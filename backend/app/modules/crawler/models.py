@@ -181,6 +181,15 @@ class CrawlPage(UUIDPrimaryKey, Base):
     is_orphan: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     fetched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
+    def analysable_hint(self) -> bool:
+        """True for successfully fetched HTML pages (see seo.context.PageData.analysable)."""
+        return (
+            self.fetch_status in (FetchStatus.FETCHED, FetchStatus.NOT_MODIFIED)
+            and self.status_code is not None
+            and 200 <= self.status_code < 300
+            and (self.content_type or "") in ("text/html", "application/xhtml+xml")
+        )
+
 
 class CrawlLink(UUIDPrimaryKey, Base):
     __tablename__ = "crawl_links"

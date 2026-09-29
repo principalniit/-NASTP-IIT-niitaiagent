@@ -10,8 +10,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_session
 from app.core.errors import ForbiddenError, NotFoundError
+from app.modules.ai.models import AIAnalysis, SeoRecommendation
 from app.modules.auth.dependencies import get_current_user
 from app.modules.crawler.models import CrawlJob
+from app.modules.drafts.models import ContentDraft
 from app.modules.organisations.models import Organisation, OrganisationMember, OrgRole
 from app.modules.organisations.permissions import (
     PLATFORM_ADMIN_PERMISSIONS,
@@ -166,5 +168,108 @@ def require_issue(permission: Permission) -> Callable[..., Awaitable[IssueAccess
         if not role_has(member.role, permission):
             raise ForbiddenError("Your role does not permit this action")
         return IssueAccess(user, issue, project, member.role)
+
+    return dependency
+
+
+async def _scoped_project(
+    session: AsyncSession,
+    user: User,
+    organisation_id: uuid.UUID,
+    project_id: uuid.UUID,
+    permission: Permission,
+    label: str,
+) -> tuple[Project, OrgRole]:
+    """Shared check for rows that belong to a project: live project, active organisation,
+    membership (404 otherwise, so ids cannot be probed) and the required permission."""
+    project = await session.scalar(
+        select(Project).where(
+            Project.id == project_id,
+            Project.organisation_id == organisation_id,
+            Project.deleted_at.is_(None),
+        )
+    )
+    member = await get_membership(session, organisation_id, user.id)
+    org = await session.get(Organisation, organisation_id)
+    if project is None or member is None or org is None or not org.is_active:
+        raise NotFoundError(f"{label} not found")
+    if not role_has(member.role, permission):
+        raise ForbiddenError("Your role does not permit this action")
+    return project, member.role
+
+
+@dataclass(frozen=True)
+class DraftAccess:
+    user: User
+    draft: ContentDraft
+    project: Project
+    role: OrgRole
+
+
+def require_draft(permission: Permission) -> Callable[..., Awaitable[DraftAccess]]:
+    async def dependency(
+        draft_id: uuid.UUID,
+        user: User = Depends(get_current_user),
+        session: AsyncSession = Depends(get_session),
+    ) -> DraftAccess:
+        draft = await session.get(ContentDraft, draft_id)
+        if draft is None:
+            raise NotFoundError("Draft not found")
+        project, role = await _scoped_project(
+            session, user, draft.organisation_id, draft.project_id, permission, "Draft"
+        )
+        return DraftAccess(user, draft, project, role)
+
+    return dependency
+
+
+@dataclass(frozen=True)
+class AnalysisAccess:
+    user: User
+    analysis: AIAnalysis
+    project: Project
+    role: OrgRole
+
+
+def require_ai_analysis(permission: Permission) -> Callable[..., Awaitable[AnalysisAccess]]:
+    async def dependency(
+        analysis_id: uuid.UUID,
+        user: User = Depends(get_current_user),
+        session: AsyncSession = Depends(get_session),
+    ) -> AnalysisAccess:
+        analysis = await session.get(AIAnalysis, analysis_id)
+        if analysis is None:
+            raise NotFoundError("AI analysis not found")
+        project, role = await _scoped_project(
+            session, user, analysis.organisation_id, analysis.project_id, permission, "AI analysis"
+        )
+        return AnalysisAccess(user, analysis, project, role)
+
+    return dependency
+
+
+@dataclass(frozen=True)
+class RecommendationAccess:
+    user: User
+    recommendation: SeoRecommendation
+    project: Project
+    role: OrgRole
+
+
+def require_recommendation(
+    permission: Permission,
+) -> Callable[..., Awaitable[RecommendationAccess]]:
+    async def dependency(
+        recommendation_id: uuid.UUID,
+        user: User = Depends(get_current_user),
+        session: AsyncSession = Depends(get_session),
+    ) -> RecommendationAccess:
+        rec = await session.get(SeoRecommendation, recommendation_id)
+        if rec is None:
+            raise NotFoundError("Recommendation not found")
+        project, role = await _scoped_project(
+            session, user, rec.organisation_id, rec.project_id, permission, "Recommendation"
+        )
+        return RecommendationAccess(user, rec, project, role)
 
     return dependency

@@ -54,8 +54,13 @@ class Settings(BaseSettings):
     # A running crawl whose heartbeat is older than this is treated as abandoned.
     worker_stale_after_seconds: int = 300
 
+    # Platform switch: "none" disables AI for every organisation regardless of their
+    # settings. The Ollama address is operator-controlled and never set by tenants.
     ai_provider: Literal["none", "ollama"] = "none"
     ollama_base_url: str = "http://localhost:11434"
+    ollama_default_model: str = ""
+    ai_timeout_seconds: int = 180
+    ai_max_active_jobs_per_org: int = 3
 
     @property
     def crawler_private_networks(self) -> list[IPv4Network | IPv6Network]:

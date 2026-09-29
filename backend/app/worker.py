@@ -23,6 +23,9 @@ import app.models  # noqa: F401  (registers every model so foreign keys resolve)
 from app.core.config import get_settings
 from app.core.database import dispose_engine, get_session_factory
 from app.core.logging import configure_logging
+from app.modules.ai.agent import MAX_TOOL_CALLS
+from app.modules.ai.models import AIAnalysis, AIStatus
+from app.modules.ai.runner import run_analysis
 from app.modules.crawler.engine import CrawlEngine
 from app.modules.crawler.models import AnalysisStatus, CrawlJob, CrawlStatus
 from app.modules.seo.analysis import AnalysisError, analyse_crawl
@@ -54,6 +57,23 @@ CLAIM_ANALYSIS_SQL = text(
 )
 
 
+CLAIM_AI_SQL = text(
+    """
+    UPDATE ai_analyses SET status = 'running', started_at = now()
+    WHERE id = (
+        SELECT id FROM ai_analyses WHERE status = 'queued'
+        ORDER BY created_at LIMIT 1 FOR UPDATE SKIP LOCKED
+    )
+    RETURNING id
+    """
+)
+
+
+# A question may need up to (MAX_TOOL_CALLS + 3) model calls of two attempts each, each
+# bounded by AI_TIMEOUT_SECONDS; allow that plus a margin before calling a task stale.
+AI_STALE_TIMEOUTS = 2 * (MAX_TOOL_CALLS + 3) + 2
+
+
 def worker_identity() -> str:
     return f"{socket.gethostname()}:{os.getpid()}:{uuid.uuid4().hex[:6]}"
 
@@ -71,7 +91,19 @@ async def recover_stale_jobs(factory: async_sessionmaker[AsyncSession], stale_se
     """Fail running crawls whose worker stopped sending heartbeats, and analyses whose
     worker stopped before finishing."""
     cutoff = datetime.now(UTC) - timedelta(seconds=stale_seconds)
+    ai_cutoff = datetime.now(UTC) - timedelta(
+        seconds=get_settings().ai_timeout_seconds * AI_STALE_TIMEOUTS
+    )
     async with factory() as session:
+        await session.execute(
+            update(AIAnalysis)
+            .where(AIAnalysis.status == AIStatus.RUNNING, AIAnalysis.started_at < ai_cutoff)
+            .values(
+                status=AIStatus.FAILED,
+                error="The worker running this AI task stopped unexpectedly.",
+                finished_at=datetime.now(UTC),
+            )
+        )
         await session.execute(
             update(CrawlJob)
             .where(
@@ -158,6 +190,28 @@ async def process_next_analysis(*, factory: async_sessionmaker[AsyncSession] | N
     return True
 
 
+async def process_next_ai_task(*, factory: async_sessionmaker[AsyncSession] | None = None) -> bool:
+    """Claim and run one queued AI analysis. Returns False when none was queued."""
+    factory = factory or get_session_factory()
+    async with factory() as session:
+        analysis_id: uuid.UUID | None = await session.scalar(CLAIM_AI_SQL)
+        await session.commit()
+    if analysis_id is None:
+        return False
+    try:
+        await run_analysis(analysis_id, factory=factory)
+    except Exception:
+        logger.exception("AI analysis failed", extra={"ai_analysis_id": str(analysis_id)})
+        async with factory() as session:
+            analysis = await session.get(AIAnalysis, analysis_id)
+            if analysis is not None:
+                analysis.status = AIStatus.FAILED
+                analysis.error = "The AI task failed because of an internal error. See worker logs."
+                analysis.finished_at = datetime.now(UTC)
+                await session.commit()
+    return True
+
+
 async def run_worker(stop: asyncio.Event) -> None:
     settings = get_settings()
     worker_id = worker_identity()
@@ -171,6 +225,7 @@ async def run_worker(stop: asyncio.Event) -> None:
         try:
             worked = await process_next_job(worker_id, factory=factory)
             worked = await process_next_analysis(factory=factory) or worked
+            worked = await process_next_ai_task(factory=factory) or worked
         except Exception:
             logger.exception("Worker loop error")
             worked = False
