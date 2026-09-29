@@ -1,0 +1,153 @@
+# Implementation Plan
+
+Source brief: "NIIT AI SEO Agent: enterprise-grade, self-hosted, commercialisable
+platform", supplied by the project owner on 2026-09-29.
+
+## 1. Repository inspection (Phase 0)
+
+| Item | Finding |
+|------|---------|
+| Existing application code | None. The repository held only `CLAUDE.md`, three Claude Code skills and a superseded draft plan. |
+| Existing conventions | Working rules in `CLAUDE.md` (plan first, small commits, feature branches, no secrets, tests with every change). Kept. |
+| Conflicts | The draft plan proposed a TypeScript backend. The brief prescribes Python/FastAPI. The draft was removed and `CLAUDE.md` updated. |
+| Local toolchain (development container) | Python 3.12, uv, Node 22, pnpm 10, PostgreSQL 16, Docker. Ollama not installed. |
+| Network | PyPI and npm reachable. `niit.edu.pk` is blocked by the development container's network policy, so no live crawl was possible. Not needed: tests use local fixtures. |
+
+## 2. Assumptions
+
+Documented per rule 12 of the brief. Each can be changed without redesign.
+
+| # | Assumption |
+|---|------------|
+| A1 | Self-registration is disabled by default. The first platform administrator is created with a CLI command. |
+| A2 | Only platform administrators create organisations in Phase 1. Self-service sign-up is a Phase 6 concern. |
+| A3 | Logos are referenced by HTTPS URL in Phase 1. File upload with validation arrives with report branding in Phase 5. |
+| A4 | NIIT's canonical website is `https://niit.edu.pk`. Authorised users can change it in project settings. |
+| A5 | The Next.js server proxies `/api/v1` to FastAPI, giving one origin and first-party cookies. |
+| A6 | Package managers: `uv` for Python, `pnpm` for Node. Both are free and fast; `pip` and `npm` also work. |
+| A7 | Default AI model name is configurable and empty until Phase 4; no model is assumed. |
+
+## 3. Prerequisites for local development
+
+| Tool | Version | Needed from |
+|------|---------|-------------|
+| Python | 3.12 or newer | Phase 1 |
+| uv (or pip) | recent | Phase 1 |
+| Node.js | 20 or 22 LTS | Phase 1 |
+| pnpm | 9 or newer | Phase 1 |
+| PostgreSQL | 15 or 16, local or via Docker Compose | Phase 1 |
+| Playwright Chromium | installed by `pnpm exec playwright install chromium` | Phase 1 (E2E), Phase 2 (rendering) |
+| Ollama | recent, with one local model pulled | Phase 4 only |
+
+## 4. Phases
+
+Each phase ends with passing lint, type checks and tests, updated docs, and a phase
+report (files, features, tests, commands, limitations, next step).
+
+### Phase 0: Discovery and architecture (complete)
+
+`docs/ARCHITECTURE.md`, this plan, `docs/SECURITY.md`, `docs/NIIT_CONFIGURATION.md`,
+updated `CLAUDE.md` and skills.
+
+### Phase 1: Foundation
+
+Backend
+- FastAPI app factory, settings via `pydantic-settings`, JSON logging, request IDs,
+  consistent error handler, CORS allowlist, `/api/v1/health`.
+- Async SQLAlchemy 2 with asyncpg, Alembic migration for users, refresh tokens,
+  organisations, members, projects, project settings and audit logs.
+- Auth: login, refresh with rotation and reuse detection, logout, `me`. Argon2id.
+  Login rate limiting.
+- Organisations: list mine, create (platform admin), read, update settings.
+- Members: list, add existing user, change role, remove, with owner safeguards.
+- Projects: list, create, read, update, soft delete; project settings read and
+  update, validated by Pydantic.
+- RBAC permission map and dependencies; 404 on cross-tenant access.
+- Audit log entries for auth events and every create, update and delete.
+- Provider interface stubs (`typing.Protocol`) for all providers in the brief.
+- CLI: `create-admin`, `seed-niit` (creates the NIIT organisation and project with
+  empty institutional profile for authorised users to complete).
+
+Frontend
+- Next.js App Router, Tailwind, shadcn/ui, TanStack Query, React Hook Form with Zod.
+- Login page, authenticated layout with full navigation, organisation switcher.
+- Overview with real counts from the API and empty states for crawl-dependent
+  widgets. Projects list, create form, project detail and settings form.
+- Organisation settings and member management pages.
+- Unbuilt sections render "Not available yet" naming the delivering phase.
+
+Tooling
+- Ruff, mypy, pytest (unit, integration, security), ESLint, `tsc --noEmit`,
+  Playwright E2E for login and project creation.
+- Docker Compose for PostgreSQL (and Ollama under an optional profile).
+- GitHub Actions CI running all of the above.
+
+Exit criteria: fresh clone to running app using README commands only; cross-tenant
+access tests pass; E2E login and create-project pass.
+
+### Phase 2: Crawler
+
+URL normalisation and validation, SSRF guard with IP pinning and per-hop
+revalidation, robots.txt, sitemap discovery and parsing (including indexes and gzip),
+breadth-first crawl with depth, page and concurrency limits, delay, timeout, size
+cap, HTML extraction (title, meta, canonical, robots, headings, word count, images
+and ALT, links, JSON-LD and microdata), content hashing, redirect chains, response
+times, DB-backed job queue and worker, progress and cancellation, crawl explorer UI.
+Tests against a local fixture site served by the test suite.
+
+### Phase 3: SEO engine
+
+Rule registry and all rules listed in section 7 of the brief, schema findings,
+internal-link graph (in/out counts, orphans, over-linked pages, under-linked
+important pages), duplicate and near-duplicate content, scoring, prioritisation
+with explanations, issue lifecycle across crawls, issues and page dashboards.
+
+### Phase 4: AI agent
+
+`AIProvider` and `OllamaProvider`, health checks, typed agent tools, structured JSON
+outputs with validation and retry, grounded summaries and recommendations, metadata
+and content drafts, approval workflow (Draft, Pending Review, Approved, Rejected,
+Published, Rolled Back) with version history. Drafts only; nothing is published.
+
+### Phase 5: Reports and monitoring
+
+HTML reports with the 13 sections in the brief, PDF export, crawl comparison,
+historical charts, issue resolution tracking, management summaries, scheduled crawl
+foundation (disabled by default).
+
+### Phase 6: Commercial readiness
+
+Multi-tenant verification suite, organisation branding and white-label reports,
+plan and usage-limit architecture without payments, integration records with
+encrypted credentials, deployment guide, production security review.
+
+## 5. Risks
+
+| Risk | Impact | Mitigation |
+|------|--------|------------|
+| SSRF through the crawler | Internal network exposure | Dedicated URL safety module, IP pinning, per-hop checks, security tests (Phase 2) |
+| Cross-tenant data leak | Severe for SaaS | `organisation_id` on every row, single authorisation dependency, isolation tests from Phase 1 |
+| AI hallucination in drafts | Misleading institutional content | Grounded prompts, schema validation, human approval, no auto-publish |
+| Overloading the NIIT site | Reputational | Conservative defaults (100 pages, depth 5, low concurrency, delay), robots.txt |
+| Scope size | Delivery slips | Strict phase gates, each phase shippable on its own |
+| In-process rate limiter | Ineffective across multiple API instances | Documented; replace with PostgreSQL or Redis store before scaling out |
+| Ollama hardware needs | Slow or unavailable AI | AI is optional; small models documented; core works without it |
+| No live-site access from the dev container | Cannot verify against real NIIT pages here | Fixture-based tests; owner runs first live crawl locally |
+
+## 6. Recommended first milestone
+
+Phase 1 foundation, delivered as backend first (models, migrations, auth, RBAC,
+isolation tests), then the frontend shell against the real API. This proves
+tenancy and security before any crawl data exists.
+
+## 7. Feature status
+
+| Area | Status |
+|------|--------|
+| Discovery documents | Done |
+| Foundation (auth, organisations, projects, RBAC, dashboard shell) | In progress |
+| Crawler | Not started |
+| SEO engine | Not started |
+| AI agent | Not started |
+| Reports and monitoring | Not started |
+| Commercial readiness | Not started |

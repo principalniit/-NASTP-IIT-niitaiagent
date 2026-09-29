@@ -1,72 +1,86 @@
-# NIIT SEO Agent
+# NIIT AI SEO Agent
 
-AI-assisted SEO agent for the National Institute of Information Technology (NIIT), a
-constituent institute of the National Aerospace Science and Technology Park (NASTP).
-The agent audits NIIT's public web presence, proposes and implements improvements,
-and reports on search visibility for programmes, admissions and research pages.
+Self-hosted SEO management platform, first deployed for the NASTP Institute of
+Information Technology (NIIT) and designed to become a multi-tenant SaaS product.
+It crawls sites, runs a deterministic SEO rules engine, scores and prioritises
+issues, and uses AI (Ollama first) only as an optional layer for explanations and
+drafts.
 
-This file is read by Claude Code at the start of every session started from this
-directory. Keep it short, factual and current. Detailed procedures live in skills
-under `.claude/skills/`.
+Read before non-trivial work: `docs/ARCHITECTURE.md`, `docs/IMPLEMENTATION_PLAN.md`
+(phases and feature status), `docs/SECURITY.md`, `docs/NIIT_CONFIGURATION.md`.
 
-## Project goals
+## Stack
 
-1. Audit `niit.edu.pk` (and any staging copies) for technical, on-page and content SEO.
-2. Ship fixes as reviewable pull requests, never as direct edits to production.
-3. Track rankings and Core Web Vitals over time and surface regressions early.
-4. Keep every change secure, accessible and compliant with institutional policy.
+- Backend: Python 3.12, FastAPI, Pydantic v2, SQLAlchemy 2 (async, asyncpg),
+  Alembic, PostgreSQL, Argon2id, JWT. Package manager `uv`.
+- Frontend: Next.js App Router, TypeScript strict, Tailwind, shadcn/ui, TanStack
+  Query, React Hook Form + Zod, Recharts. Package manager `pnpm`.
+- Crawling: httpx, selectolax, lxml, Playwright (opt-in). AI: Ollama via a provider
+  interface.
 
-## Repository layout
+## Layout
 
 ```
-CLAUDE.md                       Project memory for Claude Code (this file)
-.claude/skills/                 Custom skills, one folder per skill
-  seo-audit/SKILL.md            How to run and report an SEO audit
-  fullstack-development/SKILL.md  How to build features in this codebase
-  security-review/SKILL.md      How to review changes for security issues
+backend/app/core/        config, logging, db, security, errors
+backend/app/modules/     one folder per module: models, schemas, service, router
+backend/app/providers/   provider interfaces (AI, keywords, CMS, ...)
+backend/alembic/         migrations
+backend/tests/           unit, integration, security tests
+frontend/src/            Next.js app, components, lib
+frontend/e2e/            Playwright tests
+docs/                    architecture, plan, security, NIIT configuration
 ```
 
-Application code is added under `src/` (backend), `web/` (frontend) and `scripts/`
-(one-off tooling) as the implementation plan is approved. Update this section when
-the layout changes.
+## Commands
+
+```
+# backend (from backend/)
+uv sync
+uv run alembic upgrade head
+uv run uvicorn app.main:app --reload
+uv run ruff check . && uv run ruff format --check . && uv run mypy app && uv run pytest
+
+# frontend (from frontend/)
+pnpm install
+pnpm dev
+pnpm lint && pnpm typecheck && pnpm build && pnpm test:e2e
+```
+
+## Non-negotiable rules
+
+- **No fabricated data.** Never invent SEO metrics, keyword volumes, rankings,
+  traffic, backlinks, competitor data or NIIT facts. Show empty states instead.
+- **Deterministic core.** Crawling, rules, scoring and reports must work with AI off.
+- **Tenant isolation.** Every tenant-owned query filters by `organisation_id`.
+  Authorisation happens in the backend through the shared permission dependency.
+  Foreign resources return 404.
+- **No NIIT logic in the engine.** Institution-specific behaviour is configuration.
+- **No publishing or external actions** (CMS writes, emails, paid APIs) without
+  explicit owner authorisation. Phase 1 to 5 produce drafts and reports only.
+- **Security.** SSRF guard on every outbound crawler request. No secrets in code.
+  Generic error responses. See `docs/SECURITY.md`.
+- **Tests.** Every behaviour change ships with tests. Routine tests never hit live
+  NIIT infrastructure; use local fixtures.
 
 ## Working rules
 
-- **Plan before building.** For any non-trivial request, inspect the repository,
-  write an implementation plan, and wait for approval before writing code.
-- **Small, reviewable changes.** One concern per commit. Commit messages use the
-  imperative mood and explain why, not just what.
-- **Branching.** Never commit directly to `main`. Work on a feature branch and open a
-  pull request. Do not force-push shared branches.
-- **Secrets.** Never commit API keys, tokens, credentials or `.env` files. Read them
-  from environment variables and document required variables in `.env.example`.
-- **External calls.** Crawling and API calls against live NIIT properties must respect
-  `robots.txt`, rate limits and the institute's acceptable-use rules.
-- **Tests.** Every behaviour change ships with a test. Run the project's lint,
-  type-check and test commands before committing.
-- **Accessibility.** Frontend changes must meet WCAG 2.1 AA. SEO work never trades
-  accessibility for ranking.
-- **No fabricated data.** Audit findings, ranking numbers and performance scores must
-  come from an actual tool run. If a measurement was not taken, say so.
+- Work phase by phase as listed in `docs/IMPLEMENTATION_PLAN.md`. Update its feature
+  status table when a phase changes state.
+- Small commits, imperative subject lines, explain why. Never commit to `main`.
+- Run lint, type checks and tests before each commit. Fix failures before moving on.
+- Document reasonable assumptions in the plan and proceed; ask only for decisions
+  that change scope or need owner authorisation.
+- End each phase with a report: files changed, features done, tests run and results,
+  run commands, known limitations, next step.
 
 ## Skills
 
-Invoke a skill with its slash command or describe the task and let Claude pick it.
-
 | Skill | Use when |
 |-------|----------|
-| `/seo-audit` | Auditing a site, page or sitemap and producing a prioritised findings report |
+| `/seo-audit` | Auditing a site or page and producing a prioritised findings report |
 | `/fullstack-development` | Adding or changing backend, frontend or database code |
 | `/security-review` | Reviewing a branch or pull request for security defects before merge |
 
-## Conventions
-
-- Language: TypeScript for application code unless a plan says otherwise.
-- Formatting and linting: Prettier and ESLint with the repository config once added.
-- Documentation: Markdown in `docs/`. Diagrams as Mermaid in Markdown.
-- Reports: audit output is written to `reports/<yyyy-mm-dd>-<target>.md`.
-
-## Contacts and ownership
+## Ownership
 
 Project owner: Office of the Principal, NIIT (principal@niit.edu.pk).
-Direct questions about scope, priorities or institutional policy to the owner.

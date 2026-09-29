@@ -48,19 +48,24 @@ Deliver working, tested, reviewable code that follows the repository's conventio
 
 ## Stack conventions
 
-These are defaults. A written and approved plan may override them.
+The stack is fixed by the project brief and recorded in `CLAUDE.md`.
 
-- **Language**: TypeScript with `strict` enabled.
-- **Backend**: Node.js. HTTP framework and ORM are chosen in the implementation plan
-  and recorded in `CLAUDE.md` once decided.
-- **Frontend**: component-based, server-rendered where it helps SEO. Semantic HTML,
-  WCAG 2.1 AA, no client-side rendering of primary content.
-- **Database**: relational. Schema changes go through versioned migrations. Never
-  edit a migration that has been merged.
-- **Tests**: colocated `*.test.ts` files. Aim for meaningful coverage of behaviour,
-  not a percentage.
-- **Style**: Prettier and ESLint using the repository config. Do not disable rules
-  inline without a comment explaining why.
+- **Backend**: Python 3.12, FastAPI, Pydantic v2, async SQLAlchemy 2, Alembic.
+  Each module in `backend/app/modules/<name>/` owns `models.py`, `schemas.py`,
+  `service.py` and `router.py`. Routers call services; services take an
+  `AsyncSession` and an authorised context. Never query tenant data without an
+  `organisation_id` filter.
+- **Authorisation**: declare the needed permission on the route using the shared
+  dependency in `organisations`. Never rely on the frontend to enforce access.
+- **Database**: every schema change is a new Alembic migration, tested with upgrade
+  and downgrade. Never edit a merged migration. UUID keys, foreign keys, indexes.
+- **Frontend**: Next.js App Router, strict TypeScript, Tailwind, shadcn/ui,
+  TanStack Query for server state, React Hook Form with Zod for forms. Every data
+  view has loading, empty, error and retry states. Never render placeholder numbers.
+- **Tests**: pytest for backend (unit, integration against PostgreSQL, security),
+  Playwright for end-to-end flows. Use local fixtures, never live NIIT pages.
+- **Quality gates**: `ruff check`, `ruff format --check`, `mypy app`, `pytest`,
+  `pnpm lint`, `pnpm typecheck`, `pnpm build`.
 
 ## SEO-specific requirements for frontend work
 
