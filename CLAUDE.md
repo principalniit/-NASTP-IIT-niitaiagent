@@ -31,6 +31,10 @@ frontend/e2e/            Playwright tests
 docs/                    architecture, plan, security, NIIT configuration
 ```
 
+Next.js 16 has breaking changes from older versions. Before changing framework-level
+frontend code, read `frontend/AGENTS.md` and the bundled docs in
+`frontend/node_modules/next/dist/docs/`.
+
 ## Commands
 
 ```

@@ -64,7 +64,8 @@ backend/
   alembic/           migrations
   tests/             unit, integration and security tests
 frontend/
-  src/app/           Next.js App Router routes
+  src/app/           Next.js App Router routes (thin server pages)
+  src/components/views/  client views, one per page
   src/components/    shadcn/ui components and layout
   src/lib/           API client, auth session, query hooks, schemas
   e2e/               Playwright end-to-end tests
@@ -97,8 +98,9 @@ Recommendations, Reports.
   loads the caller's membership and checks it.
 - A resource in an organisation the caller does not belong to returns `404`, not
   `403`, so IDs cannot be used to probe for existence.
-- Platform administrators can manage organisations. Their access to tenant data is
-  recorded in `audit_logs`.
+- Platform administrators can manage organisations and memberships but have no implicit
+  access to projects or SEO data. To support a tenant they add themselves as a member,
+  which is audit-logged.
 
 ## 5. Authentication
 
@@ -111,8 +113,9 @@ Recommendations, Reports.
   a revoked token revokes the whole token family.
 - The Next.js server proxies `/api/v1/*` to FastAPI, so the browser sees a single
   origin and cookies stay first-party.
-- Login is rate limited per client IP and per email. Phase 1 uses an in-process
-  limiter; multi-instance deployments need a shared store (documented limitation).
+- Login is rate limited per email and, with a higher threshold, per client address.
+  Phase 1 uses an in-process limiter; multi-instance deployments need a shared store.
+  See `docs/SECURITY.md` for how client addresses are determined behind proxies.
 
 ## 6. Data model
 

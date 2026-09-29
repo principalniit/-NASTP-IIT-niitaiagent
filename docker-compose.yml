@@ -1,0 +1,32 @@
+# Local development services. The API and dashboard run directly on the host (see README).
+#   docker compose up -d db              PostgreSQL only
+#   docker compose --profile ai up -d    PostgreSQL and Ollama
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: niit
+      POSTGRES_PASSWORD: niit  # local development only
+      POSTGRES_DB: niit_seo
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./scripts/db-init.sql:/docker-entrypoint-initdb.d/10-extra-databases.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U niit -d niit_seo"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  ollama:
+    image: ollama/ollama:latest
+    profiles: ["ai"]
+    ports:
+      - "127.0.0.1:11434:11434"
+    volumes:
+      - ollama:/root/.ollama
+
+volumes:
+  pgdata:
+  ollama:

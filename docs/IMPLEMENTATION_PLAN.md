@@ -49,7 +49,7 @@ report (files, features, tests, commands, limitations, next step).
 `docs/ARCHITECTURE.md`, this plan, `docs/SECURITY.md`, `docs/NIIT_CONFIGURATION.md`,
 updated `CLAUDE.md` and skills.
 
-### Phase 1: Foundation
+### Phase 1: Foundation (complete)
 
 Backend
 - FastAPI app factory, settings via `pydantic-settings`, JSON logging, request IDs,
@@ -145,9 +145,38 @@ tenancy and security before any crawl data exists.
 | Area | Status |
 |------|--------|
 | Discovery documents | Done |
-| Foundation (auth, organisations, projects, RBAC, dashboard shell) | In progress |
+| Foundation (auth, organisations, projects, RBAC, dashboard shell) | Done |
 | Crawler | Not started |
 | SEO engine | Not started |
 | AI agent | Not started |
 | Reports and monitoring | Not started |
 | Commercial readiness | Not started |
+
+## 8. Known limitations after Phase 1
+
+| Limitation | Plan |
+|------------|------|
+| Login rate limiting is per process | Shared store before running several API instances |
+| Sign-in events are not shown in organisation audit views | Platform audit view in Phase 6 |
+| Members are added by email with an admin-set initial password; no invitation acceptance or forced password change | Invitations in Phase 6 |
+| Logos are referenced by HTTPS URL; no upload | File upload with validation in Phase 5 |
+| No user self-service profile page beyond the change-password API | Phase 6 |
+| shadcn/ui components were written by hand because the component registry was not reachable from the build environment; `components.json` lets the CLI add more locally | None needed |
+| `API_ORIGIN` is fixed at frontend build time | Documented; rebuild when the API address changes |
+| Content types and page groups use a line-based editor | Richer editors when Phase 3 uses them |
+
+## 9. Phase 1 report
+
+Tests at completion of Phase 1:
+
+| Suite | Result |
+|-------|--------|
+| Backend unit, integration and security tests (pytest) | 91 passed |
+| Backend lint and types (ruff, mypy strict) | Clean |
+| Frontend lint, types, production build | Clean |
+| End-to-end (Playwright, Chromium) | 7 passed |
+| Dependency audit (pip-audit, pnpm audit) | No known vulnerabilities |
+
+Recommended next step: Phase 2, starting with the URL safety module and its SSRF tests,
+then robots.txt and sitemap handling, the database-backed job queue, and the crawl
+explorer.
