@@ -18,6 +18,8 @@ dependencies = [
     "httpx>=0.27,<0.29",  # crawler transport relies on AsyncHTTPTransport internals
     "selectolax>=0.3.21",
     "lxml>=5.2",
+    # Windows has no system time zone database; zoneinfo needs this package there.
+    "tzdata>=2024.1",
 ]
 
 [dependency-groups]

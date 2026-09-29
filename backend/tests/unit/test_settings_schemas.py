@@ -60,3 +60,20 @@ def test_organisation_validation() -> None:
         OrganisationSettings.model_validate({"ai": {"provider": "openai"}})
     org = OrganisationCreate(name="X", timezone="Asia/Karachi", domain="https://Example.org/")
     assert org.domain == "example.org"
+
+
+def test_time_zones_work_without_a_system_time_zone_database() -> None:
+    """Windows has no system tz database; the tzdata package must supply it."""
+    import os
+    import subprocess
+    import sys
+
+    env = {**os.environ, "PYTHONTZPATH": ""}  # hide the operating system's database
+    code = (
+        "from app.core.validators import _TIMEZONES; "
+        "assert 'Asia/Karachi' in _TIMEZONES and 'Europe/London' in _TIMEZONES"
+    )
+    result = subprocess.run(  # noqa: S603
+        [sys.executable, "-c", code], env=env, capture_output=True, text=True, check=False
+    )
+    assert result.returncode == 0, result.stderr
