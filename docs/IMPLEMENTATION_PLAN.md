@@ -21,7 +21,7 @@ Documented per rule 12 of the brief. Each can be changed without redesign.
 |---|------------|
 | A1 | Self-registration is disabled by default. The first platform administrator is created with a CLI command. |
 | A2 | Only platform administrators create organisations in Phase 1. Self-service sign-up is a Phase 6 concern. |
-| A3 | Logos are referenced by HTTPS URL in Phase 1. File upload with validation arrives with report branding in Phase 5. |
+| A3 | Logos are referenced by HTTPS URL. Reports fetch the logo once through the SSRF guard and embed it, so no upload store is needed; file upload remains a Phase 6 option. |
 | A4 | NIIT's canonical website is `https://niit.edu.pk`. Authorised users can change it in project settings. |
 | A5 | The Next.js server proxies `/api/v1` to FastAPI, giving one origin and first-party cookies. |
 | A6 | Package managers: `uv` for Python, `pnpm` for Node. Both are free and fast; `pip` and `npm` also work. |
@@ -30,6 +30,9 @@ Documented per rule 12 of the brief. Each can be changed without redesign.
 | A9 | Approving a draft needs two people: the author or submitter of a version cannot approve it. The submitter of an AI draft counts as its author. |
 | A10 | "Published" and "rolled back" are records of what a person did in the CMS. No CMS connection exists until the owner authorises one (Phase 6). |
 | A11 | Any draft that adds, changes or removes a money amount, percentage, date, year or grade, or mentions fees, eligibility, deadlines or similar, is treated as touching official facts and needs a verified source to be approved. |
+| A12 | A report always covers the latest analysed crawl at the time it is requested, and is stored as a snapshot. Issue statuses in it are as recorded at generation time. |
+| A13 | PDF export is optional: it needs Chromium through Playwright on the server. Without it, reports are HTML (printable to PDF from a browser) and the PDF is marked unavailable. |
+| A14 | Scheduled crawls need two switches: `SCHEDULER_ENABLED` on the server and the project's own schedule. Both are off by default, and NIIT has no schedule. |
 
 ## 3. Prerequisites for local development
 
@@ -123,11 +126,11 @@ and content drafts, approval workflow (Draft, Pending Review, Approved, Rejected
 Published, Rolled Back) with version history. Drafts only; nothing is published.
 See section 12 for the report.
 
-### Phase 5: Reports and monitoring
+### Phase 5: Reports and monitoring (complete)
 
 HTML reports with the 13 sections in the brief, PDF export, crawl comparison,
 historical charts, issue resolution tracking, management summaries, scheduled crawl
-foundation (disabled by default).
+foundation (disabled by default). See section 13 for the report.
 
 ### Phase 6: Commercial readiness
 
@@ -164,7 +167,7 @@ tenancy and security before any crawl data exists.
 | Crawler, crawl explorer and page browser | Done |
 | SEO engine: rules, scoring, prioritisation, issues, SEO dashboards | Done |
 | AI agent: provider, tools, grounded tasks, recommendations, drafts and approvals | Done (not yet validated against a live Ollama model; see section 12) |
-| Reports and monitoring | Not started |
+| Reports and monitoring: 13-section reports, PDF export, score history, crawl comparison, schedule foundation | Done |
 | Commercial readiness | Not started |
 
 ## 8. Known limitations after Phase 1
@@ -174,7 +177,7 @@ tenancy and security before any crawl data exists.
 | Login rate limiting is per process | Shared store before running several API instances |
 | Sign-in events are not shown in organisation audit views | Platform audit view in Phase 6 |
 | Members are added by email with an admin-set initial password; no invitation acceptance or forced password change | Invitations in Phase 6 |
-| Logos are referenced by HTTPS URL; no upload | File upload with validation in Phase 5 |
+| Logos are referenced by HTTPS URL; no upload | Reports embed the logo through the SSRF guard (Phase 5); upload in Phase 6 if needed |
 | No user self-service profile page beyond the change-password API | Phase 6 |
 | shadcn/ui components were written by hand because the component registry was not reachable from the build environment; `components.json` lets the CLI add more locally | None needed |
 | `API_ORIGIN` is fixed at frontend build time | Documented; rebuild when the API address changes |
@@ -265,7 +268,7 @@ page-importance bonus, and a test locks this in.
 | Link suggestions need an exact mention of the target's H1 or title phrase | Deliberately conservative; AI-assisted suggestions in Phase 4 stay evidence-based |
 | Changing thresholds and re-running analysis can resolve issues that a stricter rule raised | Documented; the audit log records re-runs |
 | Crawls made before Phase 3 have no stored page text, so near-duplicate and link-suggestion checks skip them | Re-crawl |
-| Score history is stored but not charted | Monitoring in Phase 5 |
+| Score history is stored but not charted | Done: Monitoring page (Phase 5) |
 | Response-time checks use one sample from the crawler's location, not Core Web Vitals | Field data needs an approved provider (Search Console) later |
 
 Recommended next step: Phase 4, the AI agent. Ollama integration behind the provider
@@ -349,3 +352,90 @@ Recommended next step: Phase 5, reports and monitoring. HTML and PDF management
 reports using the deterministic results and, where enabled, the grounded management
 summary; score history charts; crawl comparison views over the comparison already
 built; and the scheduled-crawl foundation, off by default.
+
+## 13. Phase 5 report
+
+Delivered:
+- **Management reports** with the 13 sections of the brief:
+  1. Executive summary
+  2. Overall SEO health
+  3. Crawl overview, with changes since the previous crawl
+  4. Critical issues
+  5. High-priority issues
+  6. Technical SEO
+  7. On-page SEO
+  8. Content quality
+  9. Internal linking
+  10. Structured data
+  11. AI recommendations
+  12. Recommended action plan
+  13. Methodology and limitations
+
+  Every report states the crawl date and the number of pages analysed, and shows the
+  evidence and affected URLs for each finding. The executive summary and action plan
+  are written by fixed rules, so reports are complete with AI off. The AI section is
+  optional and labelled.
+- **Organisation branding**: primary colour, footer text and logo. The logo is fetched
+  through the SSRF guard and embedded.
+- **PDF export** through optional Chromium: A4 pages with a footer and page numbers,
+  printed offline with JavaScript off and every request refused.
+- **Storage and generation**: reports are stored as snapshots and generated by the
+  worker. People can list, view, download and delete them, with permissions, limits
+  and audit logging.
+- **Monitoring page**: score history chart with a table view, and a comparison of any
+  two analysed crawls. It shows:
+  - score changes;
+  - new, verified-resolved and recurring issues;
+  - page status, title, description, redirect, content and internal-link changes.
+- **Scheduled crawl foundation**: daily, weekly or monthly at an hour in the
+  organisation's time zone. It is off on both the server and the project by default,
+  missed runs are skipped, and no run starts while a crawl is active.
+
+Phase 5 acceptance criteria:
+
+| Criterion | How it is met |
+|-----------|---------------|
+| Reports identify the crawl date and pages analysed | Cover facts and executive summary; tested |
+| Findings include evidence and affected URLs | Every issue card in sections 4 to 10; tested against the fixture site |
+| Professional, neutral language; branding | Rule-written text, organisation colour, footer and logo; reviewed as rendered HTML and PDF |
+| Reports work without AI | Executive summary and action plan never use AI; a report with AI excluded is tested |
+| Resolved only after a verifying crawl | Comparison and reports use the Phase 3 issue lifecycle; stated in both |
+| Scheduling configurable and off by default | Two switches, both default off; worker step tested with each off and on |
+| Tenant isolation | Reports and schedules from another organisation return 404; security test |
+
+| Suite | Result |
+|-------|--------|
+| Backend unit, integration and security tests (pytest) | 303 passed, including real PDF rendering and a no-network PDF test |
+| Backend lint and types (ruff, mypy strict), migration drift check | Clean |
+| Frontend lint, types, production build | Clean |
+| End-to-end (Playwright), now including report generation and viewing, a second crawl feeding the comparison, and schedule settings | 12 passed |
+
+Found and fixed during Phase 5:
+- Time zones failed to validate on Windows, which has no system time zone database.
+  `tzdata` was added, with a test that hides the system database.
+- Some Ollama versions silently truncate long prompts, so the context window is now
+  set explicitly (`AI_CONTEXT_TOKENS`).
+- Site-wide issues in reports said "first 1 of 17 URLs"; they now show one example URL.
+- Report fact labels split across PDF pages; each label now stays with its value.
+- Two crawls on the same day produced identical chart labels; the time is now added.
+
+### Known limitations after Phase 5
+
+| Limitation | Plan |
+|------------|------|
+| PDF export needs Chromium installed on the server (`uv run playwright install chromium`) | Documented; HTML reports and browser printing work without it |
+| No automatic retention or cleanup of old crawls and reports | Phase 6 |
+| Scheduled crawls run from the worker's periodic check, so they can start up to about a minute late | Acceptable for daily to monthly schedules |
+| A scheduled run is skipped, not delayed, if a crawl is already active at that time | Documented in the schedule card |
+| Report history per project is a list; there is no side-by-side comparison of two reports | Crawl comparison on the Monitoring page covers the need |
+| Notifications (report ready, critical issue detected) are preferences only; nothing is sent | Needs an approved notification provider (Phase 6, owner authorisation for any paid service) |
+
+Recommended next step: Phase 6, commercial readiness:
+- a multi-tenant verification suite;
+- white-label reports, building on the branding added here;
+- plan and usage-limit architecture, without payments;
+- integration records with encrypted credentials;
+- data retention;
+- a deployment guide;
+- a production security review.
+

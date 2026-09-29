@@ -129,6 +129,24 @@ the platform acts on.
 - **Stored data.** Evidence and output are stored with each analysis for traceability.
   They contain crawled public page text and issue data, no credentials.
 
+## 5b. Reports and scheduled crawls
+
+- **Crawled content in reports** is untrusted. The report template autoescapes every
+  value. The document carries its own content security policy (no scripts, no remote
+  loading), and the dashboard shows it in an iframe sandboxed with no permissions.
+- **No fetching during rendering.** The logo is the only external resource. It is
+  fetched once through the crawler's SSRF guard (HTTPS, image types only, size-capped)
+  and embedded. The PDF renderer runs with JavaScript disabled, offline, and refuses
+  every request; a security test checks that no request reaches a local server.
+- **Access.** Generating and deleting reports needs the reports permission (owner,
+  admin, SEO manager); every organisation member can read them. Report ids from other
+  organisations return 404. Requests and deletions are audit-logged.
+- **Load.** At most 3 reports per organisation can be queued or running.
+- **Schedules** start crawls without a person pressing a button, so two switches must
+  be on: `SCHEDULER_ENABLED` on the server and the project's schedule. Scheduled crawls
+  use the same limits, robots.txt handling and SSRF guard as manual ones, and are
+  audit-logged as `crawl.scheduled`.
+
 ## 6. Input, output and errors
 
 - Pydantic validates every request body, query parameter and configuration blob.
@@ -146,7 +164,8 @@ detection, organisation, member, project and settings changes, and (later) crawl
 approvals and publication records. Records include actor, organisation, action, target,
 IP and a small metadata object. Passwords and tokens are never logged. Phase 4 adds
 `ai.requested`, `recommendation.updated` and `draft.<action>` for every draft
-transition.
+transition. Phase 5 adds `report.requested`, `report.deleted`, `schedule.updated` and
+`crawl.scheduled`.
 
 ## 8. Secrets and configuration
 
@@ -173,7 +192,8 @@ transition.
 - JavaScript rendering is not enabled because browser sub-requests would bypass the
   connection-level SSRF guard. It needs request interception and a dedicated review.
 - Crawl data volume is bounded by the organisation's page cap and 2,000 stored links
-  per page. Retention and cleanup of old crawls are planned for Phase 5.
+  per page. Automatic retention and cleanup of old crawls and reports is not built
+  yet; it is planned for Phase 6.
 - Grounding checks are pattern-based. They catch invented numbers, unknown issue ids and
   the listed claim types, but cannot prove that every sentence is true. That is why AI
   output is labelled, drafts need human approval, and protected facts need a source.

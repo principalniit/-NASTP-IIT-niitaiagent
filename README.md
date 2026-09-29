@@ -101,7 +101,19 @@ pnpm dev
 
 Open http://localhost:3000 and sign in with the administrator account.
 
-### 6. Ollama (optional AI assistant)
+### 6. PDF reports (optional)
+
+Reports are always available as HTML. For PDF downloads, install Chromium once:
+
+```bash
+cd backend
+uv run playwright install chromium
+```
+
+Then restart the worker. Without it, reports show "PDF not installed" and can still be
+printed to PDF from the browser.
+
+### 7. Ollama (optional AI assistant)
 
 ```bash
 docker compose --profile ai up -d ollama   # or install Ollama natively
@@ -148,6 +160,8 @@ Backend variables live in `backend/.env` (template: `backend/.env.example`).
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama address. Operator-only; organisations cannot change it. |
 | `OLLAMA_DEFAULT_MODEL` | empty | Model used when an organisation does not name one, for example `llama3.1:8b` |
 | `AI_TIMEOUT_SECONDS` | `180` | Longest wait for one model reply. Use `600` on a PC without a GPU |
+| `REPORT_PDF_BROWSER_PATH` | empty | Chromium executable for PDF reports. Empty uses the browser installed by `uv run playwright install chromium` |
+| `SCHEDULER_ENABLED` | `false` | Allows scheduled crawls. Each project's schedule must also be turned on |
 | `AI_CONTEXT_TOKENS` | `8192` | Prompt window per request. Ollama may otherwise use a smaller default and cut off long prompts |
 | `AI_MAX_ACTIVE_JOBS_PER_ORG` | `3` | Queued or running AI tasks allowed per organisation |
 | `TEST_DATABASE_URL` | `…/niit_seo_test` | Used by the pytest suite only |
@@ -195,8 +209,9 @@ rotation and reuse detection, rate limiting, role permissions, cross-organisatio
 isolation, URL safety, settings validation, the NIIT seed, SSRF protection, robots.txt
 and sitemap parsing, HTML extraction, full crawls of a local fixture website, every SEO
 rule, scoring and prioritisation, the issue lifecycle across repeated crawls, the AI
-provider, grounding checks and agent tools against a fake Ollama server, and the draft
-approval workflow. Tests never contact live NIIT infrastructure or a real AI model. CI runs all of the above on every pull request
+provider, grounding checks and agent tools against a fake Ollama server, the draft
+approval workflow, report generation (including PDF rendering with no network access)
+and crawl schedules. Tests never contact live NIIT infrastructure or a real AI model. CI runs all of the above on every pull request
 (`.github/workflows/ci.yml`), plus `pip-audit` and `pnpm audit`.
 
 ## Troubleshooting
@@ -215,6 +230,9 @@ approval workflow. Tests never contact live NIIT infrastructure or a real AI mod
 | AI assistant shows "Unavailable" | Ollama is not reachable at `OLLAMA_BASE_URL`, or the model is not pulled (`ollama list`). The platform keeps working. |
 | AI assistant shows "off" | Set `AI_PROVIDER=ollama` on the server and turn AI on in organisation settings |
 | AI task failed: "The AI model did not respond in time" | Normal on a PC without a GPU. Set `AI_TIMEOUT_SECONDS=600` in `backend/.env` and restart the API and worker, or use a smaller model such as `llama3.2:3b`, or a PC with an NVIDIA GPU |
+| Report PDF shows "not installed" | Run `uv run playwright install chromium` in `backend`, then restart the worker. The HTML report works meanwhile and can be printed to PDF from the browser |
+| A report stays "Queued" | The worker is not running; reports are generated there |
+| Scheduled crawls never start | Set `SCHEDULER_ENABLED=true` in `backend/.env`, restart the worker, and turn the schedule on for the project |
 | AI tasks stay "Waiting for the worker" | Start `uv run python -m app.worker`; AI tasks run there, not in the API |
 | An AI task failed with "claims not supported by the project data" | The model added numbers or claims that are not in the crawl evidence, so the result was discarded. Try again, or use a larger model |
 | "The author or submitter of this version cannot approve it" | Intended: a second person with an approving role must review |
@@ -246,7 +264,7 @@ Phase 6. Until then:
 | Crawler, Crawl Explorer, Pages browser (Phase 2) | Done; JavaScript rendering deferred |
 | SEO engine: 50 rules, scoring, prioritisation, issue lifecycle, SEO dashboards (Phase 3) | Done |
 | AI assistant, recommendations, content drafts, approvals (Phase 4) | Done; not yet validated against a live Ollama model |
-| Reports and monitoring (Phase 5) | Not started |
+| Reports (13 sections, HTML and PDF), monitoring, crawl comparison, schedule foundation (Phase 5) | Done |
 | Commercial readiness (Phase 6) | Not started |
 
 Known limitations are listed in `docs/IMPLEMENTATION_PLAN.md`.

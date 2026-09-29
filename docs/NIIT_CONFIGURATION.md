@@ -30,7 +30,7 @@ user must enter them, ideally with a source link.
 | Approved terminology | Preferred terms and terms to avoid, for example preferred programme names |
 | AI provider and model | `none` (the NIIT default) or `ollama`. Leave the model empty to use the server's `OLLAMA_DEFAULT_MODEL`. AI also needs the server operator to set `AI_PROVIDER=ollama` |
 | Crawl limits | Organisation-wide caps that project settings cannot exceed |
-| Report branding | Colours, footer text, logo placement (Phase 5) |
+| Report branding | Primary colour (hex, for example the NIIT brand colour) and footer text such as "Internal: for NIIT management". The logo comes from the organisation's logo URL (HTTPS, PNG, JPEG, GIF or WebP) |
 | Notification preferences | Channels and events (later phase) |
 
 ## 3. Project settings
@@ -122,6 +122,18 @@ How this works since Phase 4:
 
 AI output depends on the model. Validate it on NIIT pages before relying on it; see
 the Phase 4 report in `docs/IMPLEMENTATION_PLAN.md`.
+
+## 5b. Reports and scheduled crawls for NIIT
+
+- Generate reports from **Reports** after each analysed crawl. Each report covers the
+  latest analysed crawl and does not change afterwards, so it can be shared as a record.
+- Leave **Include AI summary** off for reports that go outside the web team until the
+  AI output has been reviewed on NIIT pages (see the Phase 4 report).
+- Scheduling is off. When the owner wants it, a weekly crawl at a quiet hour (for
+  example 02:00 Asia/Karachi) is a sensible start. The server operator must also set
+  `SCHEDULER_ENABLED=true`, and the NIIT web host should be told crawls will happen.
+- PDF export needs Chromium on the server: `uv run playwright install chromium` in the
+  backend folder.
 
 ## 6. Separation from future tenants
 
