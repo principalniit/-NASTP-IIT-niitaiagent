@@ -159,6 +159,27 @@ async def test_ai_tasks_produce_grounded_results_and_drafts(
         f"/api/v1/projects/{pid}/ai/analyses", params={"kind": "question"}, headers=h
     )
     assert only.json()["total"] == 1
+    by_issue = await client.get(
+        f"/api/v1/projects/{pid}/ai/analyses", params={"subject_id": issue["id"]}, headers=h
+    )
+    assert [a["id"] for a in by_issue.json()["items"]] == [explained["id"]]
+    about = title["page_url"]
+    by_page = await client.get(
+        f"/api/v1/projects/{pid}/ai/analyses", params={"page_url": about}, headers=h
+    )
+    assert {a["kind"] for a in by_page.json()["items"]} == {
+        "page_plan",
+        "metadata_draft",
+        "content_outline",
+    }
+    page_drafts = await client.get(
+        f"/api/v1/projects/{pid}/drafts", params={"page_url": about}, headers=h
+    )
+    assert page_drafts.json()["total"] == 3
+    other_page = await client.get(
+        f"/api/v1/projects/{pid}/drafts", params={"page_url": about + "-copy"}, headers=h
+    )
+    assert other_page.json()["total"] == 0
     audit = (await client.get(f"/api/v1/organisations/{org['id']}/audit-logs", headers=h)).json()
     assert "ai.requested" in {e["action"] for e in audit["items"]}
 

@@ -4,7 +4,6 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.core.validators import SiteURL
 from app.modules.drafts.models import ApprovalAction, DraftField, DraftSource, DraftStatus
 
 
@@ -13,7 +12,9 @@ class _Strict(BaseModel):
 
 
 class DraftCreate(_Strict):
-    page_url: SiteURL
+    page_url: str = Field(
+        min_length=1, max_length=2048, description="A URL or path on the project's website"
+    )
     field: DraftField
     proposed_content: str = Field(min_length=1, max_length=20_000)
     reason: str = Field(min_length=5, max_length=2000)

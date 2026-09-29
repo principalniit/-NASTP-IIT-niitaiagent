@@ -150,12 +150,19 @@ async def list_analyses(
     organisation_id: uuid.UUID,
     params: PageParams,
     kind: AIKind | None,
+    *,
+    subject_id: str | None = None,
+    page_url: str | None = None,
 ) -> tuple[list[AIAnalysis], int]:
     query = select(AIAnalysis).where(
         AIAnalysis.project_id == project_id, AIAnalysis.organisation_id == organisation_id
     )
     if kind:
         query = query.where(AIAnalysis.kind == kind)
+    if subject_id:
+        query = query.where(AIAnalysis.subject_id == subject_id)
+    if page_url:
+        query = query.where(AIAnalysis.params["page_url"].astext == page_url)
     total = await session.scalar(select(func.count()).select_from(query.subquery())) or 0
     rows = await session.scalars(
         query.order_by(AIAnalysis.created_at.desc()).offset(params.offset).limit(params.page_size)

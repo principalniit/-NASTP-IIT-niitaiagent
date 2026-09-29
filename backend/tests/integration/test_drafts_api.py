@@ -186,10 +186,16 @@ async def test_permissions_and_validation(client: AsyncClient) -> None:
         {"field": "body_html"},
         {"proposed_content": ""},
         {"reason": "no"},
-        {"page_url": "javascript:alert(1)"},
         {"unexpected": True},
     ):
         assert (await create(client, p["editor"], project["id"], **bad)).status_code == 422, bad
+    for url in ("javascript:alert(1)", "https://other.example.com/", "ftp://example.org/x"):
+        outside = await create(client, p["editor"], project["id"], page_url=url)
+        assert outside.status_code == 400, url
+    relative = await create(client, p["editor"], project["id"], page_url="/fees?year=next")
+    assert relative.json()["page_url"] == "https://example.org/fees?year=next"
+    sub = await create(client, p["editor"], project["id"], page_url="https://apply.example.org/")
+    assert sub.status_code == 201
     unknown_issue = await create(
         client, p["editor"], project["id"], issue_ids=["11111111-2222-3333-4444-555555555555"]
     )

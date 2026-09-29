@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_session
@@ -50,8 +50,11 @@ async def list_drafts(
     paging: Annotated[PageParams, Depends(page_params)],
     access: Annotated[ProjectAccess, Depends(require_project(Permission.PROJECTS_READ))],
     status_filter: DraftStatus | None = None,
+    page_url: Annotated[str | None, Query(max_length=2048)] = None,
 ) -> Page[DraftOut]:
-    items, total = await service.list_drafts(session, access.project, paging, status_filter)
+    items, total = await service.list_drafts(
+        session, access.project, paging, status_filter, page_url=page_url
+    )
     return Page(
         items=[DraftOut.model_validate(d) for d in items],
         total=total,

@@ -14,6 +14,7 @@ AI drafts have no human author, so the person who submits one is treated as its 
 import uuid
 from datetime import UTC, datetime
 from typing import Any
+from urllib.parse import urlsplit
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,6 +23,7 @@ from app.core.errors import AppError, ConflictError, ForbiddenError, NotFoundErr
 from app.core.pagination import PageParams
 from app.core.request_context import RequestMeta
 from app.modules.audit_logs import service as audit
+from app.modules.crawler.urls import normalise_url
 from app.modules.drafts.models import (
     Approval,
     ApprovalAction,
@@ -151,9 +153,22 @@ async def new_draft(
     return draft
 
 
+def _project_url(project: Project, value: str) -> str:
+    """Resolve a URL or path against the project and require it to be on the project's site."""
+    url = normalise_url(value.strip(), project.root_url)
+    host = (urlsplit(url).hostname or "") if url else ""
+    domain = project.domain.lower()
+    if not url or not (host == domain or host.endswith("." + domain)):
+        raise AppError(
+            "The page address must be on this project's website", code="validation_error"
+        )
+    return url
+
+
 async def create(
     session: AsyncSession, project: Project, user: User, body: DraftCreate, meta: RequestMeta
 ) -> ContentDraft:
+    page_url = _project_url(project, body.page_url)
     issue_ids = [str(i) for i in body.issue_ids]
     if issue_ids:
         found = set(
@@ -171,7 +186,7 @@ async def create(
     draft = await new_draft(
         session,
         project=project,
-        page_url=body.page_url,
+        page_url=page_url,
         field=body.field,
         original=body.original_content,
         proposed=body.proposed_content,
@@ -200,7 +215,12 @@ async def get(
 
 
 async def list_drafts(
-    session: AsyncSession, project: Project, params: PageParams, status: DraftStatus | None
+    session: AsyncSession,
+    project: Project,
+    params: PageParams,
+    status: DraftStatus | None,
+    *,
+    page_url: str | None = None,
 ) -> tuple[list[ContentDraft], int]:
     query = select(ContentDraft).where(
         ContentDraft.project_id == project.id,
@@ -208,6 +228,8 @@ async def list_drafts(
     )
     if status:
         query = query.where(ContentDraft.status == status)
+    if page_url:
+        query = query.where(ContentDraft.page_url == page_url)
     total = await session.scalar(select(func.count()).select_from(query.subquery())) or 0
     rows = await session.scalars(
         query.order_by(ContentDraft.updated_at.desc()).offset(params.offset).limit(params.page_size)

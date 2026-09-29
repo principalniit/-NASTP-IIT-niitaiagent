@@ -1,7 +1,7 @@
 import uuid
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_session
@@ -58,10 +58,21 @@ async def request_analysis(
 
 @router.get("/projects/{project_id}/ai/analyses", response_model=Page[AIAnalysisSummary])
 async def list_analyses(
-    session: Session, paging: Paging, access: ReadProject, kind: AIKind | None = None
+    session: Session,
+    paging: Paging,
+    access: ReadProject,
+    kind: AIKind | None = None,
+    subject_id: Annotated[str | None, Query(max_length=64)] = None,
+    page_url: Annotated[str | None, Query(max_length=2048)] = None,
 ) -> Page[AIAnalysisSummary]:
     items, total = await service.list_analyses(
-        session, access.project.id, access.project.organisation_id, paging, kind
+        session,
+        access.project.id,
+        access.project.organisation_id,
+        paging,
+        kind,
+        subject_id=subject_id,
+        page_url=page_url,
     )
     return Page(
         items=[AIAnalysisSummary.model_validate(i) for i in items],

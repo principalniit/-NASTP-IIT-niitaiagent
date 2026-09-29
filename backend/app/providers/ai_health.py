@@ -11,7 +11,7 @@ async def check_ai_health() -> AIHealth:
     if settings.ai_provider == "none":
         return AIHealth(provider="none", status="disabled")
     try:
-        async with httpx.AsyncClient(timeout=2.0) as client:
+        async with httpx.AsyncClient(timeout=2.0, trust_env=False) as client:
             response = await client.get(f"{settings.ollama_base_url.rstrip('/')}/api/tags")
         if response.status_code == 200:
             return AIHealth(provider="ollama", status="available")
