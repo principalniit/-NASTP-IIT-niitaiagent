@@ -35,6 +35,14 @@ class CrawlStatus(enum.StrEnum):
 ACTIVE_STATUSES = (CrawlStatus.QUEUED, CrawlStatus.RUNNING, CrawlStatus.CANCELLING)
 
 
+class AnalysisStatus(enum.StrEnum):
+    NONE = "none"
+    QUEUED = "queued"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
 class FetchStatus(enum.StrEnum):
     FETCHED = "fetched"
     NOT_MODIFIED = "not_modified"
@@ -98,6 +106,14 @@ class CrawlJob(UUIDPrimaryKey, Timestamps, Base):
     warnings: Mapped[list[str]] = mapped_column(JSONB, default=list, server_default="[]")
     error_message: Mapped[str | None] = mapped_column(Text)
 
+    analysis_status: Mapped[AnalysisStatus] = mapped_column(
+        _enum(AnalysisStatus, "analysis_status"),
+        default=AnalysisStatus.NONE,
+        server_default=AnalysisStatus.NONE.value,
+    )
+    analysed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    analysis_error: Mapped[str | None] = mapped_column(Text)
+
     worker_id: Mapped[str | None] = mapped_column(String(100))
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -149,6 +165,8 @@ class CrawlPage(UUIDPrimaryKey, Base):
     h1_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     word_count: Mapped[int | None] = mapped_column(Integer)
     content_hash: Mapped[str | None] = mapped_column(String(64))
+    # Visible text, truncated, used for near-duplicate and contextual link analysis.
+    text_content: Mapped[str | None] = mapped_column(Text, deferred=True)
     images: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list, server_default="[]")
     image_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     images_missing_alt: Mapped[int] = mapped_column(Integer, default=0, server_default="0")

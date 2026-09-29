@@ -122,7 +122,7 @@ def build_standard_site(site: FixtureSite) -> None:
     site.page(
         "/",
         "Home",
-        "<h1>Home</h1><p>Welcome</p>"
+        "<h1>Home</h1><p>Welcome. Ask the office about Scholarship Opportunities for new students.</p>"
         "<a href='/about'>About us</a> <a href='/admissions'>Admissions</a>"
         "<a href='/old-page'>Old</a> <a href='/missing'>Missing</a> <a href='/error'>Error</a>"
         "<a href='/private/secret'>Private</a> <a href='/file.pdf'>PDF</a>"
@@ -156,7 +156,11 @@ def build_standard_site(site: FixtureSite) -> None:
     site.routes["/file.pdf"] = Response(200, b"%PDF-1.4 fake", {"Content-Type": "application/pdf"})
     site.page("/private/secret", "Secret", "<p>Should never be fetched</p>")
     site.page("/wp-admin/x", "Admin", "<p>Excluded</p>")
-    site.page("/orphan", "Orphan", "<h1>Orphan</h1><p>Only in the sitemap</p>")
+    site.page(
+        "/orphan",
+        "Scholarship Opportunities",
+        "<h1>Scholarship Opportunities</h1><p>Only in the sitemap</p>",
+    )
     for i in range(1, 8):
         site.page(f"/deep/{i}", f"Deep {i}", f"<p>Level {i}</p><a href='/deep/{i + 1}'>Next</a>")
 

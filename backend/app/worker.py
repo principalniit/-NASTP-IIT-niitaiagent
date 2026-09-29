@@ -24,7 +24,8 @@ from app.core.config import get_settings
 from app.core.database import dispose_engine, get_session_factory
 from app.core.logging import configure_logging
 from app.modules.crawler.engine import CrawlEngine
-from app.modules.crawler.models import CrawlJob, CrawlStatus
+from app.modules.crawler.models import AnalysisStatus, CrawlJob, CrawlStatus
+from app.modules.seo.analysis import AnalysisError, analyse_crawl
 
 logger = logging.getLogger("app.worker")
 
@@ -35,6 +36,18 @@ CLAIM_SQL = text(
     WHERE id = (
         SELECT id FROM crawl_jobs WHERE status = 'queued'
         ORDER BY created_at LIMIT 1 FOR UPDATE SKIP LOCKED
+    )
+    RETURNING id
+    """
+)
+
+
+CLAIM_ANALYSIS_SQL = text(
+    """
+    UPDATE crawl_jobs SET analysis_status = 'running', updated_at = now()
+    WHERE id = (
+        SELECT id FROM crawl_jobs WHERE analysis_status = 'queued'
+        ORDER BY finished_at LIMIT 1 FOR UPDATE SKIP LOCKED
     )
     RETURNING id
     """
@@ -55,9 +68,21 @@ async def claim_next_job(
 
 
 async def recover_stale_jobs(factory: async_sessionmaker[AsyncSession], stale_seconds: int) -> int:
-    """Fail running crawls whose worker stopped sending heartbeats."""
+    """Fail running crawls whose worker stopped sending heartbeats, and analyses whose
+    worker stopped before finishing."""
     cutoff = datetime.now(UTC) - timedelta(seconds=stale_seconds)
     async with factory() as session:
+        await session.execute(
+            update(CrawlJob)
+            .where(
+                CrawlJob.analysis_status == AnalysisStatus.RUNNING,
+                CrawlJob.updated_at < cutoff,
+            )
+            .values(
+                analysis_status=AnalysisStatus.FAILED,
+                analysis_error="The worker running this analysis stopped unexpectedly.",
+            )
+        )
         result = await session.execute(
             update(CrawlJob)
             .where(
@@ -108,6 +133,31 @@ async def process_next_job(
     return True
 
 
+async def process_next_analysis(*, factory: async_sessionmaker[AsyncSession] | None = None) -> bool:
+    """Claim and run one queued analysis. Returns False when none was queued."""
+    factory = factory or get_session_factory()
+    async with factory() as session:
+        job_id: uuid.UUID | None = await session.scalar(CLAIM_ANALYSIS_SQL)
+        await session.commit()
+    if job_id is None:
+        return False
+    try:
+        await analyse_crawl(job_id, factory=factory)
+    except Exception as exc:
+        if isinstance(exc, AnalysisError):
+            message = str(exc)
+        else:
+            logger.exception("Analysis failed", extra={"crawl_job_id": str(job_id)})
+            message = "The analysis failed because of an internal error. See worker logs."
+        async with factory() as session:
+            job = await session.get(CrawlJob, job_id)
+            if job is not None:
+                job.analysis_status = AnalysisStatus.FAILED
+                job.analysis_error = message
+                await session.commit()
+    return True
+
+
 async def run_worker(stop: asyncio.Event) -> None:
     settings = get_settings()
     worker_id = worker_identity()
@@ -120,6 +170,7 @@ async def run_worker(stop: asyncio.Event) -> None:
     while not stop.is_set():
         try:
             worked = await process_next_job(worker_id, factory=factory)
+            worked = await process_next_analysis(factory=factory) or worked
         except Exception:
             logger.exception("Worker loop error")
             worked = False

@@ -2,7 +2,7 @@
 
 import ipaddress
 import uuid
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import Iterator
 from itertools import pairwise
 from typing import Any
 
@@ -14,8 +14,6 @@ from app.modules.crawler.config import CrawlConfig
 from app.modules.crawler.engine import CrawlEngine
 from app.modules.crawler.models import CrawlJob, CrawlLink, CrawlPage, CrawlStatus, FetchStatus
 from app.modules.crawler.url_safety import SafetyPolicy
-from app.modules.organisations.models import Organisation
-from app.modules.projects.models import Project
 from tests.fixtures.site import FixtureSite, Response, build_standard_site
 
 UA = "NIIT-SEO-Agent/0.1 (+https://example.org)"
@@ -26,18 +24,6 @@ def site() -> Iterator[FixtureSite]:
     with FixtureSite() as s:
         build_standard_site(s)
         yield s
-
-
-@pytest.fixture
-async def project() -> AsyncIterator[tuple[uuid.UUID, uuid.UUID]]:
-    async with get_session_factory()() as session:
-        org = Organisation(name="Test", slug=f"t-{uuid.uuid4().hex[:8]}", settings={})
-        session.add(org)
-        await session.flush()
-        proj = Project(organisation_id=org.id, name="Site", root_url="http://x/", domain="x")
-        session.add(proj)
-        await session.commit()
-        yield org.id, proj.id
 
 
 def policy_for(site: FixtureSite) -> SafetyPolicy:

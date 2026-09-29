@@ -33,16 +33,18 @@ NIIT_ORG = {
     "language": "en",
 }
 NIIT_PROJECT = {"name": "NIIT website", "root_url": "https://niit.edu.pk/", "domain": "niit.edu.pk"}
+# (key, label, recommended schema.org types). Types are suggestions an authorised user
+# can change; URL patterns are left empty because they must match the real site.
 NIIT_CONTENT_TYPES = [
-    ("about", "About NIIT"),
-    ("programmes", "Academic programmes"),
-    ("admissions", "Admissions"),
-    ("faculty", "Faculty"),
-    ("research", "Research"),
-    ("news_events", "News and events"),
-    ("training", "Training courses"),
-    ("student_resources", "Student resources"),
-    ("contact", "Contact information"),
+    ("about", "About NIIT", ["EducationalOrganization"]),
+    ("programmes", "Academic programmes", ["Course"]),
+    ("admissions", "Admissions", []),
+    ("faculty", "Faculty", ["Person"]),
+    ("research", "Research", []),
+    ("news_events", "News and events", ["Event"]),
+    ("training", "Training courses", ["Course"]),
+    ("student_resources", "Student resources", []),
+    ("contact", "Contact information", []),
 ]
 
 
@@ -113,7 +115,10 @@ async def seed_niit(owner_email: str) -> None:
             session.add(project)
             await session.flush()
             settings = ProjectSettingsData(
-                content_types=[ContentType(key=k, label=label) for k, label in NIIT_CONTENT_TYPES]
+                content_types=[
+                    ContentType(key=k, label=label, recommended_schema_types=types)
+                    for k, label, types in NIIT_CONTENT_TYPES
+                ]
             )
             session.add(
                 ProjectSettings(

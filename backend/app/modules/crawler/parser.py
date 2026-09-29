@@ -19,6 +19,7 @@ MAX_ANCHOR = 300
 MAX_IMAGES = 500
 MAX_LINKS = 2000
 MAX_JSON_LD_BYTES = 50_000
+MAX_TEXT_CHARS = 50_000
 NON_CONTENT_TAGS = ["script", "style", "noscript", "template", "svg", "iframe"]
 _WS = re.compile(r"\s+")
 _WORD = re.compile(r"\w+", re.UNICODE)
@@ -49,6 +50,7 @@ class ParsedPage:
     h1_count: int = 0
     word_count: int = 0
     content_hash: str | None = None
+    text: str = ""
     images: list[dict[str, Any]] = field(default_factory=list)
     image_count: int = 0
     images_missing_alt: int = 0
@@ -220,6 +222,7 @@ def parse_html(html: bytes | str, page_url: str) -> ParsedPage:
         body.strip_tags(NON_CONTENT_TAGS)
         text = _WS.sub(" ", body.text(separator=" ")).strip()
         page.word_count = len(_WORD.findall(text))
+        page.text = text[:MAX_TEXT_CHARS]
         if text:
             page.content_hash = hashlib.sha256(text.lower().encode()).hexdigest()
     return page

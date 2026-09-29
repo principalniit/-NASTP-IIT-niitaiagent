@@ -13,12 +13,20 @@ from urllib.parse import urlsplit
 
 from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.orm import undefer
 
 from app.core.config import get_settings
 from app.core.database import get_session_factory
 from app.modules.crawler.config import CrawlConfig
 from app.modules.crawler.fetcher import Fetcher, FetchResult
-from app.modules.crawler.models import CrawlJob, CrawlLink, CrawlPage, CrawlStatus, FetchStatus
+from app.modules.crawler.models import (
+    AnalysisStatus,
+    CrawlJob,
+    CrawlLink,
+    CrawlPage,
+    CrawlStatus,
+    FetchStatus,
+)
 from app.modules.crawler.parser import ParsedPage, parse_html, robots_directives
 from app.modules.crawler.robots import RobotsPolicy, RobotsTxt
 from app.modules.crawler.sitemaps import SitemapError, parse_sitemap
@@ -37,7 +45,8 @@ COPIED_FIELDS = (
     "status_code", "content_type", "content_length", "title", "title_count",
     "meta_description", "meta_description_count", "meta_robots", "x_robots_tag",
     "is_noindex", "is_nofollow", "canonical_url", "canonical_count", "lang", "headings",
-    "h1_count", "word_count", "content_hash", "images", "image_count", "images_missing_alt",
+    "h1_count", "word_count", "content_hash", "text_content", "images", "image_count",
+    "images_missing_alt",
     "structured_data", "hreflang", "internal_links_count", "external_links_count",
 )  # fmt: skip
 
@@ -317,6 +326,7 @@ class CrawlEngine:
         page.h1_count = parsed.h1_count
         page.word_count = parsed.word_count
         page.content_hash = parsed.content_hash
+        page.text_content = parsed.text or None
         page.images = parsed.images
         page.image_count = parsed.image_count
         page.images_missing_alt = parsed.images_missing_alt
@@ -438,7 +448,9 @@ class CrawlEngine:
             self.config = CrawlConfig.model_validate(job.config)
             if job.incremental and job.previous_crawl_id:
                 rows = await session.scalars(
-                    select(CrawlPage).where(CrawlPage.crawl_job_id == job.previous_crawl_id)
+                    select(CrawlPage)
+                    .options(undefer(CrawlPage.text_content))
+                    .where(CrawlPage.crawl_job_id == job.previous_crawl_id)
                 )
                 self.previous = {p.url: p for p in rows}
         self.root_host = host_of(self.config.root_url)
@@ -525,6 +537,9 @@ class CrawlEngine:
             job.status = (
                 CrawlStatus.CANCELLED if self.stop_reason == "cancelled" else CrawlStatus.COMPLETED
             )
+            if job.status == CrawlStatus.COMPLETED:
+                # Cancelled crawls are not analysed: partial data would wrongly resolve issues.
+                job.analysis_status = AnalysisStatus.QUEUED
             job.pages_discovered = len(self.seen)
             job.pages_crawled = self.counts["crawled"]
             job.pages_failed = self.counts["failed"]
