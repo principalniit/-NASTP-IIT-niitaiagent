@@ -101,3 +101,13 @@ def test_choose_provider(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(get_settings(), "ollama_default_model", "llama3.1")
     fallback = choose_provider(OrganisationSettings.model_validate({"ai": {"provider": "ollama"}}))
     assert fallback.enabled and fallback.model == "llama3.1"
+
+
+def test_build_provider_refuses_a_disabled_choice() -> None:
+    from app.modules.ai.provider import ProviderChoice, build_provider
+    from app.providers.interfaces import AIProvider
+
+    provider = build_provider(ProviderChoice(True, "ollama", "llama3.1"))
+    assert isinstance(provider, OllamaProvider) and isinstance(provider, AIProvider)
+    with pytest.raises(AIUnavailableError, match="turned off"):
+        build_provider(ProviderChoice(False, "none", None, "AI is turned off."))

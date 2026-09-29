@@ -98,6 +98,37 @@ append the real address, so the header alone can be forged.
 - Always bind the API to `127.0.0.1` or a private network so clients cannot reach it
   directly and supply their own header.
 
+## 5a. AI assistant and approvals
+
+AI is an untrusted component: its output is text to be checked, never an instruction
+the platform acts on.
+
+- **Off by default.** `AI_PROVIDER=none` disables it for the whole platform, and each
+  organisation must also turn it on. The Ollama address comes only from operator
+  configuration (`OLLAMA_BASE_URL`), so a tenant cannot point the server at another
+  host. Requests to Ollama ignore proxy environment variables.
+- **No free actions.** The model can only request one of nine read-only tools with
+  validated arguments. Each tool is bound to the one project the requester is
+  authorised for and filters by project and organisation. There is no SQL, shell,
+  file or network tool, and at most four tool calls per question.
+- **Prompt injection.** Crawled page text reaches the model as evidence. It could
+  contain instructions, but the model has nothing dangerous to call, its output is
+  schema-validated and grounding-checked, and results are stored as recommendations or
+  drafts that a person must review. Nothing an AI writes changes a website.
+- **Grounding.** Outputs with numbers not present in the evidence, unknown issue ids,
+  or claims about rankings, traffic, search volumes, backlinks or guaranteed results
+  are rejected after one retry, and nothing is saved.
+- **Approvals.** Only the defined state transitions are allowed. The author or
+  submitter of a version cannot approve it. Drafts touching fees, dates, eligibility
+  and similar official facts need a verified source reference. Every transition is
+  audit-logged with the actor. "Published" is a record of a human action; the platform
+  has no write access to any website.
+- **Load.** AI tasks run in the worker with a per-request timeout
+  (`AI_TIMEOUT_SECONDS`), and each organisation may have at most
+  `AI_MAX_ACTIVE_JOBS_PER_ORG` queued or running.
+- **Stored data.** Evidence and output are stored with each analysis for traceability.
+  They contain crawled public page text and issue data, no credentials.
+
 ## 6. Input, output and errors
 
 - Pydantic validates every request body, query parameter and configuration blob.
@@ -112,8 +143,10 @@ append the real address, so the header alone can be forged.
 
 Append-only `audit_logs` records: login success and failure, logout, token reuse
 detection, organisation, member, project and settings changes, and (later) crawls,
-approvals and publications. Records include actor, organisation, action, target,
-IP and a small metadata object. Passwords and tokens are never logged.
+approvals and publication records. Records include actor, organisation, action, target,
+IP and a small metadata object. Passwords and tokens are never logged. Phase 4 adds
+`ai.requested`, `recommendation.updated` and `draft.<action>` for every draft
+transition.
 
 ## 8. Secrets and configuration
 
@@ -141,3 +174,10 @@ IP and a small metadata object. Passwords and tokens are never logged.
   connection-level SSRF guard. It needs request interception and a dedicated review.
 - Crawl data volume is bounded by the organisation's page cap and 2,000 stored links
   per page. Retention and cleanup of old crawls are planned for Phase 5.
+- Grounding checks are pattern-based. They catch invented numbers, unknown issue ids and
+  the listed claim types, but cannot prove that every sentence is true. That is why AI
+  output is labelled, drafts need human approval, and protected facts need a source.
+- Protected-fact detection is keyword and pattern based, in English. It errs toward
+  flagging; content in other languages needs reviewer attention.
+- A single-person organisation cannot approve drafts, by design. It needs a second
+  member with an approving role.

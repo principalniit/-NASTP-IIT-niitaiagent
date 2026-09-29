@@ -8,7 +8,7 @@ from app.core.errors import ConflictError, ForbiddenError, NotFoundError, RateLi
 from app.core.pagination import PageParams
 from app.core.request_context import RequestMeta
 from app.modules.ai.models import AIAnalysis, AIKind, AIStatus, SeoRecommendation
-from app.modules.ai.provider import OllamaProvider, choose_provider
+from app.modules.ai.provider import build_provider, choose_provider
 from app.modules.ai.schemas import AIRequest, AIStatusOut
 from app.modules.audit_logs import service as audit
 from app.modules.crawler.models import CrawlPage
@@ -41,7 +41,7 @@ async def ai_status(org: Organisation) -> AIStatusOut:
             status="disabled",
             detail=choice.reason,
         )
-    health = await OllamaProvider(choice.model).health()
+    health = await build_provider(choice).health()
     return AIStatusOut(
         enabled=True,
         provider="ollama",

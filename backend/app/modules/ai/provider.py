@@ -11,7 +11,7 @@ from pydantic import BaseModel, ValidationError
 
 from app.core.config import get_settings
 from app.modules.organisations.schemas import OrganisationSettings
-from app.providers.interfaces import AIHealth
+from app.providers.interfaces import AIHealth, AIProvider
 
 logger = logging.getLogger(__name__)
 T = TypeVar("T", bound=BaseModel)
@@ -145,6 +145,13 @@ class OllamaProvider:
         raise AIOutputInvalidError(
             f"The AI reply was not valid after {max_attempts} attempts ({last_error})."
         )
+
+
+def build_provider(choice: ProviderChoice) -> AIProvider:
+    """The provider for an enabled choice. New providers are added here."""
+    if choice.provider == "ollama" and choice.model:
+        return OllamaProvider(choice.model)
+    raise AIUnavailableError(choice.reason or "AI is not available.")
 
 
 def schema_hint(schema: type[BaseModel]) -> str:

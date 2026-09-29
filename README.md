@@ -34,7 +34,7 @@ agent, content drafts and approvals arrive in Phase 4. See
 | Node.js | 20.9+ (22 LTS recommended) | https://nodejs.org/ |
 | pnpm | 9+ | `npm install -g pnpm` |
 | PostgreSQL | 15 or 16 | Docker (below) or a local install |
-| Ollama | optional, Phase 4 | https://ollama.com/download |
+| Ollama | optional, for the AI assistant | https://ollama.com/download |
 
 ### 2. Start PostgreSQL
 
@@ -101,15 +101,23 @@ pnpm dev
 
 Open http://localhost:3000 and sign in with the administrator account.
 
-### 6. Ollama (optional, used from Phase 4)
+### 6. Ollama (optional AI assistant)
 
 ```bash
 docker compose --profile ai up -d ollama   # or install Ollama natively
 ollama pull llama3.1:8b                     # any local model; choose to suit your hardware
 ```
 
-Then set `AI_PROVIDER=ollama` in `backend/.env`. The health check on the Overview page
-shows whether Ollama is reachable. Every feature built so far works with AI disabled.
+Then, in `backend/.env`, set `AI_PROVIDER=ollama` and `OLLAMA_DEFAULT_MODEL=llama3.1:8b`,
+and restart the API and the worker. AI tasks run in the worker. An organisation owner
+or admin then turns AI on under **Settings → AI provider**. The Overview shows whether
+the model is available.
+
+Everything else works with AI off. With AI on, the platform produces explanations,
+recommendations and drafts for human review; it never changes the website. The AI code
+has been tested against a scripted stand-in for Ollama, not a live model. Check the
+output on your own pages before relying on it (see `docs/IMPLEMENTATION_PLAN.md`,
+section 12).
 
 ## Environment variables
 
@@ -137,7 +145,10 @@ Backend variables live in `backend/.env` (template: `backend/.env.example`).
 | `WORKER_POLL_SECONDS` | `2.0` | How often an idle worker checks for queued crawls |
 | `WORKER_STALE_AFTER_SECONDS` | `300` | Running crawls without a heartbeat for this long are marked failed |
 | `AI_PROVIDER` | `none` | `none` or `ollama` |
-| `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama address |
+| `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama address. Operator-only; organisations cannot change it. |
+| `OLLAMA_DEFAULT_MODEL` | empty | Model used when an organisation does not name one, for example `llama3.1:8b` |
+| `AI_TIMEOUT_SECONDS` | `180` | Longest wait for one model reply |
+| `AI_MAX_ACTIVE_JOBS_PER_ORG` | `3` | Queued or running AI tasks allowed per organisation |
 | `TEST_DATABASE_URL` | `…/niit_seo_test` | Used by the pytest suite only |
 
 Frontend variables:
@@ -170,8 +181,9 @@ uv run ruff check . && uv run ruff format --check . && uv run mypy app && uv run
 cd frontend
 pnpm lint && pnpm typecheck && pnpm build
 
-# End-to-end: resets niit_seo_e2e, starts a local fixture website on :8123, a worker,
-# the API on :8001 and a production build on :3100
+# End-to-end: resets niit_seo_e2e, seeds an admin and a reviewer, starts a local fixture
+# website on :8123, a scripted fake Ollama on :11500, a worker, the API on :8001 and a
+# production build on :3100
 cd frontend
 pnpm exec playwright install chromium   # first time only
 pnpm test:e2e
@@ -181,8 +193,9 @@ The backend suite runs every migration down and up, then tests authentication, t
 rotation and reuse detection, rate limiting, role permissions, cross-organisation
 isolation, URL safety, settings validation, the NIIT seed, SSRF protection, robots.txt
 and sitemap parsing, HTML extraction, full crawls of a local fixture website, every SEO
-rule, scoring and prioritisation, and the issue lifecycle across repeated crawls. Tests never contact live
-NIIT infrastructure. CI runs all of the above on every pull request
+rule, scoring and prioritisation, the issue lifecycle across repeated crawls, the AI
+provider, grounding checks and agent tools against a fake Ollama server, and the draft
+approval workflow. Tests never contact live NIIT infrastructure or a real AI model. CI runs all of the above on every pull request
 (`.github/workflows/ci.yml`), plus `pip-audit` and `pnpm audit`.
 
 ## Troubleshooting
@@ -198,7 +211,11 @@ NIIT infrastructure. CI runs all of the above on every pull request
 | SEO pages say "No analysis results yet" | The worker analyses each completed crawl automatically; make sure it is running. A failed analysis shows its reason on the crawl page. |
 | Crawl finishes with nothing crawled and a robots.txt note | The site's robots.txt returned a server error or timed out; RFC 9309 then forbids crawling. Try again later. |
 | Crawl pages show "Blocked destination" | The host resolves to a private address. Use `CRAWLER_ALLOWED_PRIVATE_NETWORKS` only for servers you own. |
-| AI assistant shows "Unavailable" | Ollama is not reachable at `OLLAMA_BASE_URL`. The platform keeps working. |
+| AI assistant shows "Unavailable" | Ollama is not reachable at `OLLAMA_BASE_URL`, or the model is not pulled (`ollama list`). The platform keeps working. |
+| AI assistant shows "off" | Set `AI_PROVIDER=ollama` on the server and turn AI on in organisation settings |
+| AI tasks stay "Waiting for the worker" | Start `uv run python -m app.worker`; AI tasks run there, not in the API |
+| An AI task failed with "claims not supported by the project data" | The model added numbers or claims that are not in the crawl evidence, so the result was discarded. Try again, or use a larger model |
+| "The author or submitter of this version cannot approve it" | Intended: a second person with an approving role must review |
 | Production start fails with a `JWT_SECRET` or `COOKIE_SECURE` error | Intended safety check; set a strong secret and serve over HTTPS |
 
 ## Deployment notes
@@ -213,7 +230,8 @@ Phase 6. Until then:
 - Run `alembic upgrade head` before starting a new version.
 - Run at least one `python -m app.worker` process under a supervisor such as systemd.
   Stop it with SIGTERM; it finishes its current crawl first. If it is killed instead,
-  that crawl is marked failed after `WORKER_STALE_AFTER_SECONDS`.
+  that crawl is marked failed after `WORKER_STALE_AFTER_SECONDS`. The same worker runs
+  analyses and AI tasks.
 
 ## Feature status
 
@@ -225,7 +243,7 @@ Phase 6. Until then:
 | Dashboard shell, overview, projects, settings, administration | Done |
 | Crawler, Crawl Explorer, Pages browser (Phase 2) | Done; JavaScript rendering deferred |
 | SEO engine: 50 rules, scoring, prioritisation, issue lifecycle, SEO dashboards (Phase 3) | Done |
-| AI agent, drafts, approvals (Phase 4) | Not started; health check only |
+| AI assistant, recommendations, content drafts, approvals (Phase 4) | Done; not yet validated against a live Ollama model |
 | Reports and monitoring (Phase 5) | Not started |
 | Commercial readiness (Phase 6) | Not started |
 

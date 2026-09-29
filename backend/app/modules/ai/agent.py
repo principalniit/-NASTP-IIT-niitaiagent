@@ -5,7 +5,7 @@ from typing import Any
 
 from app.modules.ai.grounding import GroundingReport, check_output
 from app.modules.ai.outputs import AgentAnswer, AgentStep
-from app.modules.ai.provider import Message, OllamaProvider
+from app.modules.ai.provider import Message
 from app.modules.ai.tasks import issue_ids_in
 from app.modules.ai.tools import (
     TOOLS,
@@ -15,6 +15,7 @@ from app.modules.ai.tools import (
     get_project_summary,
     run_tool,
 )
+from app.providers.interfaces import AIProvider
 
 MAX_TOOL_CALLS = 4
 
@@ -27,7 +28,7 @@ def tool_catalogue() -> list[dict[str, Any]]:
 
 
 async def answer_question(
-    provider: OllamaProvider, tools: ToolContext, system: str, question: str
+    provider: AIProvider, tools: ToolContext, system: str, question: str
 ) -> tuple[AgentAnswer, dict[str, Any], GroundingReport, int]:
     evidence: dict[str, Any] = {
         "project_summary": await get_project_summary(tools, NoArgs()),

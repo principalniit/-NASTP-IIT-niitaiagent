@@ -15,15 +15,20 @@ class AIHealth(BaseModel):
 
 @runtime_checkable
 class AIProvider(Protocol):
-    """Generates structured output grounded in supplied evidence (Phase 4: Ollama)."""
+    """Returns JSON validated against a schema (Phase 4: Ollama).
+
+    `chat_structured` returns (validated output, attempts used, raw text of the final
+    reply). It raises app.modules.ai.provider.AIError subclasses with safe messages.
+    Grounding checks are the caller's job, so every provider gets them.
+    """
 
     name: str
 
     async def health(self) -> AIHealth: ...
 
-    async def generate_structured(
-        self, *, system: str, prompt: str, schema: type[BaseModel]
-    ) -> BaseModel: ...
+    async def chat_structured[T: BaseModel](
+        self, messages: list[dict[str, str]], schema: type[T], *, max_attempts: int = 2
+    ) -> tuple[T, int, str]: ...
 
 
 class CrawlerProvider(Protocol):

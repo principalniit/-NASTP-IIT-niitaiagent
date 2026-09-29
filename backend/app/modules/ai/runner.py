@@ -13,7 +13,7 @@ from app.modules.ai.agent import answer_question
 from app.modules.ai.grounding import check_output
 from app.modules.ai.models import AIAnalysis, AIKind, AIStatus
 from app.modules.ai.prompts import PROMPT_VERSION, system_prompt, user_prompt
-from app.modules.ai.provider import AIError, OllamaProvider, choose_provider
+from app.modules.ai.provider import AIError, build_provider, choose_provider
 from app.modules.ai.tasks import TASKS, TaskEnv, issue_ids_in
 from app.modules.ai.tools import ToolContext, ToolError
 from app.modules.organisations.models import Organisation
@@ -74,7 +74,7 @@ async def _execute(session: AsyncSession, analysis: AIAnalysis) -> None:
     )
     if not choice.enabled or choice.model is None:
         raise AIError(choice.reason or "AI is not available.")
-    provider = OllamaProvider(choice.model)
+    provider = build_provider(choice)
     tools = ToolContext(session, project)
     system = system_prompt(org.name, org_settings, org.language)
     requester = (

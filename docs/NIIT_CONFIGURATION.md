@@ -28,7 +28,7 @@ user must enter them, ideally with a source link.
 | Time zone, preferred language | Dates in reports; language of AI drafts |
 | Brand tone | Short description of voice used for AI drafts |
 | Approved terminology | Preferred terms and terms to avoid, for example preferred programme names |
-| AI provider and model | `none` or `ollama` in Phase 1 to 5 |
+| AI provider and model | `none` (the NIIT default) or `ollama`. Leave the model empty to use the server's `OLLAMA_DEFAULT_MODEL`. AI also needs the server operator to set `AI_PROVIDER=ollama` |
 | Crawl limits | Organisation-wide caps that project settings cannot exceed |
 | Report branding | Colours, footer text, logo placement (Phase 5) |
 | Notification preferences | Channels and events (later phase) |
@@ -95,6 +95,33 @@ The agent must not propose changes to official claims, dates, eligibility criter
 fees or admission requirements unless the change is backed by a verified source
 recorded in the institutional profile and approved by a human reviewer. Drafts that
 touch these areas are flagged for mandatory review.
+
+How this works since Phase 4:
+
+- The AI is told never to state or change official facts. Where content needs one, it
+  writes `[verify: what is needed]` instead of a value.
+- Any draft that adds, changes or removes a money amount, percentage, date, year or
+  grade, or mentions fees, tuition, eligibility, deadlines, merit, scholarships,
+  refunds or accreditation, is marked **protected**. The reasons are shown to the reviewer.
+- A protected draft can only be approved with a verified source reference, such as an
+  approved notice, document or page. The reference is stored in the approval trail.
+- Nobody can approve their own work: the author or submitter of a version needs a
+  second reviewer (owner, admin or SEO manager).
+- Approved drafts are never published by the platform. The web team makes the change
+  in the CMS and records it as published; the original text is kept for rollback.
+
+## 5a. AI settings for NIIT
+
+| Setting | Where | Recommended value |
+|---------|-------|-------------------|
+| Platform AI switch | Server `.env`: `AI_PROVIDER` | `ollama` once Ollama is installed; `none` otherwise |
+| Ollama address | Server `.env`: `OLLAMA_BASE_URL` | `http://localhost:11434` (only operators can change it) |
+| Default model | Server `.env`: `OLLAMA_DEFAULT_MODEL` | A model the server can run, for example `llama3.1` (8B) on a machine with 16 GB RAM |
+| Organisation AI | Settings, AI provider | Off until the owner has checked the output quality on NIIT pages |
+| Brand tone and approved terminology | Settings | Enter NIIT's preferred names (for example the official programme names) so drafts use them and reviewers see warnings when they do not |
+
+AI output depends on the model. Validate it on NIIT pages before relying on it; see
+the Phase 4 report in `docs/IMPLEMENTATION_PLAN.md`.
 
 ## 6. Separation from future tenants
 

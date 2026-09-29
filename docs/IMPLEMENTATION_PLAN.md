@@ -26,6 +26,10 @@ Documented per rule 12 of the brief. Each can be changed without redesign.
 | A5 | The Next.js server proxies `/api/v1` to FastAPI, giving one origin and first-party cookies. |
 | A6 | Package managers: `uv` for Python, `pnpm` for Node. Both are free and fast; `pip` and `npm` also work. |
 | A7 | Default AI model name is configurable and empty until Phase 4; no model is assumed. |
+| A8 | AI runs only when both the platform (`AI_PROVIDER=ollama`) and the organisation turn it on. NIIT starts with AI off. |
+| A9 | Approving a draft needs two people: the author or submitter of a version cannot approve it. The submitter of an AI draft counts as its author. |
+| A10 | "Published" and "rolled back" are records of what a person did in the CMS. No CMS connection exists until the owner authorises one (Phase 6). |
+| A11 | Any draft that adds, changes or removes a money amount, percentage, date, year or grade, or mentions fees, eligibility, deadlines or similar, is treated as touching official facts and needs a verified source to be approved. |
 
 ## 3. Prerequisites for local development
 
@@ -111,12 +115,13 @@ Acceptance criteria from the project principles:
   project settings such as important pages, page groups and content types.
 - Scores are presented as site-health indicators, never as rankings or predictions.
 
-### Phase 4: AI agent
+### Phase 4: AI agent (complete)
 
 `AIProvider` and `OllamaProvider`, health checks, typed agent tools, structured JSON
 outputs with validation and retry, grounded summaries and recommendations, metadata
 and content drafts, approval workflow (Draft, Pending Review, Approved, Rejected,
 Published, Rolled Back) with version history. Drafts only; nothing is published.
+See section 12 for the report.
 
 ### Phase 5: Reports and monitoring
 
@@ -136,11 +141,12 @@ encrypted credentials, deployment guide, production security review.
 |------|--------|------------|
 | SSRF through the crawler | Internal network exposure | Dedicated URL safety module, IP pinning, per-hop checks, security tests (Phase 2) |
 | Cross-tenant data leak | Severe for SaaS | `organisation_id` on every row, single authorisation dependency, isolation tests from Phase 1 |
-| AI hallucination in drafts | Misleading institutional content | Grounded prompts, schema validation, human approval, no auto-publish |
+| AI hallucination in drafts | Misleading institutional content | Grounded prompts, schema validation, grounding checks that reject invented numbers and claims, protected-fact detection, two-person approval, no auto-publish |
 | Overloading the NIIT site | Reputational | Conservative defaults (100 pages, depth 5, low concurrency, delay), robots.txt |
 | Scope size | Delivery slips | Strict phase gates, each phase shippable on its own |
 | In-process rate limiter | Ineffective across multiple API instances | Documented; replace with PostgreSQL or Redis store before scaling out |
 | Ollama hardware needs | Slow or unavailable AI | AI is optional; small models documented; core works without it |
+| Provider not yet tried with a real model | Real models may fail schema or grounding checks more often than the tests assume | Failures are safe (nothing saved); validate with the chosen model before enabling AI for NIIT (see section 12) |
 | No live-site access from the dev container | Cannot verify against real NIIT pages here | Fixture-based tests; owner runs first live crawl locally |
 
 ## 6. Recommended first milestone
@@ -157,7 +163,7 @@ tenancy and security before any crawl data exists.
 | Foundation (auth, organisations, projects, RBAC, dashboard shell) | Done |
 | Crawler, crawl explorer and page browser | Done |
 | SEO engine: rules, scoring, prioritisation, issues, SEO dashboards | Done |
-| AI agent | Not started |
+| AI agent: provider, tools, grounded tasks, recommendations, drafts and approvals | Done (not yet validated against a live Ollama model; see section 12) |
 | Reports and monitoring | Not started |
 | Commercial readiness | Not started |
 
@@ -265,3 +271,81 @@ page-importance bonus, and a test locks this in.
 Recommended next step: Phase 4, the AI agent. Ollama integration behind the provider
 interface, typed agent tools over the issues and pages now stored, grounded
 explanations and drafts for metadata and content, and the approval workflow.
+
+## 12. Phase 4 report
+
+Delivered:
+- An Ollama provider behind the `AIProvider` interface: schema-constrained JSON,
+  validation with one retry, and a health check that reports a missing model.
+- Platform and organisation switches for AI. NIIT starts with AI off.
+- Nine typed, read-only, project-scoped tools, and a bounded question-answering loop.
+- Five tasks:
+  - management summary;
+  - issue explanation, which creates a recommendation;
+  - page improvement plan, which creates recommendations;
+  - title and description drafts;
+  - content outline draft, with `[verify: ...]` markers for facts that need confirming.
+- Grounding checks with one retry. An ungrounded reply is never saved.
+- A deterministic crawl comparison, also available at `GET /projects/{id}/compare`.
+- Recommendations that users can accept or dismiss.
+- Drafts from people or the AI, with version history, the approval workflow, separation
+  of duties, protected-fact detection, a full approval trail and audit logging.
+- Dashboard pages: AI Recommendations, Content Opportunities, Approvals and draft
+  review, plus "Explain with AI" on issues and AI drafting on crawled pages.
+
+Phase 4 acceptance criteria:
+
+| Criterion | How it is met |
+|-----------|---------------|
+| Core works with AI off | AI is off by default; the engine never calls it; with AI off, requests return 409 `ai_disabled` and the screens explain why; tested |
+| Structured, validated output with retry | Pydantic schemas passed to Ollama as `format`; invalid JSON is retried once with the errors, then the task fails; tested against a fake server |
+| Grounded, no fabricated metrics | Invented numbers, unknown issue ids and ranking, traffic, search-volume, backlink or guarantee claims are rejected after one retry; tested for each |
+| Agent tools are typed, scoped and bounded | Argument models, allow-list, project and organisation filters, at most four tool calls; isolation and loop tests |
+| Approval workflow with version history | Six states, only defined transitions, versions and trail stored; API and E2E tests |
+| Nothing is published | No code writes to a website; "published" is a record, and the UI says so |
+| Human review for institutional content | Two-person approval; protected facts need a verified source reference; tested in API and E2E |
+| Tenant isolation | Analyses, recommendations, drafts and tools return 404 or refuse across organisations; security tests |
+
+| Suite | Result |
+|-------|--------|
+| Backend unit, integration and security tests (pytest) | 288 passed |
+| Backend lint and types (ruff, mypy strict), migration drift check | Clean |
+| Frontend lint, types, production build | Clean |
+| End-to-end (Playwright), including an AI draft approved by a second person, marked published, and a protected human draft needing a source | 11 passed |
+
+Found and fixed during Phase 4:
+- The ORM could insert an approval-trail row before its draft, because the two are
+  not linked by a relationship. The draft is now flushed first.
+- AI drafts have no human author, so the person who submitted one could also approve
+  it. The submitter of a version is now barred as well.
+- Human drafts accepted any public URL. They must now be on the project's site.
+- A long question could outlive the stale-task window and be failed while healthy.
+  The window now covers the worst-case number of model calls.
+
+How AI was tested: Ollama and its model registry cannot be reached from the build
+environment. The provider was written against Ollama's documented `/api/chat` and
+`/api/tags` endpoints. It was tested only against `backend/tests/fixtures/fake_ollama.py`,
+a local stand-in that returns scripted replies, or replies built from the prompt's own
+evidence. **It has not been run against a real model.** Before enabling AI for NIIT:
+1. Install Ollama and pull a model (`ollama pull llama3.1`).
+2. Set `AI_PROVIDER=ollama` and `OLLAMA_DEFAULT_MODEL`.
+3. Turn AI on in organisation settings.
+4. Run each task on the NIIT project, and check the grounding pass rate and the
+   quality of the drafts.
+
+### Known limitations after Phase 4
+
+| Limitation | Plan |
+|------------|------|
+| Not validated against a live Ollama model | Owner validation step above before enabling AI for NIIT |
+| Grounding checks are pattern-based and English-oriented; they catch invented numbers and listed claim types, not every false statement | Human approval remains mandatory; extend patterns as real output is reviewed |
+| Protected-fact detection is keyword-based and English-only | Reviewers see the reasons; extend per language when needed |
+| One organisation member cannot approve their own drafts, so a one-person organisation cannot approve anything | By design; add a second member with an approving role |
+| AI tasks are processed one at a time per worker; a slow model delays the queue | Run more workers, or a faster model |
+| Draft evidence links to issues by id; resolved issues still link but may no longer be current | Shown with their status on the issue page |
+| No streaming of AI output; results appear when the task completes | Acceptable for background tasks |
+
+Recommended next step: Phase 5, reports and monitoring. HTML and PDF management
+reports using the deterministic results and, where enabled, the grounded management
+summary; score history charts; crawl comparison views over the comparison already
+built; and the scheduled-crawl foundation, off by default.
