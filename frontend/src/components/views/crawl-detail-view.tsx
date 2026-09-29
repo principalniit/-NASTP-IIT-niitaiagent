@@ -91,6 +91,18 @@ export function CrawlDetailView({ crawlId }: { crawlId: string }) {
                 <dd>{job.robots_status ? (ROBOTS_LABELS[job.robots_status] ?? job.robots_status) : "Not checked yet"}</dd>
               </div>
               <div>
+                <dt className="text-muted-foreground">SEO analysis</dt>
+                <dd>
+                  {job.analysis_status === "completed" ? (
+                    <Link href="/audit" className="text-primary underline-offset-4 hover:underline">Completed · view SEO audit</Link>
+                  ) : job.analysis_status === "failed" ? (
+                    `Failed: ${job.analysis_error ?? "unknown error"}`
+                  ) : job.analysis_status === "queued" || job.analysis_status === "running" ? (
+                    "In progress"
+                  ) : job.status === "completed" ? "Not analysed" : "Runs after the crawl completes"}
+                </dd>
+              </div>
+              <div>
                 <dt className="text-muted-foreground">Sitemap URLs found</dt>
                 <dd>{job.status === "queued" ? "Not checked yet" : job.sitemap_url_count}</dd>
               </div>

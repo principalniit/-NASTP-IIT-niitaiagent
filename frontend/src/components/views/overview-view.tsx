@@ -9,11 +9,15 @@ import { ErrorState, LoadingState } from "@/components/app/states";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useCurrentOrg } from "@/lib/current-org";
-import { useCrawls, useHealth, useMembers, useProjects } from "@/lib/queries";
+import { useCrawls, useHealth, useIssueSummary, useMembers, useProjects, useScore } from "@/lib/queries";
 
 const NO_CRAWL = "No crawl data yet";
 const NOT_SCORED = "Not scored yet";
-const SCORE_HINT = "Scores are calculated by the SEO engine, delivered in Phase 3.";
+const SCORE_HINT = "Scores appear after a crawl is analysed.";
+
+function scoreValue(value: number | null | undefined): number | null {
+  return value === null || value === undefined ? null : Math.round(value);
+}
 const STATUS_LABELS: Record<string, string> = {
   queued: "Queued",
   running: "Running",
@@ -30,6 +34,14 @@ export function OverviewView() {
   const members = useMembers(current?.id ?? null, can("members:read"));
   const health = useHealth();
   const latestCrawl = useCrawls(current?.id ?? null, { page_size: 1 }, canReadProjects);
+  const latestAnalysed = useCrawls(
+    current?.id ?? null,
+    { page_size: 1, analysed: true },
+    canReadProjects,
+  );
+  const analysedCrawl = latestAnalysed.data?.items[0] ?? null;
+  const score = useScore(analysedCrawl?.id ?? null);
+  const issueSummary = useIssueSummary(analysedCrawl?.project_id ?? null);
   const latestCompleted = useCrawls(
     current?.id ?? null,
     { page_size: 1, status: "completed" },
@@ -106,11 +118,21 @@ export function OverviewView() {
           SEO health
         </h2>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <StatTile label="Overall SEO health score" value={null} emptyText={NOT_SCORED} hint={SCORE_HINT} />
-          <StatTile label="Technical SEO score" value={null} emptyText={NOT_SCORED} />
-          <StatTile label="On-page score" value={null} emptyText={NOT_SCORED} />
-          <StatTile label="Content score" value={null} emptyText={NOT_SCORED} />
-          <StatTile label="Critical and high-priority issues" value={null} emptyText={NOT_SCORED} />
+          <StatTile
+            label="Overall SEO health score"
+            value={scoreValue(score.data?.overall)}
+            loading={latestAnalysed.isLoading || (!!analysedCrawl && score.isLoading)}
+            emptyText={NOT_SCORED}
+            hint={analysedCrawl ? `${analysedCrawl.project_name} · site health, not a ranking` : SCORE_HINT}
+          />
+          <StatTile label="Technical SEO score" value={scoreValue(score.data?.technical)} emptyText={NOT_SCORED} />
+          <StatTile label="On-page score" value={scoreValue(score.data?.on_page)} emptyText={NOT_SCORED} />
+          <StatTile label="Content score" value={scoreValue(score.data?.content)} emptyText={NOT_SCORED} />
+          <StatTile
+            label="Critical and high-priority issues"
+            value={issueSummary.data && analysedCrawl ? issueSummary.data.open_by_severity.critical + issueSummary.data.open_by_severity.high : null}
+            emptyText={NOT_SCORED}
+          />
           <StatTile
             label="Pages crawled"
             value={completed ? completed.pages_crawled : null}
@@ -125,7 +147,12 @@ export function OverviewView() {
             emptyText="No crawls run"
             hint={newest ? `${newest.project_name}` : undefined}
           />
-          <StatTile label="Resolved issues" value={null} emptyText="Needs two analysed crawls" />
+          <StatTile
+            label="Resolved issues"
+            value={issueSummary.data && analysedCrawl && issueSummary.data.resolved_total > 0 ? issueSummary.data.resolved_total : null}
+            emptyText={analysedCrawl ? "None verified yet" : "Needs two analysed crawls"}
+            hint={analysedCrawl ? "Verified by a later crawl" : undefined}
+          />
         </div>
       </section>
 
@@ -135,7 +162,7 @@ export function OverviewView() {
         </h2>
         {[
           ["Issue trend", "Plotted once at least two analysed crawls exist (Phase 5)."],
-          ["Recent recommendations", "Recommendations are generated from crawl evidence (Phase 4)."],
+          ["Recent recommendations", "AI-assisted recommendations and drafts arrive in Phase 4. Rule-based recommendations are on each issue."],
           ["Latest reports", "Management reports become available in Phase 5."],
         ].map(([title, text]) => (
           <Card key={title}>

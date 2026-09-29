@@ -6,8 +6,8 @@ It crawls websites, runs a deterministic SEO rules engine, scores and prioritise
 issues, and uses a local AI model only as an optional helper for explanations and
 drafts. Nothing is ever published to a live website automatically.
 
-**Status:** Phases 1 (foundation) and 2 (crawler) are complete. The SEO rules engine
-and scoring arrive in Phase 3. See
+**Status:** Phases 1 (foundation), 2 (crawler) and 3 (SEO engine) are complete. The AI
+agent, content drafts and approvals arrive in Phase 4. See
 [Feature status](#feature-status) and [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md).
 
 ## Contents
@@ -180,7 +180,8 @@ pnpm test:e2e
 The backend suite runs every migration down and up, then tests authentication, token
 rotation and reuse detection, rate limiting, role permissions, cross-organisation
 isolation, URL safety, settings validation, the NIIT seed, SSRF protection, robots.txt
-and sitemap parsing, HTML extraction, and full crawls of a local fixture website. Tests never contact live
+and sitemap parsing, HTML extraction, full crawls of a local fixture website, every SEO
+rule, scoring and prioritisation, and the issue lifecycle across repeated crawls. Tests never contact live
 NIIT infrastructure. CI runs all of the above on every pull request
 (`.github/workflows/ci.yml`), plus `pip-audit` and `pnpm audit`.
 
@@ -194,6 +195,7 @@ NIIT infrastructure. CI runs all of the above on every pull request
 | Signed out after every page reload | Access tokens live in memory by design; the refresh cookie restores the session. If it does not, check that you open the dashboard via `localhost:3000`, not the API port. |
 | `Too many failed login attempts` | Wait five minutes, or restart the API in development |
 | A crawl stays "Queued" | Start a worker: `uv run python -m app.worker` |
+| SEO pages say "No analysis results yet" | The worker analyses each completed crawl automatically; make sure it is running. A failed analysis shows its reason on the crawl page. |
 | Crawl finishes with nothing crawled and a robots.txt note | The site's robots.txt returned a server error or timed out; RFC 9309 then forbids crawling. Try again later. |
 | Crawl pages show "Blocked destination" | The host resolves to a private address. Use `CRAWLER_ALLOWED_PRIVATE_NETWORKS` only for servers you own. |
 | AI assistant shows "Unavailable" | Ollama is not reachable at `OLLAMA_BASE_URL`. The platform keeps working. |
@@ -222,7 +224,7 @@ Phase 6. Until then:
 | Projects and project settings (including NIIT configuration) | Done |
 | Dashboard shell, overview, projects, settings, administration | Done |
 | Crawler, Crawl Explorer, Pages browser (Phase 2) | Done; JavaScript rendering deferred |
-| SEO rules, scoring, issues (Phase 3) | Not started |
+| SEO engine: 50 rules, scoring, prioritisation, issue lifecycle, SEO dashboards (Phase 3) | Done |
 | AI agent, drafts, approvals (Phase 4) | Not started; health check only |
 | Reports and monitoring (Phase 5) | Not started |
 | Commercial readiness (Phase 6) | Not started |

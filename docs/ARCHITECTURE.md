@@ -53,8 +53,7 @@ backend/
       projects/      projects and project settings
       audit_logs/    append-only audit trail
       crawler/       fetcher, URL safety, robots, sitemaps, parser, engine
-      seo_rules/     (Phase 3) rule registry and rule implementations
-      seo_scoring/   (Phase 3) scoring and prioritisation
+      seo/           rules, scoring, prioritisation, analysis, issues API
       ai/            (Phase 4) provider interface, Ollama provider, agent tools
       reporting/     (Phase 5) HTML and PDF reports, comparisons
     providers/       abstract provider interfaces (AIProvider, KeywordProvider, ...)
@@ -135,10 +134,10 @@ UUID primary keys, `created_at`/`updated_at` timestamps, foreign keys with expli
 | crawl_jobs | 2 | Status, config snapshot, counters, error, timings; also the job queue |
 | crawl_pages | 2 | URL, status, timings, redirect chain, extracted SEO fields, content hash |
 | crawl_links | 2 | Source page, target URL, anchor, internal flag, nofollow |
-| schema_findings | 3 | Structured data blocks, types, validity |
+| schema_findings | 3 | Per JSON-LD block or microdata set: types, validity, errors, warnings |
 | seo_issues | 3 | Fields listed in section 8 of the product brief |
-| seo_scores | 3 | Per crawl, per category, with rule contributions |
-| internal_link_recommendations | 3 | Source, target, reason, evidence |
+| seo_scores | 3 | One row per analysed crawl: overall and category scores with the rule contributions |
+| internal_link_recommendations | 3 | Source, target, anchor phrase, reason, matched sentence |
 | ai_analyses | 4 | Provider, model, prompt hash, validated output, status |
 | seo_recommendations | 4 | Grounded recommendation linked to issues |
 | content_drafts | 4 | Original, proposed, reason, evidence, version |
@@ -182,21 +181,39 @@ its own review before it is enabled. The project setting is kept; crawls that re
 it record a warning and analyse pages as served. External links are recorded but not
 fetched, so broken external links are not reported.
 
-## 8. Rules engine and scoring (Phase 3)
+## 8. SEO engine (Phase 3, implemented)
 
-- A rule is a small class with `id`, `category`, `default_severity` and
-  `evaluate(context) -> list[Finding]`. Rules are pure functions of crawl data, so
-  they are unit-tested with fixtures.
-- Every finding carries evidence: the URL, the observed value and the threshold.
-- Category score = `100 x (1 - min(1, sum(weight(severity) x affected_share)))`,
-  where `affected_share` is affected pages over pages analysed. Weights and category
-  percentages (technical 30, on-page 30, content 20, internal linking 10, structured
-  data 10) are configurable per project. The score is a health indicator for this
-  site only. It is not a Google ranking factor or a prediction of search results.
-- Priority score combines severity, affected pages, page importance (from configured
-  important pages and page groups), confidence and effort. The UI shows the breakdown.
-- An issue is marked resolved only when a later crawl covers the same URL and the
-  rule no longer fires.
+Code: `backend/app/modules/seo/`. No AI provider is involved anywhere in this module.
+
+| Part | File | Behaviour |
+|------|------|-----------|
+| Context | `context.py` | Loads one crawl's pages, links and facts plus current project settings into memory. Rules only read this object, so they are deterministic and unit-testable. |
+| Finding | `findings.py` | Pydantic model; rejects any finding without evidence or a recommendation. |
+| Rules | `rules/` | 50 rules: 19 technical, 15 on-page, 7 content, 5 internal linking, 4 structured data. The catalogue is served at `GET /api/v1/seo-rules`. Thresholds come from project settings. |
+| Structured data | `schema_check.py` | Checks JSON-LD for common schema.org types against documented required and recommended properties. Errors and enhancements are separate. Unknown types are not guessed at. |
+| Similarity | `text.py` | 64-bit simhash over 3-word shingles; band indexing finds pairs within 3 bits without comparing every pair. |
+| Link suggestions | `link_opportunities.py` | Only where a page's own text mentions another page's H1 or title phrase and does not link to it; the matched sentence is stored as evidence. |
+| Scoring | `scoring.py` | Category score = 100 × (1 − min(1, Σ severity weight × share of pages affected)). Site-wide findings count as affecting every page. Overall = weighted average of the categories that could be scored. Default weights: technical 30, on-page 30, content 20, internal linking 10, structured data 10; severity weights critical 1.0, high 0.5, medium 0.2, low 0.05, informational 0. |
+| Priority | `priority.py` | (severity + reach + page importance + effort bonus) × confidence, 0 to 100. Severity steps are larger than the importance bonus, so severity dominates. The breakdown is stored with each issue. |
+| Orchestration | `analysis.py` | Runs everything for one completed crawl in one transaction. |
+
+**Issue identity and lifecycle.** An issue's key is the rule plus its subject (a URL
+hash, a group hash or "site"). On each analysis:
+
+- a finding with a new key creates an open issue;
+- a finding with an existing key updates it; a resolved issue reopens and its
+  recurrence count increases; an ignored issue stays ignored;
+- an existing issue not found again is resolved only if the crawl re-examined what it
+  concerned (the page for page issues, every URL for group issues; site issues are
+  always re-examined). Otherwise it stays open.
+
+Analysis is queued when a crawl completes and run by the worker. Cancelled crawls are
+never analysed, and a crawl older than one already analysed cannot be analysed,
+because either would resolve issues on incomplete or stale evidence. Users can re-run
+the analysis of the latest crawl, for example after changing thresholds.
+
+The score is a site-health indicator for prioritising work. It is not a search engine
+ranking factor and does not predict rankings. Ignored issues still count toward it.
 
 ## 9. AI layer (Phase 4)
 

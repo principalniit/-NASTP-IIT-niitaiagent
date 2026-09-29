@@ -14,6 +14,7 @@ from app.modules.audit_logs import service as audit
 from app.modules.crawler.config import CrawlConfig
 from app.modules.crawler.models import (
     ACTIVE_STATUSES,
+    AnalysisStatus,
     CrawlJob,
     CrawlLink,
     CrawlPage,
@@ -166,6 +167,7 @@ async def list_crawls(
     params: PageParams,
     project_id: uuid.UUID | None,
     status: CrawlStatus | None,
+    analysed: bool | None = None,
 ) -> tuple[list[CrawlJobOut], int]:
     query = (
         select(CrawlJob, Project.name)
@@ -176,6 +178,9 @@ async def list_crawls(
         query = query.where(CrawlJob.project_id == project_id)
     if status:
         query = query.where(CrawlJob.status == status)
+    if analysed is not None:
+        completed = CrawlJob.analysis_status == AnalysisStatus.COMPLETED
+        query = query.where(completed if analysed else ~completed)
     total = await session.scalar(select(func.count()).select_from(query.subquery())) or 0
     rows = await session.execute(
         query.order_by(CrawlJob.created_at.desc()).offset(params.offset).limit(params.page_size)

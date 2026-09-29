@@ -5,6 +5,11 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import {
   ACTIVE_CRAWL_STATUSES,
+  type Issue,
+  type IssueSummary,
+  type LinkRecommendation,
+  type SchemaFinding,
+  type Score,
   type BrokenLink,
   type CrawlJob,
   type CrawlPageDetail,
@@ -32,6 +37,8 @@ export const keys = {
   projectSettings: (id: string) => ["projects", id, "settings"] as const,
   crawls: (orgId: string) => ["organisations", orgId, "crawls"] as const,
   crawl: (id: string) => ["crawls", id] as const,
+  issues: (projectId: string) => ["projects", projectId, "issues"] as const,
+  issue: (id: string) => ["issues", id] as const,
 };
 
 export function useHealth() {
@@ -109,6 +116,7 @@ export function isActiveCrawl(job: CrawlJob | undefined | null): boolean {
 export interface CrawlListQuery {
   project_id?: string;
   status?: string;
+  analysed?: boolean;
   page?: number;
   page_size?: number;
 }
@@ -117,7 +125,13 @@ export function useCrawls(orgId: string | null, params: CrawlListQuery = {}, ena
   return useQuery({
     queryKey: [...keys.crawls(orgId ?? ""), params],
     queryFn: () =>
-      api<Page<CrawlJob>>(`/organisations/${orgId}/crawls`, { query: { page_size: 20, ...params } }),
+      api<Page<CrawlJob>>(`/organisations/${orgId}/crawls`, {
+        query: {
+          page_size: 20,
+          ...params,
+          analysed: params.analysed === undefined ? undefined : String(params.analysed),
+        },
+      }),
     enabled: !!orgId && enabled,
     // Keep polling while any listed crawl is still in progress.
     refetchInterval: (query) =>
@@ -129,7 +143,11 @@ export function useCrawl(id: string) {
   return useQuery({
     queryKey: keys.crawl(id),
     queryFn: () => api<CrawlJob>(`/crawls/${id}`),
-    refetchInterval: (query) => (isActiveCrawl(query.state.data) ? 2000 : false),
+    refetchInterval: (query) => {
+      const job = query.state.data;
+      const analysing = job?.analysis_status === "queued" || job?.analysis_status === "running";
+      return isActiveCrawl(job) || analysing ? 2000 : false;
+    },
   });
 }
 
@@ -173,4 +191,71 @@ export function useBrokenLinks(id: string, page: number, version: string) {
     queryKey: [...keys.crawl(id), "broken", page, version],
     queryFn: () => api<Page<BrokenLink>>(`/crawls/${id}/broken-links`, { query: { page, page_size: 25 } }),
   });
+}
+
+export interface IssueFilters {
+  status?: string;
+  all_statuses?: string;
+  severity?: string;
+  category?: string;
+  rule_id?: string;
+  q?: string;
+  sort?: string;
+  order?: string;
+  page?: number;
+  page_size?: number;
+}
+
+export function useIssues(projectId: string | null, filters: IssueFilters, enabled = true) {
+  return useQuery({
+    queryKey: [...keys.issues(projectId ?? ""), filters],
+    queryFn: () => api<Page<Issue>>(`/projects/${projectId}/issues`, { query: { page_size: 25, ...filters } }),
+    enabled: !!projectId && enabled,
+  });
+}
+
+export function useIssueSummary(projectId: string | null, enabled = true) {
+  return useQuery({
+    queryKey: [...keys.issues(projectId ?? ""), "summary"],
+    queryFn: () => api<IssueSummary>(`/projects/${projectId}/issues/summary`),
+    enabled: !!projectId && enabled,
+  });
+}
+
+export function useIssue(id: string) {
+  return useQuery({ queryKey: keys.issue(id), queryFn: () => api<Issue>(`/issues/${id}`) });
+}
+
+export function useScore(crawlId: string | null) {
+  return useQuery({
+    queryKey: [...keys.crawl(crawlId ?? ""), "score"],
+    queryFn: () => api<Score>(`/crawls/${crawlId}/score`),
+    enabled: !!crawlId,
+  });
+}
+
+export function useSchemaFindings(crawlId: string | null, page: number, invalidOnly: boolean) {
+  return useQuery({
+    queryKey: [...keys.crawl(crawlId ?? ""), "schema", page, invalidOnly],
+    queryFn: () =>
+      api<Page<SchemaFinding>>(`/crawls/${crawlId}/schema-findings`, {
+        query: { page, page_size: 25, invalid_only: invalidOnly ? "true" : undefined },
+      }),
+    enabled: !!crawlId,
+  });
+}
+
+export function useLinkRecommendations(crawlId: string | null, page: number) {
+  return useQuery({
+    queryKey: [...keys.crawl(crawlId ?? ""), "link-recommendations", page],
+    queryFn: () =>
+      api<Page<LinkRecommendation>>(`/crawls/${crawlId}/link-recommendations`, { query: { page, page_size: 25 } }),
+    enabled: !!crawlId,
+  });
+}
+
+/** The most recent crawl of a project whose analysis completed. */
+export function useLatestAnalysedCrawl(orgId: string | null, projectId: string | null) {
+  const query = useCrawls(orgId, { project_id: projectId ?? undefined, analysed: true, page_size: 1 }, !!projectId);
+  return { ...query, crawl: query.data?.items[0] ?? null };
 }

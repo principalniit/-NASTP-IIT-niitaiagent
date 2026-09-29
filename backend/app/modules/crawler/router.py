@@ -59,9 +59,10 @@ async def list_crawls(
     access: Annotated[OrgAccess, Depends(require_org(Permission.PROJECTS_READ))],
     project_id: uuid.UUID | None = None,
     status_filter: Annotated[CrawlStatus | None, Query(alias="status")] = None,
+    analysed: bool | None = None,
 ) -> Page[CrawlJobOut]:
     items, total = await service.list_crawls(
-        session, access.organisation.id, paging, project_id, status_filter
+        session, access.organisation.id, paging, project_id, status_filter, analysed
     )
     return Page(items=items, total=total, page=paging.page, page_size=paging.page_size)
 

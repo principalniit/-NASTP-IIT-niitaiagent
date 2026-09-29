@@ -7,7 +7,7 @@ the project owner (principal@niit.edu.pk). Do not open public issues for them.
 
 | Asset | Threat | Primary controls |
 |-------|--------|------------------|
-| Tenant data | Cross-organisation access by ID tampering | Backend membership check on every request; `organisation_id` on every tenant row; 404 for foreign resources; isolation tests |
+| Tenant data | Cross-organisation access by ID tampering | Backend membership check on every request (organisations, projects, crawls, pages, issues, SEO results); `organisation_id` on every tenant row; 404 for foreign resources; isolation tests per module |
 | User accounts | Credential stuffing, token theft | Argon2id hashing, login rate limiting, short-lived access tokens, rotating refresh tokens with reuse detection, `HttpOnly` cookies |
 | Internal network | SSRF through the crawler | Connection-time address checks with pinning, port allowlist, per-redirect revalidation, host scope, proxies ignored |
 | Target websites | Being overloaded by our crawler | robots.txt, delay, low concurrency, page and depth caps |

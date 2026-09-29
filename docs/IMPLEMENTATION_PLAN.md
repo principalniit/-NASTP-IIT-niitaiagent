@@ -95,7 +95,7 @@ and ALT, links, JSON-LD and microdata), content hashing, redirect chains, respon
 times, DB-backed job queue and worker, progress and cancellation, crawl explorer UI.
 Tests against a local fixture site served by the test suite.
 
-### Phase 3: SEO engine
+### Phase 3: SEO engine (complete)
 
 Rule registry and all rules listed in section 7 of the brief, schema findings,
 internal-link graph (in/out counts, orphans, over-linked pages, under-linked
@@ -156,7 +156,7 @@ tenancy and security before any crawl data exists.
 | Discovery documents | Done |
 | Foundation (auth, organisations, projects, RBAC, dashboard shell) | Done |
 | Crawler, crawl explorer and page browser | Done |
-| SEO engine | Not started |
+| SEO engine: rules, scoring, prioritisation, issues, SEO dashboards | Done |
 | AI agent | Not started |
 | Reports and monitoring | Not started |
 | Commercial readiness | Not started |
@@ -212,7 +212,7 @@ the crawl instead of leaving it running.
 | Limitation | Plan |
 |------------|------|
 | JavaScript rendering is not available (security review needed for browser sub-requests) | Later phase, with request interception |
-| External links are recorded but not checked | Optional, rate-limited external checks in Phase 3 |
+| External links are recorded but not checked | Optional, rate-limited external checks in a later phase |
 | Pages found only in a sitemap are crawled but their links are not followed | By design, to keep crawls bounded |
 | Orphans are not identified when a crawl hits its page limit | By design; raise the limit for a full picture |
 | No automatic cleanup of old crawl data | Retention settings in Phase 5 |
@@ -220,3 +220,48 @@ the crawl instead of leaving it running.
 
 Recommended next step: Phase 3, the deterministic SEO rules engine, scoring and
 prioritisation, using the observations Phase 2 now stores.
+
+## 11. Phase 3 report
+
+Delivered: 50 deterministic rules across technical, on-page, content, internal linking
+and structured data; structured-data checks; near-duplicate detection; contextual
+internal-link suggestions; configurable, explained scoring and prioritisation; issue
+lifecycle across crawls with verified resolution and recurrence; triage (ignore and
+reopen, audit-logged); automatic analysis after each crawl; the issues and results API;
+and the SEO Audit, Issues, issue detail, Internal Linking and Structured Data pages,
+with live scores on the Overview.
+
+Phase 3 acceptance criteria:
+
+| Criterion | How it is met |
+|-----------|---------------|
+| Every issue has evidence and a recommendation | Enforced by the `Finding` model; every rule has a test asserting both |
+| Runs with AI disabled | No AI code in `app/modules/seo`; all tests run with `AI_PROVIDER=none` |
+| No NIIT-specific logic | A test scans the engine source for institution names; NIIT behaviour comes from project settings |
+| Scores are health indicators, not rankings | Stated in the score breakdown, the SEO Audit page and the docs |
+
+| Suite | Result |
+|-------|--------|
+| Backend unit, integration and security tests (pytest) | 254 passed |
+| Backend lint and types (ruff, mypy strict), migration drift check | Clean |
+| Frontend lint, types, production build | Clean |
+| End-to-end (Playwright), including crawl, analysis, issue review and triage | 9 passed |
+
+Found and fixed during Phase 3: the first priority weights let a low-severity issue on
+the home page tie with a high-severity error elsewhere. Severity steps now outweigh the
+page-importance bonus, and a test locks this in.
+
+### Known limitations after Phase 3
+
+| Limitation | Plan |
+|------------|------|
+| Structured data checks cover common types only; microdata properties are not checked | Extend as sites need it |
+| Link suggestions need an exact mention of the target's H1 or title phrase | Deliberately conservative; AI-assisted suggestions in Phase 4 stay evidence-based |
+| Changing thresholds and re-running analysis can resolve issues that a stricter rule raised | Documented; the audit log records re-runs |
+| Crawls made before Phase 3 have no stored page text, so near-duplicate and link-suggestion checks skip them | Re-crawl |
+| Score history is stored but not charted | Monitoring in Phase 5 |
+| Response-time checks use one sample from the crawler's location, not Core Web Vitals | Field data needs an approved provider (Search Console) later |
+
+Recommended next step: Phase 4, the AI agent. Ollama integration behind the provider
+interface, typed agent tools over the issues and pages now stored, grounded
+explanations and drafts for metadata and content, and the approval workflow.

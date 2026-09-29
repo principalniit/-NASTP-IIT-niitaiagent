@@ -47,3 +47,44 @@ test("start a crawl, follow progress and review results", async ({ page }) => {
   await expect(page.getByRole("group", { name: "Crawl status" })).toContainText("Completed");
   await expect(page.getByRole("group", { name: "Pages crawled" })).not.toContainText("No crawl data yet");
 });
+
+test("review the SEO audit, issues and link suggestions from the analysis", async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.goto("/login");
+  await page.getByLabel("Email").fill(ADMIN_EMAIL);
+  await page.getByLabel("Password").fill(ADMIN_PASSWORD);
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Overview" })).toBeVisible();
+
+  // The worker analyses the crawl from the previous test automatically.
+  await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "SEO Audit" }).click();
+  await page.getByLabel("Project", { exact: true }).selectOption({ label: "Fixture site (127.0.0.1)" });
+  await expect(page.getByText("Overall SEO health")).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByRole("meter", { name: "Technical score" })).toBeVisible();
+  await expect(page.getByText("not a search engine ranking factor")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Top priorities" })).toBeVisible();
+
+  await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Issues" }).click();
+  await page.getByLabel("Search issues by title or URL").fill("/missing");
+  const issueLink = page.getByRole("link", { name: "Page returns a client error (4xx)" });
+  await expect(issueLink).toBeVisible();
+  await issueLink.click();
+
+  await expect(page.getByRole("heading", { level: 1, name: "Page returns a client error (4xx)" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Recommendation" })).toBeVisible();
+  await expect(page.getByText("Status code")).toBeVisible();
+  await expect(page.getByText("404", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Priority \d+/ })).toBeVisible();
+  await page.getByLabel("Note (optional)").fill("Checked with the web team");
+  await page.getByRole("button", { name: "Ignore issue" }).click();
+  await expect(page.getByRole("button", { name: "Reopen issue" })).toBeVisible();
+  await page.getByRole("button", { name: "Reopen issue" }).click();
+  await expect(page.getByRole("button", { name: "Ignore issue" })).toBeVisible();
+
+  await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Internal Linking" }).click();
+  await page.getByLabel("Project", { exact: true }).selectOption({ label: "Fixture site (127.0.0.1)" });
+  await expect(page.getByText("“Scholarship Opportunities”").first()).toBeVisible();
+
+  await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Overview" }).click();
+  await expect(page.getByRole("group", { name: "Overall SEO health score" })).not.toContainText("Not scored yet");
+});

@@ -52,6 +52,14 @@ user must enter them, ideally with a source link.
 | Content types | see below | Used to classify pages and tailor recommendations |
 | Institutional profile | empty | Description, contacts, approved sources |
 | Editorial approval required | true | All drafts need human approval |
+| Analysis thresholds | see below | Limits the SEO rules use, for example title length and thin-content word count |
+| Score weights | technical 30, on-page 30, content 20, internal linking 10, structured data 10 | Must total 100 |
+
+Analysis thresholds (defaults): title 30 to 60 characters, meta description 70 to 160
+characters, thin content below 200 words, slow response from 1000 ms and very slow from
+3000 ms, at most 150 links per page, at least 3 internal links to each important page,
+URLs up to 115 characters, important pages within 3 clicks of the home page. These are
+generic starting points; adjust them to NIIT's own editorial standards.
 
 ## 4. Content types
 
@@ -70,9 +78,16 @@ created empty so an authorised user can attach URL patterns:
 | student_resources | Student resources |
 | contact | Contact information |
 
-Each content type holds a label, URL patterns, and optional expected sections (for
-example "eligibility" and "how to apply" for admissions). Missing expected sections
-are reported as editorial suggestions, never as definite errors.
+Each content type holds a label, URL patterns, optional expected sections (for example
+"eligibility" and "how to apply" for admissions) and optional recommended schema.org
+types. Missing expected sections are reported as editorial suggestions, never as
+definite errors. Missing recommended schema types are reported as optional
+enhancements.
+
+The seed suggests these schema types, which authorised users can change: About NIIT →
+EducationalOrganization, Academic programmes → Course, Training courses → Course,
+Faculty → Person, News and events → Event. Content types only take effect once URL
+patterns matching the real NIIT site are added.
 
 ## 5. Protected content
 

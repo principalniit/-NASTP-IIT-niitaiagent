@@ -180,6 +180,9 @@ export interface CrawlJob {
   sitemap_url_count: number;
   warnings: string[];
   error_message: string | null;
+  analysis_status: AnalysisStatus;
+  analysed_at: string | null;
+  analysis_error: string | null;
   requested_by_id: string | null;
   created_at: string;
   started_at: string | null;
@@ -270,4 +273,125 @@ export interface BrokenLink {
   anchor_text: string | null;
   status_code: number | null;
   fetch_status: FetchStatus;
+}
+
+export type AnalysisStatus = "none" | "queued" | "running" | "completed" | "failed";
+export type Severity = "critical" | "high" | "medium" | "low" | "informational";
+export const SEVERITIES: Severity[] = ["critical", "high", "medium", "low", "informational"];
+export type IssueCategory = "technical" | "on_page" | "content" | "internal_linking" | "structured_data";
+export const CATEGORY_LABELS: Record<IssueCategory, string> = {
+  technical: "Technical",
+  on_page: "On-page",
+  content: "Content",
+  internal_linking: "Internal linking",
+  structured_data: "Structured data",
+};
+export type ResolutionStatus = "open" | "resolved" | "ignored";
+
+export interface PriorityFactor {
+  factor: string;
+  points?: number;
+  multiplier?: number;
+  reason: string;
+}
+
+export interface Issue {
+  id: string;
+  project_id: string;
+  rule_id: string;
+  scope: "page" | "group" | "site";
+  category: IssueCategory;
+  severity: Severity;
+  title: string;
+  description: string;
+  recommendation: string;
+  evidence: Record<string, unknown>;
+  affected_url: string | null;
+  affected_urls: string[];
+  affected_page_count: number;
+  confidence: "high" | "medium" | "low";
+  effort: "low" | "medium" | "high";
+  priority_score: number;
+  priority_breakdown: PriorityFactor[];
+  auto_fix_eligible: boolean;
+  approval_status: "none" | "pending_review" | "approved" | "rejected";
+  resolution_status: ResolutionStatus;
+  first_detected_at: string;
+  last_detected_at: string;
+  first_crawl_id: string | null;
+  last_crawl_id: string | null;
+  resolved_at: string | null;
+  resolved_in_crawl_id: string | null;
+  recurrence_count: number;
+  triage_note: string | null;
+}
+
+export interface IssueSummary {
+  latest_crawl_id: string | null;
+  analysed_at: string | null;
+  open_total: number;
+  open_by_severity: Record<Severity, number>;
+  open_by_category: Record<IssueCategory, number>;
+  ignored_total: number;
+  resolved_total: number;
+  new_in_latest: number;
+  resolved_in_latest: number;
+}
+
+export interface ScoreContribution {
+  rule_id: string;
+  findings: number;
+  affected_pages: number;
+  penalty: number;
+}
+
+export interface CategoryBreakdown {
+  score: number | null;
+  weight: number;
+  pages_considered: number;
+  penalty?: number;
+  note?: string;
+  contributions: ScoreContribution[];
+}
+
+export interface Score {
+  crawl_job_id: string;
+  overall: number | null;
+  technical: number | null;
+  on_page: number | null;
+  content: number | null;
+  internal_linking: number | null;
+  structured_data: number | null;
+  pages_analysed: number;
+  breakdown: {
+    method: string;
+    categories: Record<IssueCategory, CategoryBreakdown>;
+    overall: { score: number | null; weights_used: Record<string, number> };
+  };
+  created_at: string;
+}
+
+export interface SchemaFinding {
+  id: string;
+  page_id: string;
+  page_url: string;
+  format: string;
+  schema_types: string[];
+  is_valid: boolean;
+  errors: string[];
+  warnings: string[];
+}
+
+export interface LinkRecommendation {
+  id: string;
+  source_page_id: string;
+  source_url: string;
+  source_title: string | null;
+  target_page_id: string;
+  target_url: string;
+  target_title: string | null;
+  anchor_text: string;
+  reason: string;
+  snippet: string | null;
+  relevance: number;
 }

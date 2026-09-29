@@ -156,3 +156,16 @@ def test_schema_checks() -> None:
     assert not check_page(untyped)[0].valid
     unknown = {"json_ld": [{"valid": True, "types": ["Thing"], "data": {"@type": "Thing"}}]}
     assert check_page(unknown)[0].valid and check_page(unknown)[0].errors == []
+
+
+def test_severity_dominates_page_importance() -> None:
+    from app.modules.seo.models import Severity
+
+    pages = [page("/", title="Short"), page("/other", status_code=404)]
+    ctx = context(pages)
+    findings = {f.rule_id: f for f in run_rules(ctx)}
+    low_on_home, _ = prioritise(ctx, findings["onpage.title_length"])
+    high_elsewhere, _ = prioritise(ctx, findings["tech.http_client_error"])
+    assert findings["onpage.title_length"].severity == Severity.LOW
+    assert findings["tech.http_client_error"].severity == Severity.HIGH
+    assert high_elsewhere > low_on_home

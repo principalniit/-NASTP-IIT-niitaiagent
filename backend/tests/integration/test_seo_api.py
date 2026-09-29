@@ -81,6 +81,20 @@ async def test_issues_scores_and_results(client: AsyncClient, site: FixtureSite)
     schema = (await client.get(f"/api/v1/crawls/{crawl['id']}/schema-findings", headers=h)).json()
     assert schema["total"] == 0
 
+    org_id = project["organisation_id"]
+    analysed = (
+        await client.get(
+            f"/api/v1/organisations/{org_id}/crawls", params={"analysed": "true"}, headers=h
+        )
+    ).json()
+    assert [c["id"] for c in analysed["items"]] == [crawl["id"]]
+    pending = (
+        await client.get(
+            f"/api/v1/organisations/{org_id}/crawls", params={"analysed": "false"}, headers=h
+        )
+    ).json()
+    assert pending["total"] == 0
+
     rules = (await client.get("/api/v1/seo-rules", headers=h)).json()
     assert len(rules) == 50 and all(r["recommendation"] for r in rules)
 

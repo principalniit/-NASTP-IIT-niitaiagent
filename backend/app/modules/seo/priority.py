@@ -1,6 +1,9 @@
 """Issue prioritisation with an explanation of every factor.
 
 priority = (severity + reach + page importance + quick-win bonus) x confidence, 0 to 100.
+
+Severity dominates: each step is worth more than the page-importance bonus, so a high
+issue on an ordinary page always outranks a low issue on the home page.
 """
 
 import math
@@ -9,8 +12,10 @@ from typing import Any
 from app.modules.seo.context import AnalysisContext
 from app.modules.seo.findings import Finding
 
-SEVERITY_POINTS = {"critical": 40, "high": 30, "medium": 20, "low": 10, "informational": 2}
-EFFORT_POINTS = {"low": 10, "medium": 5, "high": 0}
+SEVERITY_POINTS = {"critical": 55, "high": 40, "medium": 25, "low": 10, "informational": 2}
+EFFORT_POINTS = {"low": 8, "medium": 4, "high": 0}
+IMPORTANT_PAGE_POINTS = 12
+PRIORITY_GROUP_POINTS = 6
 CONFIDENCE_FACTOR = {"high": 1.0, "medium": 0.85, "low": 0.7}
 
 
@@ -45,7 +50,7 @@ def prioritise(ctx: AnalysisContext, finding: Finding) -> tuple[float, list[dict
         factors.append(
             {
                 "factor": "page importance",
-                "points": 20,
+                "points": IMPORTANT_PAGE_POINTS,
                 "reason": "includes the home page or a configured important page"
                 if important
                 else "site-wide issue",
@@ -55,7 +60,7 @@ def prioritise(ctx: AnalysisContext, finding: Finding) -> tuple[float, list[dict
         factors.append(
             {
                 "factor": "page importance",
-                "points": 10,
+                "points": PRIORITY_GROUP_POINTS,
                 "reason": f"in priority page group '{ctx.priority_group(grouped[0])}'",
             }
         )

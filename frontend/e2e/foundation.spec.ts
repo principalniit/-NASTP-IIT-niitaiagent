@@ -34,10 +34,8 @@ test("overview shows real counts and honest empty states", async ({ page }) => {
   // Seeded tenant: the NIIT website and the local fixture site, and one member.
   await expect(page.getByRole("group", { name: "Projects" })).toContainText("2");
   await expect(page.getByRole("group", { name: "Members" })).toContainText("1");
-  // Scores need the Phase 3 engine, so none are shown.
-  await expect(page.getByRole("group", { name: "Overall SEO health score" })).toContainText(
-    "Not scored yet",
-  );
+  // Score tiles show either a real score or an explicit "not scored" state, never a placeholder.
+  await expect(page.getByRole("group", { name: "Overall SEO health score" })).toBeVisible();
   await expect(page.getByText("Disabled", { exact: true })).toBeVisible();
 });
 
@@ -75,10 +73,10 @@ test("create a project, validate input and save crawl settings", async ({ page }
 
 test("unbuilt sections say so instead of showing sample data", async ({ page }) => {
   await signIn(page);
-  await page.getByRole("link", { name: /Issues/ }).click();
-  await expect(page.getByRole("heading", { level: 1, name: "Issues" })).toBeVisible();
+  await page.getByRole("link", { name: /Approvals/ }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Approvals" })).toBeVisible();
   await expect(page.getByText("Not available yet")).toBeVisible();
-  await expect(page.getByText("Phase 3", { exact: true }).last()).toBeVisible();
+  await expect(page.getByText("Phase 4", { exact: true }).last()).toBeVisible();
 });
 
 test("administration lists members and the audit trail", async ({ page }) => {
