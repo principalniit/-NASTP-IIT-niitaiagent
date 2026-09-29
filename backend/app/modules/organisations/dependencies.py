@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_session
 from app.core.errors import ForbiddenError, NotFoundError
 from app.modules.auth.dependencies import get_current_user
+from app.modules.crawler.models import CrawlJob
 from app.modules.organisations.models import Organisation, OrganisationMember, OrgRole
 from app.modules.organisations.permissions import (
     PLATFORM_ADMIN_PERMISSIONS,
@@ -36,6 +37,14 @@ class OrgAccess:
 @dataclass(frozen=True)
 class ProjectAccess:
     user: User
+    project: Project
+    role: OrgRole
+
+
+@dataclass(frozen=True)
+class CrawlAccess:
+    user: User
+    crawl: CrawlJob
     project: Project
     role: OrgRole
 
@@ -94,5 +103,32 @@ def require_project(permission: Permission) -> Callable[..., Awaitable[ProjectAc
         if not role_has(member.role, permission):
             raise ForbiddenError("Your role does not permit this action")
         return ProjectAccess(user, project, member.role)
+
+    return dependency
+
+
+def require_crawl(permission: Permission) -> Callable[..., Awaitable[CrawlAccess]]:
+    async def dependency(
+        crawl_id: uuid.UUID,
+        user: User = Depends(get_current_user),
+        session: AsyncSession = Depends(get_session),
+    ) -> CrawlAccess:
+        crawl = await session.get(CrawlJob, crawl_id)
+        if crawl is None:
+            raise NotFoundError("Crawl not found")
+        project = await session.scalar(
+            select(Project).where(
+                Project.id == crawl.project_id,
+                Project.organisation_id == crawl.organisation_id,
+                Project.deleted_at.is_(None),
+            )
+        )
+        member = await get_membership(session, crawl.organisation_id, user.id)
+        org = await session.get(Organisation, crawl.organisation_id)
+        if project is None or member is None or org is None or not org.is_active:
+            raise NotFoundError("Crawl not found")
+        if not role_has(member.role, permission):
+            raise ForbiddenError("Your role does not permit this action")
+        return CrawlAccess(user, crawl, project, member.role)
 
     return dependency

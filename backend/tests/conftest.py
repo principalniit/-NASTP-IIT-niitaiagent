@@ -63,6 +63,8 @@ async def client(app) -> AsyncIterator[AsyncClient]:  # type: ignore[no-untyped-
 
 @dataclass
 class TestUser:
+    __test__ = False  # a helper, not a test class
+
     id: str
     email: str
     headers: dict[str, str]

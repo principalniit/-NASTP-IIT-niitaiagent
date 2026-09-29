@@ -154,8 +154,11 @@ async def update(
 
 
 async def soft_delete(session: AsyncSession, access: ProjectAccess, meta: RequestMeta) -> None:
+    from app.modules.crawler.service import cancel_active_for_project
+
     project = access.project
     project.deleted_at = datetime.now(UTC)
+    await cancel_active_for_project(session, project)
     audit.record(
         session,
         action="project.deleted",
