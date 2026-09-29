@@ -573,6 +573,8 @@ export interface DraftDetail extends Draft {
   versions: DraftVersion[];
   trail: ApprovalEntry[];
   people: Record<string, string>;
+  /** People who created, requested, wrote or submitted the draft; they cannot approve it. */
+  contributor_ids: string[];
 }
 
 // ---------------------------------------------------------------- reports and monitoring

@@ -102,3 +102,7 @@ class DraftDetail(DraftOut):
     versions: list[DraftVersionOut]
     trail: list[ApprovalOut]
     people: dict[str, str] = Field(default_factory=dict, description="user id to display name")
+    contributor_ids: list[uuid.UUID] = Field(
+        default_factory=list,
+        description="People who created, requested, wrote or submitted it; they cannot approve",
+    )

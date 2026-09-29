@@ -26,13 +26,15 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 def create_app() -> FastAPI:
     settings = get_settings()
     configure_logging(settings.log_level)
+    # The interactive API docs are for development; production does not publish them.
+    public_docs = settings.environment != "production"
     app = FastAPI(
         title=settings.app_name,
         version="0.1.0",
-        openapi_url="/api/v1/openapi.json",
-        docs_url="/api/v1/docs",
+        openapi_url="/api/v1/openapi.json" if public_docs else None,
+        docs_url="/api/v1/docs" if public_docs else None,
         redoc_url=None,
-        swagger_ui_oauth2_redirect_url="/api/v1/docs/oauth2-redirect",
+        swagger_ui_oauth2_redirect_url="/api/v1/docs/oauth2-redirect" if public_docs else None,
         lifespan=lifespan,
     )
 

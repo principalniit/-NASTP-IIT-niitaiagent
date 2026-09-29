@@ -1,5 +1,7 @@
 """Application settings loaded from environment variables and an optional .env file."""
 
+import logging
+import secrets
 from functools import lru_cache
 from ipaddress import IPv4Network, IPv6Network, ip_network
 from typing import Literal
@@ -9,7 +11,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _METADATA_NET = ip_network("169.254.0.0/16")
 
-DEV_JWT_SECRET = "dev-only-insecure-secret-change-me-0000000000"  # noqa: S105
+# Values that must never sign tokens: the .env.example placeholder and an old default.
+_KNOWN_WEAK_SECRETS = frozenset(
+    {"replace-with-a-long-random-value", "dev-only-insecure-secret-change-me-0000000000"}
+)
 
 
 class Settings(BaseSettings):
@@ -21,7 +26,9 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql+asyncpg://niit:niit@localhost:5432/niit_seo"
 
-    jwt_secret: SecretStr = SecretStr(DEV_JWT_SECRET)
+    # Required in production. Elsewhere, a missing or weak value is replaced by a random one
+    # for the life of the process, so no fixed, published secret can ever sign tokens.
+    jwt_secret: SecretStr = SecretStr("")
     jwt_issuer: str = "niit-seo-agent"
     jwt_audience: str = "niit-seo-agent-api"
     access_token_ttl_minutes: int = 15
@@ -106,10 +113,18 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _check_production_safety(self) -> "Settings":
+        secret = self.jwt_secret.get_secret_value()
+        weak = secret in _KNOWN_WEAK_SECRETS or len(secret) < 32
+        if weak and self.environment == "production":
+            raise ValueError("JWT_SECRET must be set to a random value of 32+ characters")
+        if weak:
+            if self.environment != "test":
+                logging.getLogger(__name__).warning(
+                    "JWT_SECRET is not set or too weak; using a random secret for this process. "
+                    "Sign-ins last until the API restarts. Set JWT_SECRET (see .env.example)."
+                )
+            self.jwt_secret = SecretStr(secrets.token_urlsafe(48))
         if self.environment == "production":
-            secret = self.jwt_secret.get_secret_value()
-            if secret == DEV_JWT_SECRET or len(secret) < 32:
-                raise ValueError("JWT_SECRET must be set to a random value of 32+ characters")
             if not self.cookie_secure:
                 raise ValueError("COOKIE_SECURE must be true in production")
             for net in self.crawler_private_networks:

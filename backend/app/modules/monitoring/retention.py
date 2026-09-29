@@ -1,9 +1,9 @@
 """Data retention. Off unless an organisation owner sets it in organisation settings.
 
 - Page-level crawl data (pages, links, structured-data results, link suggestions) is
-  deleted for crawls older than the newest `keep_crawls` per project. The crawl record,
-  its score and the issue history stay, so trends and reports remain meaningful. The
-  latest analysed crawl is never pruned.
+  deleted for crawls older than the newest `keep_crawls` completed crawls per project.
+  The crawl record, its score and the issue history stay, so trends and reports remain
+  meaningful. The latest analysed crawl is never pruned.
 - Reports older than `delete_reports_after_days` are deleted.
 Every run that deletes anything is audit-logged per organisation.
 """
@@ -27,6 +27,12 @@ FINISHED = (CrawlStatus.COMPLETED, CrawlStatus.FAILED, CrawlStatus.CANCELLED)
 
 
 async def _prune_project(session: AsyncSession, project: Project, keep: int, now: datetime) -> int:
+    """Remove page data from crawls older than the newest `keep` completed crawls.
+
+    Failed and cancelled crawls do not count towards `keep`, so cancelling crawls cannot push
+    useful data out. Never pruned: the latest analysed crawl, the newest completed crawl, and
+    any crawl whose analysis is queued or running.
+    """
     crawls = list(
         await session.scalars(
             select(CrawlJob)
@@ -38,12 +44,24 @@ async def _prune_project(session: AsyncSession, project: Project, keep: int, now
             .order_by(CrawlJob.created_at.desc())
         )
     )
+    completed = [c for c in crawls if c.status == CrawlStatus.COMPLETED]
+    if len(completed) <= keep:
+        return 0
+    oldest_kept = completed[keep - 1].created_at
+    protected = {completed[0].id}
+    protected.update(
+        c.id for c in crawls if c.analysis_status in (AnalysisStatus.QUEUED, AnalysisStatus.RUNNING)
+    )
     latest_analysed = next(
         (c.id for c in crawls if c.analysis_status == AnalysisStatus.COMPLETED), None
     )
+    if latest_analysed:
+        protected.add(latest_analysed)
     pruned = 0
-    for crawl in crawls[keep:]:
-        if crawl.pages_pruned_at is not None or crawl.id == latest_analysed:
+    for crawl in crawls:
+        if crawl.created_at >= oldest_kept or crawl.pages_pruned_at is not None:
+            continue
+        if crawl.id in protected:
             continue
         await session.execute(delete(CrawlPage).where(CrawlPage.crawl_job_id == crawl.id))
         crawl.pages_pruned_at = now

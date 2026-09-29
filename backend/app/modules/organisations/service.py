@@ -109,6 +109,17 @@ async def update(
 ) -> Organisation:
     org = access.organisation
     changes = data.model_dump(exclude_unset=True, mode="json")
+    details: dict[str, object] = {"fields": sorted(changes)}
+    if data.settings is not None:
+        before = OrganisationSettings.model_validate(org.settings or {}).data_retention.model_dump(
+            mode="json"
+        )
+        after = data.settings.data_retention.model_dump(mode="json")
+        if before != after:
+            # Retention deletes data that cannot be recovered, so only owners set it.
+            if not access.is_owner_level:
+                raise ForbiddenError("Only owners can change the data retention policy")
+            details["data_retention"] = {"from": before, "to": after}
     for field, value in changes.items():
         if value is None and field in _REQUIRED_FIELDS:
             raise AppError(f"{field} cannot be null", code="validation_error")
@@ -121,7 +132,7 @@ async def update(
         organisation_id=org.id,
         target_type="organisation",
         target_id=org.id,
-        details={"fields": sorted(changes)},
+        details=details,
     )
     await session.commit()
     await session.refresh(org)
@@ -143,15 +154,16 @@ async def list_members(
 
 
 async def _owner_count(session: AsyncSession, organisation_id: uuid.UUID) -> int:
-    return (
-        await session.scalar(
-            select(func.count()).where(
-                OrganisationMember.organisation_id == organisation_id,
-                OrganisationMember.role == OrgRole.OWNER,
-            )
+    """Count owners, locking their rows so two owners cannot remove each other at once."""
+    owners = await session.scalars(
+        select(OrganisationMember.id)
+        .where(
+            OrganisationMember.organisation_id == organisation_id,
+            OrganisationMember.role == OrgRole.OWNER,
         )
-        or 0
+        .with_for_update()
     )
+    return len(list(owners))
 
 
 def _check_owner_privilege(access: OrgAccess, *roles: OrgRole) -> None:
@@ -179,6 +191,16 @@ async def add_member(
         created_account = True
     elif await _find_member_by_user(session, org_id, user.id):
         raise ConflictError("This user is already a member")
+    elif not access.user.is_platform_admin:
+        # Emails are not verified, so an account may have been created, with a password
+        # someone else knows, by another organisation's administrator. Attaching it here
+        # could hand this organisation's data to that person. A platform administrator
+        # decides, and can reset the account's password first.
+        raise ConflictError(
+            "This email already has an account. Ask a platform administrator to add it to "
+            "this organisation.",
+            code="account_exists",
+        )
     member = OrganisationMember(organisation_id=org_id, user_id=user.id, role=data.role)
     session.add(member)
     audit.record(

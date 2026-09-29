@@ -67,7 +67,7 @@ test("AI drafts go through review by a second person and are never published aut
   await page.getByRole("button", { name: "Submit for review" }).click();
   await expect(page.getByText("Pending review").first()).toBeVisible();
   // The person who submitted a version cannot approve it.
-  await expect(page.getByText("You wrote or submitted this version")).toBeVisible();
+  await expect(page.getByText("You wrote or submitted this draft")).toBeVisible();
   await expect(page.getByRole("button", { name: "Approve" })).toHaveCount(0);
   const draftUrl = page.url();
 
@@ -105,7 +105,7 @@ test("people can propose changes, and official facts need a verified source", as
   await expect(page.getByRole("heading", { level: 1, name: "Meta description" })).toBeVisible();
   await expect(page.getByText("This draft touches official information")).toBeVisible();
   await page.getByRole("button", { name: "Submit for review" }).click();
-  await expect(page.getByText("You wrote or submitted this version")).toBeVisible();
+  await expect(page.getByText("You wrote or submitted this draft")).toBeVisible();
   const draftUrl = page.url();
 
   await page.getByRole("button", { name: "Sign out" }).click();
@@ -170,12 +170,12 @@ test("integration records keep credentials encrypted and never connect", async (
   await page.getByLabel("Name", { exact: true }).fill("NIIT website CMS");
   await page.getByLabel("Site Url").fill("https://niit.edu.pk");
   await page.getByLabel("Username").fill("seo-bot");
-  await page.getByLabel("Application password (optional)").fill("app-password-9876");
+  await page.getByLabel("Application password (optional)").fill("wp-app-password-abcd-efgh-9876");
   await page.getByRole("button", { name: "Save integration" }).click();
 
   await expect(page.getByText("NIIT website CMS")).toBeVisible();
   await expect(page.getByText("Credential stored (…9876)")).toBeVisible();
-  await expect(page.getByText("app-password-9876")).toHaveCount(0);
+  await expect(page.getByText("wp-app-password-abcd-efgh-9876")).toHaveCount(0);
   await expect(page.getByText("Not connected: the platform does not contact this service.")).toBeVisible();
   await page.getByRole("button", { name: "Turn on" }).click();
   await expect(page.getByText("Enabled (recorded only)")).toBeVisible();

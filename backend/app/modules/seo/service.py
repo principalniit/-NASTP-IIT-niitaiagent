@@ -299,6 +299,10 @@ async def request_analysis(
     job = await session.get(CrawlJob, access.crawl.id, with_for_update=True)
     if job is None or job.status != CrawlStatus.COMPLETED:
         raise ConflictError("Only completed crawls can be analysed")
+    if job.pages_pruned_at is not None:
+        raise ConflictError(
+            "This crawl's page data was removed under the data retention policy. Start a new crawl."
+        )
     if job.analysis_status in (AnalysisStatus.QUEUED, AnalysisStatus.RUNNING):
         raise ConflictError("An analysis of this crawl is already queued or running")
     newer = await session.scalar(

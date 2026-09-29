@@ -125,6 +125,9 @@ async def analyse_crawl(
             raise AnalysisError("Crawl not found")
         if job.status != CrawlStatus.COMPLETED:
             raise AnalysisError("Only completed crawls can be analysed")
+        if job.pages_pruned_at is not None:
+            # With no pages, every issue would look resolved: refuse rather than invent results.
+            raise AnalysisError("This crawl's page data was removed under the retention policy")
         newer = await session.scalar(
             select(CrawlJob.id).where(
                 CrawlJob.project_id == job.project_id,

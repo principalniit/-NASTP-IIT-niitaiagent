@@ -7,6 +7,7 @@ report content cannot make the renderer fetch anything.
 """
 
 import logging
+import os
 
 from markupsafe import escape
 
@@ -19,6 +20,14 @@ INSTALL_HINT = (
     "`uv run playwright install chromium` in the backend folder, then restart the worker. "
     "The HTML report can be printed to PDF from the browser meanwhile."
 )
+
+
+def _sandbox() -> bool:
+    """Use Chromium's own sandbox, which it refuses to start under the root account."""
+    is_root = hasattr(os, "geteuid") and os.geteuid() == 0
+    if is_root:
+        logger.warning("PDF renderer runs as root, so Chromium's sandbox is off; run as a user")
+    return not is_root
 
 
 class PdfUnavailableError(Exception):
@@ -41,8 +50,24 @@ async def render_pdf(html: str, footer_text: str) -> bytes:
         "</div>"
     )
     async with async_playwright() as p:
+        sandbox = _sandbox()
         try:
-            browser = await p.chromium.launch(executable_path=browser_path)
+            try:
+                browser = await p.chromium.launch(
+                    executable_path=browser_path, chromium_sandbox=sandbox
+                )
+            except PlaywrightError:
+                if not sandbox:
+                    raise
+                # Some hosts (containers, locked-down kernels) cannot start the sandbox. The
+                # page still has JavaScript and the network off, so print without it.
+                logger.warning(
+                    "Chromium's sandbox could not start; printing without it. Enable "
+                    "unprivileged user namespaces on this host to restore it."
+                )
+                browser = await p.chromium.launch(
+                    executable_path=browser_path, chromium_sandbox=False
+                )
         except PlaywrightError as exc:
             logger.warning("PDF renderer could not start", extra={"error": str(exc)[:300]})
             raise PdfUnavailableError(INSTALL_HINT) from exc

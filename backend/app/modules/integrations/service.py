@@ -59,7 +59,9 @@ def _config(provider: str, config: dict[str, object]) -> dict[str, object]:
 
 
 def _hint(secret: str) -> str:
-    return "…" + secret[-4:] if len(secret) >= 12 else "set"
+    """Last four characters, only for long credentials such as API keys and tokens, where
+    they give away little. Short ones, such as passwords, show no characters at all."""
+    return "…" + secret[-4:] if len(secret) >= 24 else "set"
 
 
 def _set_secret(integration: Integration, secret: str) -> None:

@@ -218,7 +218,7 @@ def page_facts(page: CrawlPage) -> dict[str, Any]:
         "status_code": page.status_code,
         "title": page.title,
         "meta_description": page.meta_description,
-        "h1": [h["text"] for h in page.headings if h.get("level") == 1],
+        "h1": [h["text"] for h in page.headings if h.get("level") == 1][:10],
         "headings": [f"H{h['level']}: {h['text']}" for h in page.headings[:25]],
         "word_count": page.word_count,
         "lang": page.lang,

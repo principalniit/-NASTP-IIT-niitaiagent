@@ -7,8 +7,12 @@ published      --roll back-->       rolled_back    (recorded only)
 approved, rejected --reopen-->      draft
 draft, rejected --edit-->           draft (new version)
 
-Separation of duties: whoever wrote or submitted the current version cannot approve it.
-AI drafts have no human author, so the person who submits one is treated as its sponsor.
+Separation of duties: nobody who created the draft, requested it from the AI assistant, wrote
+any of its versions, or submitted the current version can approve it. AI drafts have no human
+author, so the person who submits one is treated as its sponsor.
+
+Protected-fact detection compares the proposal with the value the crawler recorded, never
+with an "original" typed in by the author, which could already contain the new facts.
 """
 
 import uuid
@@ -22,7 +26,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.errors import AppError, ConflictError, ForbiddenError, NotFoundError
 from app.core.pagination import PageParams
 from app.core.request_context import RequestMeta
+from app.modules.ai.models import AIAnalysis
 from app.modules.audit_logs import service as audit
+from app.modules.crawler.models import CrawlPage
 from app.modules.crawler.urls import normalise_url
 from app.modules.drafts.models import (
     Approval,
@@ -35,8 +41,10 @@ from app.modules.drafts.models import (
 )
 from app.modules.drafts.protected import protected_reasons
 from app.modules.drafts.schemas import DraftCreate
-from app.modules.projects.models import Project
+from app.modules.projects.models import Project, ProjectSettings
+from app.modules.projects.schemas import ProjectSettingsData
 from app.modules.seo.models import SeoIssue
+from app.modules.seo.service import latest_analysed_crawl
 from app.modules.users.models import User
 
 EDITABLE = (DraftStatus.DRAFT, DraftStatus.REJECTED)
@@ -107,8 +115,10 @@ async def new_draft(
     author: User | None,
     crawl_page_id: uuid.UUID | None = None,
     ai_analysis_id: uuid.UUID | None = None,
+    original_from_crawl: bool = True,
 ) -> ContentDraft:
-    reasons = protected_reasons(original, proposed)
+    evidence = {**evidence, "original_from_crawl": original_from_crawl}
+    reasons = protected_reasons(original if original_from_crawl else None, proposed)
     draft = ContentDraft(
         id=uuid.uuid4(),
         organisation_id=project.organisation_id,
@@ -165,6 +175,40 @@ def _project_url(project: Project, value: str) -> str:
     return url
 
 
+_CRAWLED_FIELDS = (DraftField.TITLE, DraftField.META_DESCRIPTION, DraftField.H1)
+
+
+async def _crawled_value(
+    session: AsyncSession, project: Project, page_url: str, field: DraftField
+) -> tuple[str | None, uuid.UUID | None]:
+    """The page's current value as last crawled, and the crawled page's id, if known."""
+    if field not in _CRAWLED_FIELDS:
+        return None, None
+    crawl = await latest_analysed_crawl(session, project.id, project.organisation_id)
+    if crawl is None:
+        return None, None
+    page = await session.scalar(
+        select(CrawlPage).where(
+            CrawlPage.crawl_job_id == crawl.id,
+            CrawlPage.organisation_id == project.organisation_id,
+            CrawlPage.url == page_url,
+        )
+    )
+    if page is None:
+        return None, None
+    if field == DraftField.TITLE:
+        return page.title, page.id
+    if field == DraftField.META_DESCRIPTION:
+        return page.meta_description, page.id
+    h1 = next((h["text"] for h in page.headings if h.get("level") == 1), None)
+    return h1, page.id
+
+
+def _baseline(draft: ContentDraft) -> str | None:
+    """The text protected-fact detection compares against (see the module docstring)."""
+    return draft.original_content if draft.evidence.get("original_from_crawl", True) else None
+
+
 async def create(
     session: AsyncSession, project: Project, user: User, body: DraftCreate, meta: RequestMeta
 ) -> ContentDraft:
@@ -183,12 +227,15 @@ async def create(
         )
         if found != set(issue_ids):
             raise AppError("Some issues do not belong to this project", code="validation_error")
+    crawled, crawl_page_id = await _crawled_value(session, project, page_url, body.field)
     draft = await new_draft(
         session,
         project=project,
         page_url=page_url,
         field=body.field,
-        original=body.original_content,
+        original=crawled if crawl_page_id else body.original_content,
+        original_from_crawl=crawl_page_id is not None,
+        crawl_page_id=crawl_page_id,
         proposed=body.proposed_content,
         reason=body.reason,
         evidence={"issue_ids": issue_ids},
@@ -271,6 +318,71 @@ async def history(
     return versions, trail, people
 
 
+async def contributors(session: AsyncSession, draft: ContentDraft) -> set[uuid.UUID]:
+    """Everyone who created, requested or wrote the draft, or submitted the current version."""
+    authors = await session.scalars(
+        select(ContentDraftVersion.edited_by_id).where(ContentDraftVersion.draft_id == draft.id)
+    )
+    submitters = await session.scalars(
+        select(Approval.actor_id).where(
+            Approval.draft_id == draft.id,
+            Approval.action == ApprovalAction.SUBMITTED,
+            Approval.version == draft.version,
+        )
+    )
+    people = {draft.created_by_id, draft.version_author_id, *authors, *submitters}
+    if draft.ai_analysis_id is not None:
+        # Whoever asked the assistant for this draft (and could steer it) is a contributor too.
+        people.add(
+            await session.scalar(
+                select(AIAnalysis.requested_by_id).where(AIAnalysis.id == draft.ai_analysis_id)
+            )
+        )
+    return {p for p in people if p is not None}
+
+
+def _under(url: str, source: str) -> bool:
+    ref, base = urlsplit(url), urlsplit(source)
+    if (
+        ref.scheme != "https"
+        or (ref.hostname or "") != (base.hostname or "")
+        or ref.port != base.port
+    ):
+        return False
+    prefix = base.path.rstrip("/")
+    return ref.path == prefix or ref.path.startswith(prefix + "/") or not prefix
+
+
+async def _check_source(
+    session: AsyncSession, draft: ContentDraft, source_reference: str | None
+) -> str:
+    """A protected draft needs a source. A web address must be on an approved source."""
+    reference = (source_reference or "").strip()
+    if not reference:
+        raise ConflictError(
+            "This draft changes official information. Approving it requires a verified source "
+            "reference: a page on one of the project's approved sources, or an official document."
+        )
+    if "://" in reference or reference.lower().startswith("www."):
+        row = await session.scalar(
+            select(ProjectSettings).where(
+                ProjectSettings.project_id == draft.project_id,
+                ProjectSettings.organisation_id == draft.organisation_id,
+            )
+        )
+        sources = (
+            ProjectSettingsData.model_validate(row.settings).institutional_profile.approved_sources
+            if row
+            else []
+        )
+        if not any(_under(reference, str(s.url)) for s in sources):
+            raise ConflictError(
+                "That web address is not on one of the project's approved sources. Cite a page "
+                "on an approved source, or an official document by name and reference number."
+            )
+    return reference
+
+
 def _require(draft: ContentDraft, allowed: tuple[DraftStatus, ...], action: str) -> None:
     if draft.status not in allowed:
         raise ConflictError(
@@ -286,14 +398,17 @@ async def edit(
     reason: str,
     meta: RequestMeta,
 ) -> ContentDraft:
+    await session.refresh(draft, with_for_update=True)  # no concurrent review or edit
     _require(draft, EDITABLE, "edited")
+    if content.strip() == draft.proposed_content.strip():
+        raise ConflictError("The proposed content is unchanged")
     previous = draft.status
     draft.version += 1
     draft.proposed_content = content
     draft.reason = reason
     draft.version_author_id = user.id
     draft.status = DraftStatus.DRAFT
-    reasons = protected_reasons(draft.original_content, content)
+    reasons = protected_reasons(_baseline(draft), content)
     draft.protected, draft.protected_reasons = bool(reasons), reasons
     session.add(
         ContentDraftVersion(
@@ -322,31 +437,19 @@ async def transition(
     comment: str | None = None,
     source_reference: str | None = None,
 ) -> ContentDraft:
+    await session.refresh(draft, with_for_update=True)  # no concurrent review or edit
     previous = draft.status
     if action == ApprovalAction.SUBMITTED:
         _require(draft, (DraftStatus.DRAFT,), "submitted for review")
         draft.status = DraftStatus.PENDING_REVIEW
     elif action == ApprovalAction.APPROVED:
         _require(draft, (DraftStatus.PENDING_REVIEW,), "approved")
-        submitter = await session.scalar(
-            select(Approval.actor_id)
-            .where(
-                Approval.draft_id == draft.id,
-                Approval.action == ApprovalAction.SUBMITTED,
-                Approval.version == draft.version,
-            )
-            .order_by(Approval.created_at.desc())
-            .limit(1)
-        )
-        if user.id in (draft.version_author_id, submitter):
+        if user.id in await contributors(session, draft):
             raise ForbiddenError(
-                "The author or submitter of this version cannot approve it; another reviewer must"
+                "People who wrote or submitted this draft cannot approve it; another reviewer must"
             )
-        if draft.protected and not (source_reference or "").strip():
-            raise ConflictError(
-                "This draft changes official information. Approving it requires a verified source "
-                "reference, such as an approved source URL or document."
-            )
+        if draft.protected:
+            source_reference = await _check_source(session, draft, source_reference)
         draft.status = DraftStatus.APPROVED
         draft.reviewed_by_id = user.id
         draft.reviewed_at = _now()

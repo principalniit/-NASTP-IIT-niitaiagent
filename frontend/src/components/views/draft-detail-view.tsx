@@ -111,8 +111,8 @@ function Decision({ draft }: { draft: DraftDetail }) {
     action.mutate({ action: name, body }, { onSuccess: () => { setComment(""); setSource(""); } });
   const note = comment.trim() || null;
   const userId = me?.user.id;
-  const submitter = [...draft.trail].reverse().find((t) => t.action === "submitted" && t.version === draft.version)?.actor_id;
-  const ownWork = !!userId && (userId === draft.version_author_id || userId === submitter);
+  // The API lists everyone who took part in the draft; none of them can approve it.
+  const ownWork = !!userId && draft.contributor_ids.includes(userId);
   const author = can("drafts:create");
   const reviewer = can("approvals:decide");
 
@@ -143,13 +143,14 @@ function Decision({ draft }: { draft: DraftDetail }) {
     case "pending_review":
       body = reviewer ? (
         ownWork ? (
-          <p className="text-sm">You wrote or submitted this version, so another reviewer must decide on it.</p>
+          <p className="text-sm">You wrote or submitted this draft, so another reviewer must decide on it.</p>
         ) : (
           <div className="space-y-3">
             {draft.protected ? (
               <div className="space-y-1.5">
                 <Label htmlFor={sourceId}>Verified source (required)</Label>
-                <Input id={sourceId} value={source} onChange={(e) => setSource(e.target.value)} maxLength={2048} placeholder="Approved notice, document or page confirming these facts" />
+                <Input id={sourceId} value={source} onChange={(e) => setSource(e.target.value)} maxLength={2048} placeholder="A page on an approved source, or an official document and its reference" />
+                <p className="text-xs text-muted-foreground">Web addresses must be on one of the project&apos;s approved sources (Project settings).</p>
               </div>
             ) : null}
             {commentBox("Comment")}

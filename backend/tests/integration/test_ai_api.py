@@ -197,7 +197,7 @@ async def test_ungrounded_reply_is_retried_then_rejected(
 
     ollama.script(UNGROUNDED, UNGROUNDED)
     rejected = await run(client, owner, project["id"], kind="management_summary")
-    assert rejected["status"] == "failed"
+    assert rejected["status"] == "failed" and rejected["output"] is None  # never shown
     assert rejected["error"] == (
         "The AI reply included claims not supported by the project data, so it was not used."
     )

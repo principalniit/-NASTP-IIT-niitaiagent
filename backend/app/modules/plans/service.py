@@ -16,6 +16,7 @@ from app.core.errors import AppError, ConflictError, NotFoundError
 from app.core.request_context import RequestMeta
 from app.modules.ai.models import AIAnalysis
 from app.modules.audit_logs import service as audit
+from app.modules.audit_logs.models import AuditLog
 from app.modules.crawler.models import CrawlJob
 from app.modules.organisations.models import Organisation, OrganisationMember
 from app.modules.plans.models import Plan
@@ -29,7 +30,6 @@ from app.modules.plans.schemas import (
     UsageOut,
 )
 from app.modules.projects.models import Project
-from app.modules.reports.models import Report
 from app.modules.users.models import User
 
 UNLIMITED = Plan(key="internal", name="Internal", description=None, limits={}, is_default=True)
@@ -82,15 +82,29 @@ async def _count(session: AsyncSession, org_id: uuid.UUID, resource: Resource) -
         "ai_tasks_per_day": select(func.count()).where(
             AIAnalysis.organisation_id == org_id, AIAnalysis.created_at >= day
         ),
+        # Counted from the append-only audit log, so deleting a report does not free quota.
         "reports_per_month": select(func.count()).where(
-            Report.organisation_id == org_id, Report.created_at >= month
+            AuditLog.organisation_id == org_id,
+            AuditLog.action == "report.requested",
+            AuditLog.created_at >= month,
         ),
     }
     return await session.scalar(queries[resource]) or 0
 
 
+async def lock_usage(session: AsyncSession, org_id: uuid.UUID) -> None:
+    """Serialise usage checks for one organisation until the transaction ends."""
+    key = int.from_bytes(org_id.bytes[:8], "big", signed=True)
+    await session.execute(select(func.pg_advisory_xact_lock(key)))
+
+
 async def enforce(session: AsyncSession, org_id: uuid.UUID, resource: Resource) -> None:
-    """Raise PlanLimitError if one more `resource` would exceed the organisation's plan."""
+    """Raise PlanLimitError if one more `resource` would exceed the organisation's plan.
+
+    Takes a per-organisation lock held until the caller's transaction ends, so concurrent
+    requests count one after another and cannot together overshoot a limit.
+    """
+    await lock_usage(session, org_id)
     org = await session.get(Organisation, org_id)
     if org is None:
         return

@@ -27,6 +27,19 @@ def tool_catalogue() -> list[dict[str, Any]]:
     ]
 
 
+def _grounding_facts(evidence: dict[str, Any]) -> dict[str, Any]:
+    """What an answer may rely on: the data the tools returned, never the model's own tool
+    arguments or error messages, which echo text the model chose."""
+    return {
+        "project_summary": evidence["project_summary"],
+        "tool_results": [
+            {"tool": call["tool"], "result": call["result"]}
+            for call in evidence["tool_results"]
+            if not (isinstance(call["result"], dict) and "error" in call["result"])
+        ],
+    }
+
+
 async def answer_question(
     provider: AIProvider, tools: ToolContext, system: str, question: str
 ) -> tuple[AgentAnswer, dict[str, Any], GroundingReport, int]:
@@ -63,8 +76,15 @@ async def answer_question(
             except ToolError as exc:
                 result = {"error": str(exc)}
             tools_used.append(name)
+            arguments = json.dumps(step.arguments, default=str)
             evidence["tool_results"].append(
-                {"tool": name, "arguments": step.arguments, "result": result}
+                {
+                    "tool": name[:100],
+                    "arguments": step.arguments
+                    if len(arguments) <= 2000
+                    else {"omitted": "too long"},
+                    "result": result,
+                }
             )
             messages.append(
                 {
@@ -86,8 +106,9 @@ async def answer_question(
             issue_ids=step.issue_ids,
             tools_used=tools_used,
         )
+        facts = _grounding_facts(evidence)
         report = check_output(
-            answer.model_copy(update={"tools_used": []}), evidence, issue_ids_in(evidence)
+            answer.model_copy(update={"tools_used": []}), facts, issue_ids_in(facts)
         )
         if report.passed or retried_grounding:
             return answer, evidence, report, attempts

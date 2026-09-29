@@ -1,6 +1,7 @@
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from ipaddress import ip_address
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -36,6 +37,24 @@ def reset_login_limits() -> None:
     ip_limiter.clear()
 
 
+def _address_keys(meta: RequestMeta) -> tuple[str, ...]:
+    """The per-address limiter key, or none when the address is not the client's.
+
+    Without trusted proxy headers, every sign-in through the dashboard arrives from the
+    dashboard server's loopback address. Counting those together would let anyone lock
+    every user out with a handful of wrong passwords, so only the per-email limit applies.
+    """
+    if not meta.ip:
+        return ()
+    if not get_settings().trust_proxy_headers:
+        try:
+            if ip_address(meta.ip).is_loopback:
+                return ()
+        except ValueError:
+            pass
+    return (f"ip:{meta.ip}",)
+
+
 @dataclass(frozen=True)
 class IssuedTokens:
     access_token: str
@@ -66,15 +85,15 @@ async def login(
     session: AsyncSession, email: str, password: str, meta: RequestMeta
 ) -> IssuedTokens:
     email = normalise_email(email)
-    ip_key = f"ip:{meta.ip}"
-    if email_limiter.is_blocked(email) or ip_limiter.is_blocked(ip_key):
+    ip_keys = _address_keys(meta)
+    if email_limiter.is_blocked(email) or ip_limiter.is_blocked(*ip_keys):
         raise RateLimitedError("Too many failed login attempts. Try again later.")
 
     user = await get_by_email(session, email)
     valid = verify_password(user.password_hash if user else None, password)
     if user is None or not valid or not user.is_active:
         email_limiter.record_failure(email)
-        ip_limiter.record_failure(ip_key)
+        ip_limiter.record_failure(*ip_keys)
         audit.record(
             session,
             action="auth.login_failed",

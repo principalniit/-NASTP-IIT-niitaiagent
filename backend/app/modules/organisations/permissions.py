@@ -33,6 +33,9 @@ class Permission(enum.StrEnum):
     DRAFTS_CREATE = "drafts:create"
     APPROVALS_DECIDE = "approvals:decide"
     REPORTS_GENERATE = "reports:generate"
+    # Integration records hold account details, so they are for members only: platform
+    # administrators do not get this through their organisation-profile rights.
+    INTEGRATIONS_MANAGE = "integrations:manage"
 
 
 ROLE_PERMISSIONS: dict[Permission, frozenset[OrgRole]] = {
@@ -51,6 +54,7 @@ ROLE_PERMISSIONS: dict[Permission, frozenset[OrgRole]] = {
     Permission.DRAFTS_CREATE: frozenset({OWN, ADM, MGR, EDT}),
     Permission.APPROVALS_DECIDE: frozenset({OWN, ADM, MGR}),
     Permission.REPORTS_GENERATE: frozenset({OWN, ADM, MGR}),
+    Permission.INTEGRATIONS_MANAGE: frozenset({OWN, ADM}),
 }
 
 # Platform administrators may administer any organisation's profile and membership,

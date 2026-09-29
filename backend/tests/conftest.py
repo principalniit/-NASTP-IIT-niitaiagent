@@ -96,13 +96,36 @@ async def make_org(client: AsyncClient, admin: TestUser, name: str) -> dict:  # 
 async def add_member(
     client: AsyncClient, owner: TestUser, org_id: str, user: TestUser, role: str
 ) -> dict:  # type: ignore[type-arg]
-    response = await client.post(
-        f"/api/v1/organisations/{org_id}/members",
-        json={"email": user.email, "role": role},
-        headers=owner.headers,
-    )
+    """Attach an existing test account. Only platform administrators may attach existing
+    accounts, so when `owner` is not one, a helper administrator does it instead."""
+    url = f"/api/v1/organisations/{org_id}/members"
+    body = {"email": user.email, "role": role}
+    response = await client.post(url, json=body, headers=owner.headers)
+    if response.status_code == 409 and response.json()["error"]["code"] == "account_exists":
+        response = await client.post(url, json=body, headers=(await _helper_admin(client)).headers)
     assert response.status_code == 201, response.text
     return response.json()  # type: ignore[no-any-return]
+
+
+HELPER_ADMIN = "platform-helper@example.test"
+
+
+async def _helper_admin(client: AsyncClient) -> TestUser:
+    from app.modules.users.service import get_by_email
+
+    async with get_session_factory()() as session:
+        existing = await get_by_email(session, HELPER_ADMIN)
+    if existing is None:
+        return await make_user(client, HELPER_ADMIN, platform_admin=True)
+    response = await client.post(
+        "/api/v1/auth/login", json={"email": HELPER_ADMIN, "password": PASSWORD}
+    )
+    client.cookies.clear()
+    return TestUser(
+        str(existing.id),
+        HELPER_ADMIN,
+        {"Authorization": f"Bearer {response.json()['access_token']}"},
+    )
 
 
 async def make_project(

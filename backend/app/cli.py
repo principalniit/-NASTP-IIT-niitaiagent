@@ -14,12 +14,17 @@ import asyncio
 import getpass
 import os
 import sys
+import uuid
+from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import select, update
+from sqlalchemy.ext.asyncio import AsyncSession
 
 import app.models  # noqa: F401  (registers every model so foreign keys resolve)
 from app.core.database import dispose_engine, get_session_factory
+from app.core.security import hash_password
 from app.modules.audit_logs import service as audit
+from app.modules.auth.models import RefreshToken
 from app.modules.organisations.models import Organisation, OrganisationMember, OrgRole
 from app.modules.organisations.schemas import OrganisationSettings
 from app.modules.projects.models import Project, ProjectSettings
@@ -57,12 +62,25 @@ def _password() -> str:
     return password
 
 
+async def _revoke_sessions(session: AsyncSession, user_id: uuid.UUID) -> None:
+    await session.execute(
+        update(RefreshToken)
+        .where(RefreshToken.user_id == user_id, RefreshToken.revoked_at.is_(None))
+        .values(revoked_at=datetime.now(UTC))
+    )
+
+
 async def create_admin(email: str, name: str) -> None:
     async with get_session_factory()() as session:
         user = await get_by_email(session, email)
         if user is not None:
+            # The account may have been created by someone else with a password they know,
+            # so promotion always sets a new password and ends existing sessions.
+            print(f"{email} already has an account. Set a new password to promote it.")
+            user.password_hash = hash_password(_password())
             user.is_platform_admin = True
-            action = "promoted existing user"
+            await _revoke_sessions(session, user.id)
+            action = "promoted existing user (password reset)"
         else:
             user = build_user(email, name, _password(), platform_admin=True)
             session.add(user)
@@ -147,23 +165,12 @@ async def seed_niit(owner_email: str) -> None:
 
 async def reset_password(email: str) -> None:
     """Set a new password and sign the account out everywhere."""
-    from datetime import UTC, datetime
-
-    from sqlalchemy import update
-
-    from app.core.security import hash_password
-    from app.modules.auth.models import RefreshToken
-
     async with get_session_factory()() as session:
         user = await get_by_email(session, email)
         if user is None:
             sys.exit(f"No user with email {email}.")
         user.password_hash = hash_password(_password())
-        await session.execute(
-            update(RefreshToken)
-            .where(RefreshToken.user_id == user.id, RefreshToken.revoked_at.is_(None))
-            .values(revoked_at=datetime.now(UTC))
-        )
+        await _revoke_sessions(session, user.id)
         audit.record(
             session,
             action="user.password_reset",

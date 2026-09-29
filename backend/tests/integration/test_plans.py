@@ -11,12 +11,14 @@ from sqlalchemy import select
 from app.core.config import get_settings
 from app.core.database import get_session_factory
 from app.modules.ai.models import AIAnalysis
+from app.modules.audit_logs.models import AuditLog
 from app.modules.crawler.models import CrawlJob, CrawlStatus
 from app.modules.crawler.service import build_config
 from app.modules.monitoring.models import CrawlSchedule
 from app.modules.monitoring.service import process_due_schedules
 from app.modules.projects.models import Project
 from app.modules.reports.models import Report
+from app.worker import process_next_report
 from tests.conftest import TestUser, add_member, make_org, make_project, make_user
 from tests.fixtures.site import FixtureSite, build_standard_site
 from tests.integration.test_ai_api import analysed, enable_ai
@@ -179,6 +181,12 @@ async def test_crawls_ai_and_reports_are_limited(
     assert report.status_code == 202
     again = await client.post(f"/api/v1/projects/{pid}/reports", json={}, headers=owner.headers)
     assert again.status_code == 409 and again.json()["error"]["code"] == "plan_limit_reached"
+    # Deleting a report does not give the quota back.
+    assert await process_next_report()
+    deleted = await client.delete(f"/api/v1/reports/{report.json()['id']}", headers=owner.headers)
+    assert deleted.status_code == 204
+    after = await client.post(f"/api/v1/projects/{pid}/reports", json={}, headers=owner.headers)
+    assert after.status_code == 409
 
     monkeypatch.setattr(get_settings(), "ai_provider", "ollama")
     monkeypatch.setattr(get_settings(), "ollama_default_model", "llama3.1")
@@ -205,6 +213,8 @@ async def test_crawls_ai_and_reports_are_limited(
                 select(model).where(model.project_id == uuid.UUID(pid))
             ):
                 row.created_at = old
+        for entry in await session.scalars(select(AuditLog)):
+            entry.created_at = old
         await session.commit()
     usage = (
         await client.get(f"/api/v1/organisations/{org['id']}/usage", headers=owner.headers)

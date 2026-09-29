@@ -64,6 +64,7 @@ async def request_analysis(
     choice = choose_provider(OrganisationSettings.model_validate(org.settings))
     if not choice.enabled:
         raise ConflictError(choice.reason or "AI is not available", code="ai_disabled")
+    await enforce(session, org.id, "ai_tasks_per_day")  # also locks, so the count below holds
     active = (
         await session.scalar(
             select(func.count()).where(
@@ -73,7 +74,6 @@ async def request_analysis(
         )
         or 0
     )
-    await enforce(session, org.id, "ai_tasks_per_day")
     if active >= get_settings().ai_max_active_jobs_per_org:
         raise RateLimitedError(
             "Too many AI tasks are already queued for this organisation. Try again shortly."

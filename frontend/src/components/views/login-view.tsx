@@ -21,8 +21,18 @@ const schema = z.object({
 type FormValues = z.infer<typeof schema>;
 
 function safeNext(value: string | null): string {
-  // Only allow same-site relative paths to avoid open redirects.
-  return value && value.startsWith("/") && !value.startsWith("//") ? value : "/overview";
+  // Only allow paths on this site, to avoid open redirects. Browsers read "/\\host" and
+  // paths with tabs or newlines as other sites, so the value is resolved the way a browser
+  // would, and anything that leaves this origin is refused.
+  if (!value || !value.startsWith("/") || /[\\\u0000-\u001f]/.test(value)) return "/overview";
+  const base = "https://this.site";
+  try {
+    const url = new URL(value, base);
+    const path = url.pathname + url.search + url.hash;
+    return url.origin === base && !path.startsWith("//") ? path : "/overview";
+  } catch {
+    return "/overview";
+  }
 }
 
 export function LoginView() {

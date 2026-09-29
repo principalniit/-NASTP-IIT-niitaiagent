@@ -224,7 +224,7 @@ function IntegrationCard({ integration, provider, org, canStoreSecrets }: { inte
 
 export function IntegrationsView() {
   const { current, can, isLoading } = useCurrentOrg();
-  const manage = can("org:update");
+  const manage = can("integrations:manage");
   const providers = useIntegrationProviders();
   const integrations = useIntegrations(current?.id ?? null, manage);
   const encryption = useEncryptionStatus(current?.id ?? null, manage);

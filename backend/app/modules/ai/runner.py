@@ -86,7 +86,8 @@ async def _execute(session: AsyncSession, analysis: AIAnalysis) -> None:
             provider, tools, system, str(analysis.params.get("question", ""))
         )
         analysis.evidence, analysis.attempts = evidence, attempts
-        analysis.output, analysis.grounding = answer.model_dump(mode="json"), report.as_dict()
+        analysis.output = answer.model_dump(mode="json") if report.passed else None
+        analysis.grounding = report.as_dict()
         if not report.passed:
             _fail(analysis, "The answer included claims not supported by the project data.")
             return
@@ -130,7 +131,8 @@ async def _execute(session: AsyncSession, analysis: AIAnalysis) -> None:
         attempts += more
         report = check_output(output, plan.evidence, known)
     analysis.attempts = attempts
-    analysis.output = output.model_dump(mode="json")
+    # Output that failed grounding is never stored, so no screen or API can show it.
+    analysis.output = output.model_dump(mode="json") if report.passed else None
     analysis.grounding = report.as_dict()
     if not report.passed:
         _fail(

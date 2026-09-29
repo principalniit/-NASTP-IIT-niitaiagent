@@ -24,9 +24,9 @@ from app.modules.organisations.permissions import Permission
 
 router = APIRouter(tags=["integrations"])
 Session = Annotated[AsyncSession, Depends(get_session)]
-Manage = Annotated[OrgAccess, Depends(require_org(Permission.ORG_UPDATE))]
+Manage = Annotated[OrgAccess, Depends(require_org(Permission.INTEGRATIONS_MANAGE))]
 ManageIntegration = Annotated[
-    IntegrationAccess, Depends(require_integration(Permission.ORG_UPDATE))
+    IntegrationAccess, Depends(require_integration(Permission.INTEGRATIONS_MANAGE))
 ]
 
 

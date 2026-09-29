@@ -41,6 +41,7 @@ async def _detail(session: AsyncSession, access: DraftAccess) -> DraftDetail:
         versions=[DraftVersionOut.model_validate(v) for v in versions],
         trail=[ApprovalOut.model_validate(a) for a in trail],
         people=people,
+        contributor_ids=sorted(await service.contributors(session, access.draft), key=str),
     )
 
 

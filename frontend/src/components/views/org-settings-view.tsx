@@ -97,6 +97,9 @@ function OrgSettingsForm({ org, canEdit }: { org: Organisation; canEdit: boolean
   const [saved, setSaved] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const form = useForm<Values>({ resolver: zodResolver(schema), defaultValues: toForm(org) });
+  // Retention deletes data permanently, so the API accepts it from owners only (a platform
+  // administrator acting without membership counts as an owner).
+  const canSetRetention = canEdit && (org.my_role === "owner" || org.my_role === null);
   useEffect(() => form.reset(toForm(org)), [org, form]);
 
   const save = useMutation({
@@ -241,8 +244,13 @@ function OrgSettingsForm({ org, canEdit }: { org: Organisation; canEdit: boolean
               </CardDescription>
             </CardHeader>
             <CardContent className="grid gap-4 sm:grid-cols-2">
-              {text("keep_crawls", "Keep page data for the newest crawls", "Per project, 2 or more. Empty keeps everything")}
-              {text("delete_reports_after_days", "Delete reports older than (days)", "30 or more. Empty keeps every report")}
+              {canSetRetention ? null : (
+                <p className="text-sm text-muted-foreground sm:col-span-2">Only owners can change data retention.</p>
+              )}
+              <fieldset disabled={!canSetRetention} className="contents">
+                {text("keep_crawls", "Keep page data for the newest crawls", "Per project, 2 or more. Empty keeps everything")}
+                {text("delete_reports_after_days", "Delete reports older than (days)", "30 or more. Empty keeps every report")}
+              </fieldset>
             </CardContent>
           </Card>
         </fieldset>

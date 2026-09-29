@@ -17,6 +17,23 @@ test("unauthenticated visitors are sent to sign in", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "NIIT AI SEO Agent" })).toBeVisible();
 });
 
+test("a sign-in link cannot send people to another site", async ({ page }) => {
+  // Browsers read "/\host" as another site; the dashboard must not follow it.
+  await page.goto("/login?next=%2F%5Cexample.com");
+  await page.getByLabel("Email").fill(ADMIN_EMAIL);
+  await page.getByLabel("Password").fill(ADMIN_PASSWORD);
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Overview" })).toBeVisible();
+  expect(new URL(page.url()).hostname).not.toBe("example.com");
+});
+
+test("pages are served with a content security policy", async ({ page }) => {
+  const response = await page.goto("/login");
+  const csp = response?.headers()["content-security-policy"] ?? "";
+  expect(csp).toContain("frame-ancestors 'none'");
+  expect(csp).toContain("object-src 'none'");
+});
+
 test("wrong password shows an error and does not sign in", async ({ page }) => {
   await page.goto("/login");
   await page.getByLabel("Email").fill(ADMIN_EMAIL);
