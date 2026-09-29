@@ -12,8 +12,12 @@ import {
   type Draft,
   type DraftDetail,
   type DraftStatus,
+  type Comparison,
   type Recommendation,
   type RecommendationStatus,
+  type Report,
+  type Schedule,
+  type ScorePoint,
   type Issue,
   type IssueSummary,
   type LinkRecommendation,
@@ -54,6 +58,8 @@ export const keys = {
   recommendations: (projectId: string) => ["projects", projectId, "recommendations"] as const,
   drafts: (projectId: string) => ["projects", projectId, "drafts"] as const,
   draft: (id: string) => ["drafts", id] as const,
+  reports: (projectId: string) => ["projects", projectId, "reports"] as const,
+  schedule: (projectId: string) => ["projects", projectId, "schedule"] as const,
 };
 
 export function useHealth() {
@@ -346,4 +352,37 @@ export function useDrafts(projectId: string | null, filters: DraftFilters = {}) 
 
 export function useDraft(id: string) {
   return useQuery({ queryKey: keys.draft(id), queryFn: () => api<DraftDetail>(`/drafts/${id}`) });
+}
+
+// ---------------------------------------------------------------- reports and monitoring
+
+export function useReports(projectId: string | null, page = 1) {
+  return useQuery({
+    queryKey: [...keys.reports(projectId ?? ""), page],
+    queryFn: () => api<Page<Report>>(`/projects/${projectId}/reports`, { query: { page, page_size: 20 } }),
+    enabled: !!projectId,
+    refetchInterval: (query) => (query.state.data?.items.some((r) => running(r.status)) ? 2000 : false),
+  });
+}
+
+export function useSchedule(projectId: string) {
+  return useQuery({ queryKey: keys.schedule(projectId), queryFn: () => api<Schedule>(`/projects/${projectId}/schedule`) });
+}
+
+export function useScoreHistory(projectId: string | null) {
+  return useQuery({
+    queryKey: ["projects", projectId ?? "", "score-history"],
+    queryFn: () => api<ScorePoint[]>(`/projects/${projectId}/scores`),
+    enabled: !!projectId,
+  });
+}
+
+export function useComparison(projectId: string | null, fromCrawl?: string, toCrawl?: string, enabled = true) {
+  return useQuery({
+    queryKey: ["projects", projectId ?? "", "compare", fromCrawl ?? "", toCrawl ?? ""],
+    queryFn: () =>
+      api<Comparison>(`/projects/${projectId}/compare`, { query: { from_crawl: fromCrawl, to_crawl: toCrawl } }),
+    enabled: !!projectId && enabled,
+    retry: false,
+  });
 }

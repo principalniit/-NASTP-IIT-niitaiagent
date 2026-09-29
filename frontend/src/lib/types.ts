@@ -566,3 +566,84 @@ export interface DraftDetail extends Draft {
   trail: ApprovalEntry[];
   people: Record<string, string>;
 }
+
+// ---------------------------------------------------------------- reports and monitoring
+
+export type ReportStatus = "queued" | "running" | "completed" | "failed";
+export type PdfStatus = "pending" | "ready" | "unavailable" | "failed";
+
+export interface Report {
+  id: string;
+  project_id: string;
+  crawl_job_id: string | null;
+  title: string;
+  status: ReportStatus;
+  include_ai: boolean;
+  pdf_status: PdfStatus;
+  pdf_error: string | null;
+  error: string | null;
+  requested_by_id: string | null;
+  created_at: string;
+  finished_at: string | null;
+}
+
+export type ScheduleFrequency = "daily" | "weekly" | "monthly";
+
+export interface Schedule {
+  enabled: boolean;
+  frequency: ScheduleFrequency;
+  hour: number;
+  timezone: string;
+  next_run_at: string | null;
+  last_run_at: string | null;
+  platform_enabled: boolean;
+}
+
+export interface ScorePoint {
+  crawl_job_id: string;
+  created_at: string;
+  overall: number | null;
+  technical: number | null;
+  on_page: number | null;
+  content: number | null;
+  internal_linking: number | null;
+  structured_data: number | null;
+}
+
+export interface Capped<T> {
+  count: number;
+  items: T[];
+}
+
+export interface ChangedValue<T> {
+  url: string;
+  from: T;
+  to: T;
+}
+
+export interface ComparedIssue {
+  id: string;
+  rule_id: string;
+  title: string;
+  severity: Severity;
+  affected_url: string | null;
+  affected_page_count: number;
+}
+
+export interface Comparison {
+  from_crawl: { id: string; finished_at: string | null; pages: number };
+  to_crawl: { id: string; finished_at: string | null; pages: number };
+  score_change: Record<string, { from: number | null; to: number | null; change: number | null }>;
+  issues: { new: Capped<ComparedIssue>; resolved: Capped<ComparedIssue>; recurring: Capped<ComparedIssue> };
+  pages: {
+    added: Capped<string>;
+    removed: Capped<string>;
+    status_changes: Capped<ChangedValue<number | null>>;
+    title_changes: Capped<ChangedValue<string | null>>;
+    meta_description_changes: Capped<ChangedValue<string | null>>;
+    redirect_changes: Capped<ChangedValue<string | null>>;
+    content_changed: Capped<string>;
+    inbound_link_changes: Capped<ChangedValue<number>>;
+  };
+  note: string;
+}

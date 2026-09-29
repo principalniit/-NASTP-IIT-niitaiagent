@@ -18,6 +18,8 @@ PORT="${E2E_API_PORT:-8001}"
 FIXTURE_PORT="${E2E_FIXTURE_PORT:-8123}"
 OLLAMA_PORT="${E2E_OLLAMA_PORT:-11500}"
 export OLLAMA_BASE_URL="http://127.0.0.1:$OLLAMA_PORT"
+# Chromium for PDF reports, if one is installed; otherwise reports are HTML only.
+export REPORT_PDF_BROWSER_PATH="${E2E_PDF_BROWSER_PATH:-}"
 ADMIN_EMAIL="${E2E_ADMIN_EMAIL:-admin@e2e.example.org}"
 
 case "$DATABASE_URL" in

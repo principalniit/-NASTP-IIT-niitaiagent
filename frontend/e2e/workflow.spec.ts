@@ -117,3 +117,46 @@ test("people can propose changes, and official facts need a verified source", as
   await approve.click();
   await expect(page.getByText("Verified source: Admissions notice AO-2026-07")).toBeVisible();
 });
+
+test("management reports, crawl-to-crawl monitoring and schedules", async ({ page }) => {
+  test.setTimeout(180_000);
+  await signIn(page, ADMIN_EMAIL);
+
+  await nav(page, "Reports").click();
+  await page.getByLabel("Project", { exact: true }).selectOption({ label: FIXTURE });
+  await page.getByLabel("Title (optional)").fill("Quarterly SEO review");
+  await page.getByRole("button", { name: "Generate report" }).click();
+  const link = page.getByRole("link", { name: "Quarterly SEO review" });
+  await expect(link).toBeVisible({ timeout: 60_000 });
+  await link.click();
+
+  const report = page.frameLocator("iframe[title='Quarterly SEO review']");
+  await expect(report.getByRole("heading", { name: "1.Executive summary" })).toBeVisible();
+  await expect(report.getByRole("heading", { name: "13.Methodology and limitations" })).toBeVisible();
+  await expect(report.getByText("not a search ranking").first()).toBeVisible();
+  await expect(report.getByText("/missing").first()).toBeVisible();
+  await expect(page.getByRole("button", { name: "Download HTML" })).toBeVisible();
+
+  // A second crawl gives Monitoring something to compare.
+  await nav(page, "Crawl Explorer").click();
+  await page.getByLabel("Project", { exact: true }).selectOption({ label: FIXTURE });
+  await page.getByRole("button", { name: "Start crawl" }).click();
+  await expect(page.getByText("Completed", { exact: true })).toBeVisible({ timeout: 90_000 });
+  await expect(page.getByRole("link", { name: "Completed · view SEO audit" })).toBeVisible({ timeout: 60_000 });
+
+  await nav(page, "Monitoring").click();
+  await page.getByLabel("Project", { exact: true }).selectOption({ label: FIXTURE });
+  await expect(page.getByRole("img", { name: /Overall score over 2 crawls/ })).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByRole("heading", { name: "Compare two crawls" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /New issues/ })).toBeVisible();
+  await expect(page.getByText("Status code changes")).toBeVisible();
+
+  await nav(page, "Projects").click();
+  await page.getByRole("link", { name: "Fixture site" }).click();
+  await expect(page.getByText("Scheduling is switched off on this server")).toBeVisible();
+  await page.getByLabel("Crawl on a schedule").check();
+  await page.getByLabel("How often").selectOption("monthly");
+  await page.getByRole("button", { name: "Save schedule" }).click();
+  await expect(page.getByText("Schedule saved")).toBeVisible();
+  await expect(page.getByText(/Next crawl:/)).toBeVisible();
+});

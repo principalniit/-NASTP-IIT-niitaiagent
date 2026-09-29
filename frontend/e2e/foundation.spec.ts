@@ -73,10 +73,10 @@ test("create a project, validate input and save crawl settings", async ({ page }
 
 test("unbuilt sections say so instead of showing sample data", async ({ page }) => {
   await signIn(page);
-  await page.getByRole("link", { name: /Reports/ }).click();
-  await expect(page.getByRole("heading", { level: 1, name: "Reports" })).toBeVisible();
+  await page.getByRole("link", { name: /Integrations/ }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Integrations" })).toBeVisible();
   await expect(page.getByText("Not available yet")).toBeVisible();
-  await expect(page.getByText("Phase 5", { exact: true }).last()).toBeVisible();
+  await expect(page.getByText("Phase 6", { exact: true }).last()).toBeVisible();
 });
 
 test("administration lists members and the audit trail", async ({ page }) => {

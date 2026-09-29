@@ -78,10 +78,10 @@ export function refreshSession(): Promise<boolean> {
 
 type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
-export async function api<T>(
-  path: string,
-  options: { method?: Method; body?: unknown; query?: Record<string, string | number | undefined> } = {},
-): Promise<T> {
+type Options = { method?: Method; body?: unknown; query?: Record<string, string | number | undefined> };
+
+/** Sends an authenticated request, refreshing the session once on 401. Throws ApiError. */
+async function request(path: string, options: Options = {}): Promise<Response> {
   const url = new URL(`/api/v1${path}`, window.location.origin);
   for (const [key, value] of Object.entries(options.query ?? {})) {
     if (value !== undefined && value !== "") url.searchParams.set(key, String(value));
@@ -106,8 +106,31 @@ export async function api<T>(
     }
   }
   if (!response.ok) throw await toError(response);
+  return response;
+}
+
+export async function api<T>(path: string, options: Options = {}): Promise<T> {
+  const response = await request(path, options);
   if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
+}
+
+/** A text body, such as a stored HTML report. */
+export async function apiText(path: string): Promise<string> {
+  return (await request(path)).text();
+}
+
+/** Downloads a binary response (for example a PDF) as a file with the given name. */
+export async function downloadFile(path: string, filename: string): Promise<void> {
+  const blob = await (await request(path)).blob();
+  const href = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = href;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(href), 1000);
 }
 
 export async function login(email: string, password: string): Promise<void> {

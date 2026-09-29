@@ -10,6 +10,7 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 
 import { describedBy, Field } from "@/components/app/field";
+import { ScheduleCard } from "@/components/monitoring/schedule-card";
 import { PageHeader } from "@/components/app/page-header";
 import { CrawlStatusBadge } from "@/components/crawls/crawl-status";
 import { StartCrawlButton } from "@/components/crawls/start-crawl";
@@ -77,6 +78,7 @@ export function ProjectDetailView({ projectId }: { projectId: string }) {
         <div className="space-y-6">
           <DetailsCard project={p} canEdit={can("projects:update")} timeZone={current?.timezone} />
           <CrawlHistoryCard project={p} canStart={can("crawls:start")} timeZone={current?.timezone} />
+          <ScheduleCard project={p} canEdit={can("project_settings:update")} />
           {can("projects:delete") ? <DeleteCard project={p} /> : null}
         </div>
       </div>
