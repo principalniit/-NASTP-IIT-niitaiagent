@@ -175,6 +175,7 @@ tenancy and security before any crawl data exists.
 | SEO engine: rules, scoring, prioritisation, issues, SEO dashboards | Done |
 | AI agent: provider, tools, grounded tasks, recommendations, drafts and approvals | Done (not yet validated against a live Ollama model; see section 12) |
 | Reports and monitoring: 13-section reports, PDF export, score history, crawl comparison, schedule foundation | Done |
+| Interface uplift: animated sign-in, grouped navigation, interactive tiles and tabs, data-drawn page thumbnails, search-result previews | Done |
 | Commercial readiness: tenant verification suite, plans and usage limits, integration records with encrypted credentials, white-label reports, retention, platform audit, deployment guide, security review | Done |
 
 ## 8. Known limitations after Phase 1
@@ -529,3 +530,55 @@ Recommended next step: the interface uplift the owner asked for:
 
 It must keep the same data rules (no invented numbers, honest empty states), keep
 accessibility (reduced motion, keyboard, contrast), and keep every test passing.
+
+## 15. Interface uplift (after Phase 6)
+
+Requested by the owner: interactive screens with tabs, tiles and dynamic thumbnails, and
+a sign-in screen with a high-quality animation about AI-based SEO.
+
+Delivered:
+- **Sign-in**:
+  - a split layout with an animated vector scene: a crawler scanning a page, a rules
+    check list, a local AI core, and an AI draft awaiting human approval;
+  - a show-characters toggle for the password;
+  - a mobile layout.
+- **Navigation**: the sidebar is grouped into Workspace, Analyse, Improve, Track and
+  Manage, with the brand mark and an active-page indicator. The top bar shows the
+  person's initials.
+- **Overview**:
+  - a hero banner with the live overall score ring and quick actions;
+  - tiles that link to the screen behind each number;
+  - open-issue tiles per severity that open the filtered Issues list for that project;
+  - workspace tabs: module launch tiles, the score trend, and recent reports.
+- **Pages**:
+  - a thumbnail on every row;
+  - a Gallery tab of thumbnail cards;
+  - a legend that explains how thumbnails are drawn.
+- **Page detail**: a thumbnail and a search-result preview. Details are split into
+  Overview, Content, Structured data and Links tabs.
+- **Projects**: tiles with a per-project colour and the live health score, or a table.
+
+Design rules kept:
+- No invented figures. Every number comes from the API, and missing data says so.
+- Thumbnails are drawings of crawl data, labelled as such. Pages are never
+  screenshotted, because rendering pages in a browser is deferred for SSRF reasons.
+- Every image is a local vector, so the Content Security Policy is unchanged.
+- The tabs follow the WAI-ARIA pattern. The tiles are real links with visible focus.
+  Motion stops under reduced-motion settings.
+
+Assumption A21: the illustration contains no figures or claims, only generic
+shapes and the labels Crawl, Analyse, AI draft and Human approval. This way it cannot
+misstate the product or the institute.
+
+| Suite | Result |
+|-------|--------|
+| Frontend lint, types, production build | Clean |
+| End-to-end (Playwright), now covering the gallery tab, keyboard tab navigation on page detail, workspace tabs and tiles on the overview, and reduced motion on sign-in | 16 passed |
+
+### Known limitations after the uplift
+
+| Limitation | Plan |
+|------------|------|
+| Thumbnails are schematic, not screenshots | Real screenshots need browser rendering behind the SSRF guard (deferred) |
+| No manual light/dark switch; the theme follows the system setting | Add a toggle if people ask for it |
+| No profile page yet | Next interface step |

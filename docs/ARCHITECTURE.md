@@ -326,6 +326,17 @@ Initial implementations: `OllamaProvider`, `LocalCrawlerProvider`,
 - An authenticated layout holds the sidebar with every navigation section from the
   brief; every section is a real page. No placeholder numbers are ever rendered.
 - Pages are served with a Content Security Policy (see `docs/SECURITY.md`).
+- Visual language: a brand gradient, an animated vector illustration on the sign-in page
+  (`components/login/seo-hero-scene.tsx`), interactive tiles (`app/stat-tile.tsx`,
+  `app/launch-tile.tsx`), a score ring and accessible tabs (`ui/tabs.tsx`, arrow keys,
+  Home and End). Every image is a local vector, so nothing loads from other sites.
+- Page thumbnails (`seo/page-thumbnail.tsx`) are drawn from each page's crawl facts:
+  status, title and H1 presence, word count, internal links, noindex, orphan and alt
+  text. They are not screenshots, because pages are never rendered in a browser. The
+  search-result preview (`seo/serp-preview.tsx`) shows the page's own title and
+  description at approximate display limits.
+- Motion is decoration only. A global `prefers-reduced-motion` rule turns it off, and an
+  end-to-end test checks that it does.
 - AI output is always labelled "AI-generated", links the issues it cites, and shows
   why a task failed instead of partial output. When AI is off, screens say so and the
   deterministic views work unchanged. Review actions are shown only when the viewer's

@@ -33,6 +33,13 @@ test("start a crawl, follow progress and review results", async ({ page }) => {
 
   await expect(page.getByRole("heading", { level: 1, name: "/missing" })).toBeVisible();
   await expect(page.getByText("404").first()).toBeVisible();
+  // A thumbnail drawn from crawl data sits above the tabs.
+  await expect(page.getByText("Drawn from crawl data, not a screenshot.")).toBeVisible();
+  // Details are split into tabs; arrow keys move between them.
+  const tabs = page.getByRole("tablist", { name: "Page details" });
+  await tabs.getByRole("tab", { name: "Overview" }).focus();
+  await page.keyboard.press("End");
+  await expect(tabs.getByRole("tab", { name: "Links" })).toHaveAttribute("aria-selected", "true");
   await expect(page.getByRole("heading", { name: "Incoming internal links" })).toBeVisible();
 
   await page.getByRole("link", { name: "Back to crawl" }).click();
@@ -42,6 +49,11 @@ test("start a crawl, follow progress and review results", async ({ page }) => {
   await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Pages" }).click();
   await page.getByLabel("Project", { exact: true }).selectOption({ label: "Fixture site (127.0.0.1)" });
   await expect(page.getByRole("link", { name: "/about", exact: true })).toBeVisible();
+  // The gallery shows every page as a thumbnail card drawn from its crawl data.
+  await page.getByRole("tab", { name: "Gallery" }).click();
+  await expect(page.getByRole("tab", { name: "Gallery" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("link", { name: /\/about/ }).first()).toBeVisible();
+  await page.getByRole("tab", { name: "Table" }).click();
 
   await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Overview" }).click();
   await expect(page.getByRole("group", { name: "Crawl status" })).toContainText("Completed");

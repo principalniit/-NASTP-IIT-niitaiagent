@@ -1,15 +1,18 @@
 "use client";
 
-import { ArrowLeft, ExternalLink } from "lucide-react";
+import { ArrowLeft, Braces, ExternalLink, Gauge, Heading, Link2 } from "lucide-react";
 import Link from "next/link";
 
 import { PageHeader } from "@/components/app/page-header";
 import { EmptyState, ErrorState, LoadingState } from "@/components/app/states";
 import { HttpStatus } from "@/components/crawls/crawl-status";
+import { PageThumbnail } from "@/components/seo/page-thumbnail";
+import { SerpPreview } from "@/components/seo/serp-preview";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageAssistant } from "@/components/ai/ai-actions";
 import { ApiError } from "@/lib/api";
 import { useCurrentOrg } from "@/lib/current-org";
@@ -78,72 +81,104 @@ export function PageDetailView({ crawlId, pageId }: { crawlId: string; pageId: s
           </Button>
         }
       />
+      <div className="mb-6 grid gap-4 lg:grid-cols-[16rem_1fr]">
+        <figure className="rounded-xl border bg-muted/40 p-3 shadow-sm">
+          <PageThumbnail page={page} />
+          <figcaption className="mt-2 text-xs text-muted-foreground">Drawn from crawl data, not a screenshot.</figcaption>
+        </figure>
+        {parsed ? (
+          <SerpPreview url={page.url} title={page.title} description={page.meta_description} />
+        ) : (
+          <Card>
+            <CardHeader>
+              <CardTitle>No search preview</CardTitle>
+              <CardDescription>The page was not fetched as HTML, so it has no title or description to preview.</CardDescription>
+            </CardHeader>
+          </Card>
+        )}
+      </div>
       {parsed ? <CrawlPageAssistant crawlId={crawlId} pageUrl={page.url} /> : null}
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Response</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <dl>
-              <Fact label="HTTP status"><HttpStatus code={page.status_code} /></Fact>
-              <Fact label="Outcome">{FETCH_STATUS_LABELS[page.fetch_status]}{page.error ? ` — ${page.error}` : ""}</Fact>
-              <Fact label="Response time">{page.response_time_ms !== null ? `${page.response_time_ms} ms` : <Missing text="Not measured" />}</Fact>
-              <Fact label="Content type">{page.content_type ?? <Missing text="Unknown" />}</Fact>
-              <Fact label="Size">{page.content_length !== null ? `${page.content_length.toLocaleString()} bytes` : <Missing text="Unknown" />}</Fact>
-              <Fact label="Depth">{page.depth ?? <Missing text="Found via sitemap only" />}</Fact>
-              <Fact label="Found via">{page.discovered_via}</Fact>
-              <Fact label="In sitemap">{page.in_sitemap ? "Yes" : "No"}{page.is_orphan ? " · orphan (no internal links point here)" : ""}</Fact>
-              {page.redirect_chain.length ? (
-                <Fact label="Redirects">
-                  <ol className="list-decimal space-y-1 pl-4">
-                    {page.redirect_chain.map((hop) => (
-                      <li key={hop.url}>
-                        {hop.status_code} {hop.url}
-                      </li>
-                    ))}
-                    <li>{page.final_url}</li>
-                  </ol>
-                </Fact>
-              ) : null}
-            </dl>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Metadata</CardTitle>
-            <CardDescription>{parsed ? "As served by the website." : "Not available because the page was not fetched as HTML."}</CardDescription>
-          </CardHeader>
-          {parsed ? (
+      <Tabs defaultValue="overview">
+        <TabsList label="Page details">
+          <TabsTrigger value="overview">
+            <Gauge aria-hidden /> Overview
+          </TabsTrigger>
+          <TabsTrigger value="content" disabled={!parsed}>
+            <Heading aria-hidden /> Content
+          </TabsTrigger>
+          <TabsTrigger value="structured" disabled={!parsed}>
+            <Braces aria-hidden /> Structured data
+          </TabsTrigger>
+          <TabsTrigger value="links">
+            <Link2 aria-hidden /> Links
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="overview" className="grid gap-6 lg:grid-cols-2">
+          <Card>
+            <CardHeader>
+              <CardTitle>Response</CardTitle>
+            </CardHeader>
             <CardContent>
               <dl>
-                <Fact label="Title">
-                  {page.title ? `${page.title} (${page.title.length} characters)` : <Missing />}
-                  {page.title_count > 1 ? <Badge variant="warning" className="ml-2">{page.title_count} title tags</Badge> : null}
-                </Fact>
-                <Fact label="Meta description">
-                  {page.meta_description ? `${page.meta_description} (${page.meta_description.length} characters)` : <Missing />}
-                  {page.meta_description_count > 1 ? <Badge variant="warning" className="ml-2">{page.meta_description_count} tags</Badge> : null}
-                </Fact>
-                <Fact label="Canonical">
-                  {page.canonical_url ?? <Missing />}
-                  {page.canonical_count > 1 ? <Badge variant="warning" className="ml-2">{page.canonical_count} canonicals</Badge> : null}
-                </Fact>
-                <Fact label="Robots">
-                  {[page.meta_robots && `meta: ${page.meta_robots}`, page.x_robots_tag && `header: ${page.x_robots_tag}`].filter(Boolean).join(" · ") || <Missing text="No directives" />}
-                  {page.is_noindex ? <Badge variant="warning" className="ml-2">noindex</Badge> : null}
-                </Fact>
-                <Fact label="Language">{page.lang ?? <Missing />}</Fact>
-                <Fact label="Word count">{page.word_count ?? <Missing />}</Fact>
-                <Fact label="hreflang">
-                  {page.hreflang.length ? page.hreflang.map((h) => `${h.hreflang}: ${h.href}`).join(", ") : <Missing />}
-                </Fact>
+                <Fact label="HTTP status"><HttpStatus code={page.status_code} /></Fact>
+                <Fact label="Outcome">{FETCH_STATUS_LABELS[page.fetch_status]}{page.error ? ` — ${page.error}` : ""}</Fact>
+                <Fact label="Response time">{page.response_time_ms !== null ? `${page.response_time_ms} ms` : <Missing text="Not measured" />}</Fact>
+                <Fact label="Content type">{page.content_type ?? <Missing text="Unknown" />}</Fact>
+                <Fact label="Size">{page.content_length !== null ? `${page.content_length.toLocaleString()} bytes` : <Missing text="Unknown" />}</Fact>
+                <Fact label="Depth">{page.depth ?? <Missing text="Found via sitemap only" />}</Fact>
+                <Fact label="Found via">{page.discovered_via}</Fact>
+                <Fact label="In sitemap">{page.in_sitemap ? "Yes" : "No"}{page.is_orphan ? " · orphan (no internal links point here)" : ""}</Fact>
+                {page.redirect_chain.length ? (
+                  <Fact label="Redirects">
+                    <ol className="list-decimal space-y-1 pl-4">
+                      {page.redirect_chain.map((hop) => (
+                        <li key={hop.url}>
+                          {hop.status_code} {hop.url}
+                        </li>
+                      ))}
+                      <li>{page.final_url}</li>
+                    </ol>
+                  </Fact>
+                ) : null}
               </dl>
             </CardContent>
-          ) : null}
-        </Card>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>Metadata</CardTitle>
+              <CardDescription>{parsed ? "As served by the website." : "Not available because the page was not fetched as HTML."}</CardDescription>
+            </CardHeader>
+            {parsed ? (
+              <CardContent>
+                <dl>
+                  <Fact label="Title">
+                    {page.title ? `${page.title} (${page.title.length} characters)` : <Missing />}
+                    {page.title_count > 1 ? <Badge variant="warning" className="ml-2">{page.title_count} title tags</Badge> : null}
+                  </Fact>
+                  <Fact label="Meta description">
+                    {page.meta_description ? `${page.meta_description} (${page.meta_description.length} characters)` : <Missing />}
+                    {page.meta_description_count > 1 ? <Badge variant="warning" className="ml-2">{page.meta_description_count} tags</Badge> : null}
+                  </Fact>
+                  <Fact label="Canonical">
+                    {page.canonical_url ?? <Missing />}
+                    {page.canonical_count > 1 ? <Badge variant="warning" className="ml-2">{page.canonical_count} canonicals</Badge> : null}
+                  </Fact>
+                  <Fact label="Robots">
+                    {[page.meta_robots && `meta: ${page.meta_robots}`, page.x_robots_tag && `header: ${page.x_robots_tag}`].filter(Boolean).join(" · ") || <Missing text="No directives" />}
+                    {page.is_noindex ? <Badge variant="warning" className="ml-2">noindex</Badge> : null}
+                  </Fact>
+                  <Fact label="Language">{page.lang ?? <Missing />}</Fact>
+                  <Fact label="Word count">{page.word_count ?? <Missing />}</Fact>
+                  <Fact label="hreflang">
+                    {page.hreflang.length ? page.hreflang.map((h) => `${h.hreflang}: ${h.href}`).join(", ") : <Missing />}
+                  </Fact>
+                </dl>
+              </CardContent>
+            ) : null}
+          </Card>
+        </TabsContent>
         {parsed ? (
-          <>
+          <TabsContent value="content" className="grid gap-6 lg:grid-cols-2">
             <Card>
               <CardHeader>
                 <CardTitle>Headings</CardTitle>
@@ -185,7 +220,11 @@ export function PageDetailView({ crawlId, pageId }: { crawlId: string; pageId: s
                 )}
               </CardContent>
             </Card>
-            <Card className="lg:col-span-2">
+          </TabsContent>
+        ) : null}
+        {parsed ? (
+          <TabsContent value="structured">
+            <Card>
               <CardHeader>
                 <CardTitle>Structured data</CardTitle>
                 <CardDescription>As detected on the page. Validation results are listed under Structured Data.</CardDescription>
@@ -207,18 +246,20 @@ export function PageDetailView({ crawlId, pageId }: { crawlId: string; pageId: s
                 ) : null}
               </CardContent>
             </Card>
-          </>
+          </TabsContent>
         ) : null}
-        <LinksCard title="Outgoing links" description={`${page.internal_links_count} internal · ${page.external_links_count} external`} links={page.outlinks} crawlId={crawlId} />
-        <LinksCard title="Incoming internal links" description={`${page.inlinks_count} crawled pages link here`} links={page.inlinks} crawlId={crawlId} />
-      </div>
+        <TabsContent value="links" className="grid gap-6">
+          <LinksCard title="Outgoing links" description={`${page.internal_links_count} internal · ${page.external_links_count} external`} links={page.outlinks} crawlId={crawlId} />
+          <LinksCard title="Incoming internal links" description={`${page.inlinks_count} crawled pages link here`} links={page.inlinks} crawlId={crawlId} />
+        </TabsContent>
+      </Tabs>
     </>
   );
 }
 
 function LinksCard({ title, description, links, crawlId }: { title: string; description: string; links: CrawlLinkRef[]; crawlId: string }) {
   return (
-    <Card className="lg:col-span-2">
+    <Card>
       <CardHeader>
         <CardTitle>{title}</CardTitle>
         <CardDescription>{description}</CardDescription>

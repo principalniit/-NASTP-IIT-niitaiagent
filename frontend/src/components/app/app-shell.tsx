@@ -5,12 +5,13 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { BrandMark } from "@/components/app/brand-mark";
 import { LoadingState } from "@/components/app/states";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { NativeSelect } from "@/components/ui/native-select";
 import { CurrentOrgProvider, useCurrentOrg } from "@/lib/current-org";
-import { NAV_ITEMS } from "@/lib/navigation";
+import { NAV_GROUPS, NAV_ITEMS } from "@/lib/navigation";
 import { useSession } from "@/lib/session";
 import { ROLE_LABELS } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -54,13 +55,18 @@ function Shell({ children }: { children: React.ReactNode }) {
       </a>
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-40 w-64 -translate-x-full bg-sidebar text-sidebar-foreground transition-transform md:static md:translate-x-0",
+          "fixed inset-y-0 left-0 z-40 flex w-64 -translate-x-full flex-col bg-sidebar text-sidebar-foreground transition-transform md:sticky md:top-0 md:h-screen md:translate-x-0",
           menuOpen && "translate-x-0",
         )}
+        style={{
+          backgroundImage:
+            "radial-gradient(circle at 0% 0%, color-mix(in oklch, var(--brand-violet) 22%, transparent), transparent 55%), radial-gradient(circle at 100% 100%, color-mix(in oklch, var(--brand-glow) 14%, transparent), transparent 50%)",
+        }}
       >
-        <div className="flex h-14 items-center justify-between border-b border-white/10 px-4">
-          <Link href="/overview" className="font-semibold tracking-tight">
-            NIIT AI SEO Agent
+        <div className="flex h-14 shrink-0 items-center justify-between border-b border-white/10 px-4">
+          <Link href="/overview" className="flex items-center gap-2.5 font-semibold tracking-tight">
+            <BrandMark className="size-7" />
+            <span>NIIT AI SEO Agent</span>
           </Link>
           <Button
             variant="ghost"
@@ -72,30 +78,45 @@ function Shell({ children }: { children: React.ReactNode }) {
             <X />
           </Button>
         </div>
-        <nav aria-label="Main" className="overflow-y-auto p-2" style={{ maxHeight: "calc(100vh - 3.5rem)" }}>
-          <ul className="space-y-0.5">
-            {NAV_ITEMS.map((item) => {
-              const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
-              const Icon = item.icon;
-              return (
-                <li key={item.href}>
-                  <Link
-                    href={item.href}
-                    aria-current={active ? "page" : undefined}
-                    onClick={() => setMenuOpen(false)}
-                    className={cn(
-                      "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors hover:bg-sidebar-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-foreground/60",
-                      active ? "bg-sidebar-accent font-medium" : "text-sidebar-foreground/85",
-                    )}
-                  >
-                    <Icon className="size-4 shrink-0" aria-hidden />
-                    <span className="flex-1">{item.label}</span>
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
+        <nav aria-label="Main" className="flex-1 overflow-y-auto px-2 py-3">
+          {NAV_GROUPS.map((group) => (
+            <div key={group} className="mb-3">
+              <p id={`nav-${group}`} className="px-3 pb-1 text-[0.65rem] font-semibold uppercase tracking-widest text-sidebar-muted/80">
+                {group}
+              </p>
+              <ul className="space-y-0.5" aria-labelledby={`nav-${group}`}>
+                {NAV_ITEMS.filter((item) => item.group === group).map((item) => {
+                  const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+                  const Icon = item.icon;
+                  return (
+                    <li key={item.href}>
+                      <Link
+                        href={item.href}
+                        aria-current={active ? "page" : undefined}
+                        onClick={() => setMenuOpen(false)}
+                        className={cn(
+                          "group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all hover:bg-sidebar-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-foreground/60",
+                          active
+                            ? "bg-sidebar-accent font-medium text-white shadow-inner"
+                            : "text-sidebar-foreground/80 hover:translate-x-0.5 hover:text-sidebar-foreground",
+                        )}
+                      >
+                        {active ? (
+                          <span className="absolute inset-y-1.5 left-0 w-1 rounded-full bg-gradient-to-b from-brand-teal to-brand-violet" aria-hidden />
+                        ) : null}
+                        <Icon className={cn("size-4 shrink-0 transition-colors", active ? "text-brand-teal" : "group-hover:text-brand-teal")} aria-hidden />
+                        <span className="flex-1">{item.label}</span>
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))}
         </nav>
+        <p className="shrink-0 border-t border-white/10 px-5 py-3 text-[0.7rem] leading-relaxed text-sidebar-muted">
+          Drafts only: nothing is published without a person&apos;s approval.
+        </p>
       </aside>
       {menuOpen ? (
         <div className="fixed inset-0 z-30 bg-black/40 md:hidden" onClick={() => setMenuOpen(false)} aria-hidden />
@@ -149,7 +170,17 @@ function TopBar({ onOpenMenu }: { onOpenMenu: () => void }) {
         </div>
       ) : null}
       <div className="ml-auto flex items-center gap-3">
-        <span className="hidden text-sm text-muted-foreground sm:inline">{me?.user.full_name}</span>
+        {me ? (
+          <span className="hidden items-center gap-2 sm:flex">
+            <span
+              className="flex size-8 items-center justify-center rounded-full bg-gradient-to-br from-brand-violet to-brand-glow text-xs font-semibold text-white"
+              aria-hidden
+            >
+              {initials(me.user.full_name)}
+            </span>
+            <span className="text-sm text-muted-foreground">{me.user.full_name}</span>
+          </span>
+        ) : null}
         <Button
           variant="outline"
           size="sm"
@@ -163,4 +194,9 @@ function TopBar({ onOpenMenu }: { onOpenMenu: () => void }) {
       </div>
     </header>
   );
+}
+
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  return ((parts[0]?.[0] ?? "") + (parts.length > 1 ? parts[parts.length - 1][0] : "")).toUpperCase() || "?";
 }

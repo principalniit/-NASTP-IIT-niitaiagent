@@ -268,6 +268,7 @@ and key rotation. The latest security review is
 | SEO engine: 50 rules, scoring, prioritisation, issue lifecycle, SEO dashboards (Phase 3) | Done |
 | AI assistant, recommendations, content drafts, approvals (Phase 4) | Done; not yet validated against a live Ollama model |
 | Reports (13 sections, HTML and PDF), monitoring, crawl comparison, schedule foundation (Phase 5) | Done |
+| Interface uplift: animated sign-in, grouped navigation, interactive overview tiles and tabs, page thumbnails drawn from crawl data, search-result previews, project tiles | Done; motion stops under reduced-motion settings |
 | Commercial readiness: tenant verification suite, plans and usage limits, integration records with encrypted credentials, white-label reports, data retention, platform audit log, deployment guide, security review (Phase 6) | Done; integrations are records only, no payments |
 
 Known limitations are listed in `docs/IMPLEMENTATION_PLAN.md`.

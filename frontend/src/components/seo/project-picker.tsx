@@ -10,7 +10,9 @@ const STORAGE_KEY = "niit-seo.selected-project";
 
 function stored(): string | null {
   try {
-    return window.localStorage.getItem(STORAGE_KEY);
+    // A link can name the project (for example from an Overview tile); otherwise the last
+    // choice made in this browser applies.
+    return new URLSearchParams(window.location.search).get("project") ?? window.localStorage.getItem(STORAGE_KEY);
   } catch {
     return null;
   }

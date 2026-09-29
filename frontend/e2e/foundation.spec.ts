@@ -27,6 +27,17 @@ test("a sign-in link cannot send people to another site", async ({ page }) => {
   expect(new URL(page.url()).hostname).not.toBe("example.com");
 });
 
+test("the sign-in animation stops when people ask for reduced motion", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/login");
+  const duration = await page
+    .locator(".animate-float")
+    .first()
+    .evaluate((el) => parseFloat(getComputedStyle(el).animationDuration));
+  expect(duration).toBeLessThan(0.1);
+  await expect(page.getByRole("heading", { name: "NIIT AI SEO Agent" })).toBeVisible();
+});
+
 test("pages are served with a content security policy", async ({ page }) => {
   const response = await page.goto("/login");
   const csp = response?.headers()["content-security-policy"] ?? "";
@@ -54,6 +65,11 @@ test("overview shows real counts and honest empty states", async ({ page }) => {
   // Score tiles show either a real score or an explicit "not scored" state, never a placeholder.
   await expect(page.getByRole("group", { name: "Overall SEO health score" })).toBeVisible();
   await expect(page.getByText("Disabled", { exact: true })).toBeVisible();
+  // Launch tiles open every section; the workspace tabs switch views in place.
+  const workspace = page.getByRole("tablist", { name: "Workspace views" });
+  await expect(workspace.getByRole("tab", { name: "Modules" })).toHaveAttribute("aria-selected", "true");
+  await page.getByRole("tabpanel").getByRole("link", { name: /Monitoring/ }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Monitoring" })).toBeVisible();
 });
 
 test("create a project, validate input and save crawl settings", async ({ page }) => {
@@ -102,7 +118,7 @@ test("every navigation section opens a real page", async ({ page }) => {
 
 test("administration lists members and the audit trail", async ({ page }) => {
   await signIn(page);
-  await page.getByRole("link", { name: "Administration" }).click();
+  await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Administration" }).click();
   await expect(page.getByRole("cell", { name: ADMIN_EMAIL })).toBeVisible();
   // Organisation audit entries (sign-in events are account-level and not listed here).
   await expect(page.getByRole("cell", { name: "project.created" }).first()).toBeVisible();
