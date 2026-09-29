@@ -102,6 +102,15 @@ internal-link graph (in/out counts, orphans, over-linked pages, under-linked
 important pages), duplicate and near-duplicate content, scoring, prioritisation
 with explanations, issue lifecycle across crawls, issues and page dashboards.
 
+Acceptance criteria from the project principles:
+- Every issue carries evidence (affected URL, observed value, rule and threshold) and
+  an actionable recommendation. The issue schema rejects findings missing either.
+- Rules, scoring and prioritisation run with AI disabled and are covered by
+  deterministic tests on local fixtures.
+- No rule contains NIIT-specific logic; institution-specific behaviour comes from
+  project settings such as important pages, page groups and content types.
+- Scores are presented as site-health indicators, never as rankings or predictions.
+
 ### Phase 4: AI agent
 
 `AIProvider` and `OllamaProvider`, health checks, typed agent tools, structured JSON
