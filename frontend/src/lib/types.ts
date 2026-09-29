@@ -395,3 +395,174 @@ export interface LinkRecommendation {
   snippet: string | null;
   relevance: number;
 }
+
+// ---------------------------------------------------------------- AI assistant
+
+export type AIKind =
+  | "management_summary"
+  | "issue_explanation"
+  | "page_plan"
+  | "metadata_draft"
+  | "content_outline"
+  | "question";
+export type AIRunStatus = "queued" | "running" | "completed" | "failed";
+
+export interface AIStatus {
+  enabled: boolean;
+  provider: string;
+  model: string | null;
+  status: "disabled" | "available" | "unavailable";
+  detail: string | null;
+}
+
+export interface AIRequest {
+  kind: AIKind;
+  issue_id?: string;
+  page_url?: string;
+  question?: string;
+  goal?: string;
+}
+
+export interface AIAnalysisSummary {
+  id: string;
+  project_id: string;
+  crawl_job_id: string | null;
+  kind: AIKind;
+  status: AIRunStatus;
+  subject_type: string;
+  subject_id: string | null;
+  params: Record<string, string>;
+  provider: string | null;
+  model: string | null;
+  error: string | null;
+  created_at: string;
+  finished_at: string | null;
+  requested_by_id: string | null;
+}
+
+export interface Grounding {
+  passed?: boolean;
+  violations?: string[];
+  warnings?: string[];
+}
+
+export interface AIAnalysis extends AIAnalysisSummary {
+  prompt_version: string | null;
+  evidence: Record<string, unknown>;
+  output: Record<string, unknown> | null;
+  grounding: Grounding;
+  attempts: number;
+  duration_ms: number | null;
+  draft_ids: string[];
+}
+
+export type RecommendationStatus = "open" | "accepted" | "dismissed";
+
+export interface Recommendation {
+  id: string;
+  project_id: string;
+  ai_analysis_id: string;
+  issue_ids: string[];
+  page_url: string | null;
+  title: string;
+  body: string;
+  steps: string[];
+  status: RecommendationStatus;
+  created_at: string;
+}
+
+// ---------------------------------------------------------------- drafts and approvals
+
+export type DraftField = "title" | "meta_description" | "h1" | "content_outline" | "content_section";
+export type DraftStatus = "draft" | "pending_review" | "approved" | "rejected" | "published" | "rolled_back";
+export type ApprovalAction =
+  | "created"
+  | "edited"
+  | "submitted"
+  | "approved"
+  | "rejected"
+  | "reopened"
+  | "published"
+  | "rolled_back";
+
+export const DRAFT_FIELD_LABELS: Record<DraftField, string> = {
+  title: "Page title",
+  meta_description: "Meta description",
+  h1: "Main heading (H1)",
+  content_outline: "Content outline",
+  content_section: "Content section",
+};
+
+export const DRAFT_STATUS_LABELS: Record<DraftStatus, string> = {
+  draft: "Draft",
+  pending_review: "Pending review",
+  approved: "Approved",
+  rejected: "Rejected",
+  published: "Published",
+  rolled_back: "Rolled back",
+};
+
+export const APPROVAL_ACTION_LABELS: Record<ApprovalAction, string> = {
+  created: "Created",
+  edited: "Edited",
+  submitted: "Submitted for review",
+  approved: "Approved",
+  rejected: "Rejected",
+  reopened: "Reopened",
+  published: "Marked as published",
+  rolled_back: "Marked as rolled back",
+};
+
+export interface Draft {
+  id: string;
+  project_id: string;
+  page_url: string;
+  crawl_page_id: string | null;
+  field: DraftField;
+  original_content: string | null;
+  proposed_content: string;
+  reason: string;
+  evidence: { issue_ids?: string[]; facts_used?: string[]; warnings?: string[] } & Record<string, unknown>;
+  source: "ai" | "human";
+  ai_analysis_id: string | null;
+  status: DraftStatus;
+  version: number;
+  protected: boolean;
+  protected_reasons: string[];
+  created_by_id: string | null;
+  version_author_id: string | null;
+  reviewed_by_id: string | null;
+  reviewed_at: string | null;
+  source_reference: string | null;
+  published_at: string | null;
+  rolled_back_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DraftVersion {
+  version: number;
+  proposed_content: string;
+  reason: string;
+  source: "ai" | "human";
+  edited_by_id: string | null;
+  created_at: string;
+}
+
+export interface ApprovalEntry {
+  id: string;
+  version: number;
+  action: ApprovalAction;
+  from_status: DraftStatus | null;
+  to_status: DraftStatus;
+  actor_id: string | null;
+  comment: string | null;
+  source_reference: string | null;
+  created_at: string;
+}
+
+export interface DraftDetail extends Draft {
+  versions: DraftVersion[];
+  trail: ApprovalEntry[];
+  people: Record<string, string>;
+}

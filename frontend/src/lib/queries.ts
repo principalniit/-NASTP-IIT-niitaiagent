@@ -5,6 +5,15 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import {
   ACTIVE_CRAWL_STATUSES,
+  type AIAnalysis,
+  type AIAnalysisSummary,
+  type AIKind,
+  type AIStatus,
+  type Draft,
+  type DraftDetail,
+  type DraftStatus,
+  type Recommendation,
+  type RecommendationStatus,
   type Issue,
   type IssueSummary,
   type LinkRecommendation,
@@ -39,6 +48,12 @@ export const keys = {
   crawl: (id: string) => ["crawls", id] as const,
   issues: (projectId: string) => ["projects", projectId, "issues"] as const,
   issue: (id: string) => ["issues", id] as const,
+  aiStatus: (orgId: string) => ["organisations", orgId, "ai-status"] as const,
+  analyses: (projectId: string) => ["projects", projectId, "ai-analyses"] as const,
+  analysis: (id: string) => ["ai-analyses", id] as const,
+  recommendations: (projectId: string) => ["projects", projectId, "recommendations"] as const,
+  drafts: (projectId: string) => ["projects", projectId, "drafts"] as const,
+  draft: (id: string) => ["drafts", id] as const,
 };
 
 export function useHealth() {
@@ -258,4 +273,77 @@ export function useLinkRecommendations(crawlId: string | null, page: number) {
 export function useLatestAnalysedCrawl(orgId: string | null, projectId: string | null) {
   const query = useCrawls(orgId, { project_id: projectId ?? undefined, analysed: true, page_size: 1 }, !!projectId);
   return { ...query, crawl: query.data?.items[0] ?? null };
+}
+
+// ---------------------------------------------------------------- AI assistant
+
+export function useAIStatus(orgId: string | null) {
+  return useQuery({
+    queryKey: keys.aiStatus(orgId ?? ""),
+    queryFn: () => api<AIStatus>(`/organisations/${orgId}/ai/status`),
+    enabled: !!orgId,
+    staleTime: 60_000,
+  });
+}
+
+function running(status: string | undefined): boolean {
+  return status === "queued" || status === "running";
+}
+
+export interface AnalysisFilters {
+  kind?: AIKind;
+  subject_id?: string;
+  page_url?: string;
+  page_size?: number;
+}
+
+export function useAnalyses(projectId: string | null, filters: AnalysisFilters = {}, enabled = true) {
+  return useQuery({
+    queryKey: [...keys.analyses(projectId ?? ""), filters],
+    queryFn: () =>
+      api<Page<AIAnalysisSummary>>(`/projects/${projectId}/ai/analyses`, { query: { page_size: 10, ...filters } }),
+    enabled: !!projectId && enabled,
+    refetchInterval: (query) => (query.state.data?.items.some((a) => running(a.status)) ? 2000 : false),
+  });
+}
+
+/** One AI analysis, polled while the worker is still running it. */
+export function useAnalysis(id: string | null) {
+  return useQuery({
+    queryKey: keys.analysis(id ?? ""),
+    queryFn: () => api<AIAnalysis>(`/ai-analyses/${id}`),
+    enabled: !!id,
+    refetchInterval: (query) => (running(query.state.data?.status) ? 2000 : false),
+  });
+}
+
+export function useRecommendations(projectId: string | null, status: RecommendationStatus | "" = "open", page = 1) {
+  return useQuery({
+    queryKey: [...keys.recommendations(projectId ?? ""), status, page],
+    queryFn: () =>
+      api<Page<Recommendation>>(`/projects/${projectId}/recommendations`, {
+        query: { status_filter: status || undefined, page, page_size: 20 },
+      }),
+    enabled: !!projectId,
+  });
+}
+
+// ---------------------------------------------------------------- drafts
+
+export interface DraftFilters {
+  status_filter?: DraftStatus | "";
+  page_url?: string;
+  page?: number;
+}
+
+export function useDrafts(projectId: string | null, filters: DraftFilters = {}) {
+  return useQuery({
+    queryKey: [...keys.drafts(projectId ?? ""), filters],
+    queryFn: () => api<Page<Draft>>(`/projects/${projectId}/drafts`, { query: { page_size: 25, ...filters } }),
+    enabled: !!projectId,
+  });
+}
+
+export function useDraft(id: string) {
+  return useQuery({ queryKey: keys.draft(id), queryFn: () => api<DraftDetail>(`/drafts/${id}`) });
 }

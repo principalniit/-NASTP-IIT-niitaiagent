@@ -1,18 +1,21 @@
 """Test-only: add a project pointing at the local fixture site to the E2E database.
 
 Project creation through the API rejects local addresses, so the E2E suite seeds this
-directly. Never run against a real database; e2e_server.sh guards the database name.
+directly. It also adds a reviewer account, because approving a draft needs a second
+person. Never run against a real database; e2e_server.sh guards the database name.
 """
 
 import asyncio
+import os
 import sys
 
 from sqlalchemy import select
 
 from app.core.database import dispose_engine, get_session_factory
-from app.modules.organisations.models import Organisation
+from app.modules.organisations.models import Organisation, OrganisationMember, OrgRole
 from app.modules.projects.models import Project, ProjectSettings
 from app.modules.projects.schemas import CrawlSettings, ProjectSettingsData
+from app.modules.users.service import build_user
 
 
 async def main(port: int) -> None:
@@ -36,6 +39,18 @@ async def main(port: int) -> None:
                 project_id=project.id,
                 organisation_id=org.id,
                 settings=settings.model_dump(mode="json"),
+            )
+        )
+        reviewer = build_user(
+            os.environ.get("E2E_REVIEWER_EMAIL", "reviewer@e2e.example.org"),
+            "E2E Reviewer",
+            os.environ["ADMIN_PASSWORD"],
+        )
+        session.add(reviewer)
+        await session.flush()
+        session.add(
+            OrganisationMember(
+                organisation_id=org.id, user_id=reviewer.id, role=OrgRole.SEO_MANAGER
             )
         )
         await session.commit()

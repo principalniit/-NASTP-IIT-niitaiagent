@@ -1,18 +1,23 @@
 #!/usr/bin/env bash
-# Reset the end-to-end database, seed a known admin, the NIIT tenant and a project that
-# points at a local fixture website, then serve the fixture site, a crawl worker and the
-# API. Used by frontend/playwright.config.ts. Never point E2E_DATABASE_URL at a real
+# Reset the end-to-end database, seed a known admin, a reviewer, the NIIT tenant and a
+# project that points at a local fixture website, then serve the fixture site, a fake
+# Ollama, the worker and the API. Used by frontend/playwright.config.ts. Never point E2E_DATABASE_URL at a real
 # database.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 export DATABASE_URL="${E2E_DATABASE_URL:-postgresql+asyncpg://niit:niit@localhost:5432/niit_seo_e2e}"
 export ENVIRONMENT=test
-export AI_PROVIDER=none
+# AI runs against a scripted stand-in for Ollama (tests/fixtures/fake_ollama.py), never a
+# real model. Organisations still start with AI off until an admin enables it.
+export AI_PROVIDER=ollama
+export OLLAMA_DEFAULT_MODEL=llama3.1
 export ADMIN_PASSWORD="${E2E_ADMIN_PASSWORD:-e2e-admin-password}"
 export WORKER_POLL_SECONDS=0.5
 PORT="${E2E_API_PORT:-8001}"
 FIXTURE_PORT="${E2E_FIXTURE_PORT:-8123}"
+OLLAMA_PORT="${E2E_OLLAMA_PORT:-11500}"
+export OLLAMA_BASE_URL="http://127.0.0.1:$OLLAMA_PORT"
 ADMIN_EMAIL="${E2E_ADMIN_EMAIL:-admin@e2e.example.org}"
 
 case "$DATABASE_URL" in
@@ -29,6 +34,7 @@ uv run python -m app.cli seed-niit --owner-email "$ADMIN_EMAIL"
 uv run python -m scripts.e2e_seed_fixture_project "$FIXTURE_PORT"
 
 uv run python -m tests.fixtures.site "$FIXTURE_PORT" &
+uv run python -m tests.fixtures.fake_ollama "$OLLAMA_PORT" llama3.1:latest &
 # Loopback is allowed here only so the worker can reach the fixture site; production
 # refuses this setting.
 CRAWLER_ALLOWED_PRIVATE_NETWORKS=127.0.0.1/32 uv run python -m app.worker &

@@ -5,6 +5,7 @@ import { ArrowLeft, ExternalLink } from "lucide-react";
 import Link from "next/link";
 import { useId, useState } from "react";
 
+import { ExplainIssue } from "@/components/ai/ai-actions";
 import { EmptyState, ErrorState, LoadingState } from "@/components/app/states";
 import { SeverityBadge } from "@/components/seo/severity";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -183,13 +184,18 @@ export function IssueDetailView({ issueId }: { issueId: string }) {
                 {i.recurrence_count ? <div><dt className="text-muted-foreground">Recurred</dt><dd>{i.recurrence_count} time{i.recurrence_count === 1 ? "" : "s"} after being resolved</dd></div> : null}
                 <div><dt className="text-muted-foreground">Confidence · effort</dt><dd>{i.confidence} · {i.effort}</dd></div>
                 <div>
-                  <dt className="text-muted-foreground">Proposed change</dt>
-                  <dd>No change has been proposed. Drafts and approvals arrive in Phase 4.</dd>
+                  <dt className="text-muted-foreground">Proposed changes</dt>
+                  <dd>
+                    Drafts for the affected page are listed on its page in the{" "}
+                    <Link href="/pages" className="text-primary underline-offset-4 hover:underline">Pages</Link> view and in{" "}
+                    <Link href="/approvals" className="text-primary underline-offset-4 hover:underline">Approvals</Link>.
+                  </dd>
                 </div>
               </dl>
             </CardContent>
           </Card>
           {can("issues:triage") ? <TriageCard issue={i} /> : null}
+          <ExplainIssue issue={i} />
         </div>
       </div>
     </>

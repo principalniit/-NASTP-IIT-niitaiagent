@@ -9,7 +9,7 @@ import { ErrorState, LoadingState } from "@/components/app/states";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useCurrentOrg } from "@/lib/current-org";
-import { useCrawls, useHealth, useIssueSummary, useMembers, useProjects, useScore } from "@/lib/queries";
+import { useAIStatus, useCrawls, useHealth, useIssueSummary, useMembers, useProjects, useScore } from "@/lib/queries";
 
 const NO_CRAWL = "No crawl data yet";
 const NOT_SCORED = "Not scored yet";
@@ -33,6 +33,7 @@ export function OverviewView() {
   const projects = useProjects(current?.id ?? null, { page: 1 }, canReadProjects);
   const members = useMembers(current?.id ?? null, can("members:read"));
   const health = useHealth();
+  const ai = useAIStatus(current?.id ?? null);
   const latestCrawl = useCrawls(current?.id ?? null, { page_size: 1 }, canReadProjects);
   const latestAnalysed = useCrawls(
     current?.id ?? null,
@@ -93,11 +94,11 @@ export function OverviewView() {
             <CardHeader className="pb-2">
               <CardDescription>AI assistant</CardDescription>
               <CardTitle className="text-base">
-                {health.data ? (
-                  <Badge variant={health.data.ai.status === "available" ? "success" : "secondary"}>
-                    {health.data.ai.status === "disabled"
+                {ai.data ? (
+                  <Badge variant={ai.data.status === "available" ? "success" : "secondary"}>
+                    {ai.data.status === "disabled"
                       ? "Disabled"
-                      : health.data.ai.status === "available"
+                      : ai.data.status === "available"
                         ? "Available"
                         : "Unavailable"}
                   </Badge>
@@ -107,6 +108,7 @@ export function OverviewView() {
               </CardTitle>
             </CardHeader>
             <CardContent className="text-xs text-muted-foreground">
+              {ai.data?.status === "available" ? `Model ${ai.data.model}. ` : ai.data?.detail ? `${ai.data.detail} ` : ""}
               Crawling, analysis and reports work without AI.
             </CardContent>
           </Card>

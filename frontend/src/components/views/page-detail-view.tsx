@@ -10,8 +10,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { PageAssistant } from "@/components/ai/ai-actions";
 import { ApiError } from "@/lib/api";
-import { useCrawlPage } from "@/lib/queries";
+import { useCurrentOrg } from "@/lib/current-org";
+import { useCrawl, useCrawlPage, useLatestAnalysedCrawl } from "@/lib/queries";
 import { FETCH_STATUS_LABELS, type CrawlLinkRef } from "@/lib/types";
 import { pathOf } from "@/lib/utils";
 
@@ -26,6 +28,19 @@ function Fact({ label, children }: { label: string; children: React.ReactNode })
 
 function Missing({ text = "Not present" }: { text?: string }) {
   return <span className="text-muted-foreground">{text}</span>;
+}
+
+function CrawlPageAssistant({ crawlId, pageUrl }: { crawlId: string; pageUrl: string }) {
+  const { current } = useCurrentOrg();
+  const crawl = useCrawl(crawlId);
+  const projectId = crawl.data?.project_id ?? null;
+  const latest = useLatestAnalysedCrawl(current?.id ?? null, projectId);
+  if (!projectId || latest.isLoading) return null;
+  return (
+    <div className="mb-6">
+      <PageAssistant projectId={projectId} pageUrl={pageUrl} latestCrawl={latest.crawl?.id === crawlId} />
+    </div>
+  );
 }
 
 export function PageDetailView({ crawlId, pageId }: { crawlId: string; pageId: string }) {
@@ -63,6 +78,7 @@ export function PageDetailView({ crawlId, pageId }: { crawlId: string; pageId: s
           </Button>
         }
       />
+      {parsed ? <CrawlPageAssistant crawlId={crawlId} pageUrl={page.url} /> : null}
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader>
@@ -172,7 +188,7 @@ export function PageDetailView({ crawlId, pageId }: { crawlId: string; pageId: s
             <Card className="lg:col-span-2">
               <CardHeader>
                 <CardTitle>Structured data</CardTitle>
-                <CardDescription>Detected only. Validation against schema.org recommendations arrives in Phase 3.</CardDescription>
+                <CardDescription>As detected on the page. Validation results are listed under Structured Data.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-2 text-sm">
                 {jsonLd.length === 0 && !microdata?.count ? <Missing text="No JSON-LD or microdata found" /> : null}

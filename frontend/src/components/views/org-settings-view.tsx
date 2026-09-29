@@ -174,7 +174,10 @@ function OrgSettingsForm({ org, canEdit }: { org: Organisation; canEdit: boolean
           <Card>
             <CardHeader>
               <CardTitle>AI provider</CardTitle>
-              <CardDescription>AI features arrive in Phase 4. Everything else works with AI disabled.</CardDescription>
+              <CardDescription>
+                Explanations and drafts from a local Ollama model. The server operator must also enable AI and run Ollama.
+                Crawling, analysis, scores and issues work with AI off.
+              </CardDescription>
             </CardHeader>
             <CardContent className="grid gap-4 sm:grid-cols-2">
               <Field id="ai_provider" label="Provider">
@@ -183,7 +186,7 @@ function OrgSettingsForm({ org, canEdit }: { org: Organisation; canEdit: boolean
                   <option value="ollama">Ollama (local)</option>
                 </NativeSelect>
               </Field>
-              {text("ai_model", "Model name", "As pulled in Ollama")}
+              {text("ai_model", "Model name", "As pulled in Ollama, for example llama3.1. Leave empty to use the server default.")}
             </CardContent>
           </Card>
           <Card>
