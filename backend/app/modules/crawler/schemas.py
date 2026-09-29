@@ -4,7 +4,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.modules.crawler.models import CrawlStatus, FetchStatus
+from app.modules.crawler.models import AnalysisStatus, CrawlStatus, FetchStatus
 
 
 class CrawlStartRequest(BaseModel):
@@ -34,6 +34,9 @@ class CrawlJobOut(BaseModel):
     sitemap_url_count: int
     warnings: list[str]
     error_message: str | None
+    analysis_status: AnalysisStatus
+    analysed_at: datetime | None
+    analysis_error: str | None
     requested_by_id: uuid.UUID | None
     created_at: datetime
     started_at: datetime | None

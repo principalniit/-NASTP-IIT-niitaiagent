@@ -19,6 +19,7 @@ from app.modules.organisations.permissions import (
     role_has,
 )
 from app.modules.projects.models import Project
+from app.modules.seo.models import SeoIssue
 from app.modules.users.models import User
 
 
@@ -45,6 +46,14 @@ class ProjectAccess:
 class CrawlAccess:
     user: User
     crawl: CrawlJob
+    project: Project
+    role: OrgRole
+
+
+@dataclass(frozen=True)
+class IssueAccess:
+    user: User
+    issue: SeoIssue
     project: Project
     role: OrgRole
 
@@ -130,5 +139,32 @@ def require_crawl(permission: Permission) -> Callable[..., Awaitable[CrawlAccess
         if not role_has(member.role, permission):
             raise ForbiddenError("Your role does not permit this action")
         return CrawlAccess(user, crawl, project, member.role)
+
+    return dependency
+
+
+def require_issue(permission: Permission) -> Callable[..., Awaitable[IssueAccess]]:
+    async def dependency(
+        issue_id: uuid.UUID,
+        user: User = Depends(get_current_user),
+        session: AsyncSession = Depends(get_session),
+    ) -> IssueAccess:
+        issue = await session.get(SeoIssue, issue_id)
+        if issue is None:
+            raise NotFoundError("Issue not found")
+        project = await session.scalar(
+            select(Project).where(
+                Project.id == issue.project_id,
+                Project.organisation_id == issue.organisation_id,
+                Project.deleted_at.is_(None),
+            )
+        )
+        member = await get_membership(session, issue.organisation_id, user.id)
+        org = await session.get(Organisation, issue.organisation_id)
+        if project is None or member is None or org is None or not org.is_active:
+            raise NotFoundError("Issue not found")
+        if not role_has(member.role, permission):
+            raise ForbiddenError("Your role does not permit this action")
+        return IssueAccess(user, issue, project, member.role)
 
     return dependency
