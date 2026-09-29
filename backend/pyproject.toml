@@ -21,6 +21,7 @@ dependencies = [
     # Windows has no system time zone database; zoneinfo needs this package there.
     "tzdata>=2024.1",
     "jinja2>=3.1",
+    "cryptography>=43",
 ]
 
 [project.optional-dependencies]

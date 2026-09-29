@@ -67,6 +67,11 @@ class Settings(BaseSettings):
     report_pdf_browser_path: str = ""
     # Scheduled crawls run only when this platform switch and the project's schedule are on.
     scheduler_enabled: bool = False
+    # Comma-separated Fernet keys for integration credentials. The first key encrypts; all
+    # keys decrypt, so a new key can be added in front and old secrets re-encrypted.
+    # Generate one with: python -c "from cryptography.fernet import Fernet;
+    # print(Fernet.generate_key().decode())"
+    integrations_encryption_keys: SecretStr = SecretStr("")
     ai_max_active_jobs_per_org: int = 3
 
     @property
@@ -80,6 +85,24 @@ class Settings(BaseSettings):
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
+    @model_validator(mode="after")
+    def _check_encryption_keys(self) -> "Settings":
+        from cryptography.fernet import Fernet
+
+        for key in self.encryption_keys:
+            try:
+                Fernet(key)
+            except ValueError as exc:
+                raise ValueError(
+                    "INTEGRATIONS_ENCRYPTION_KEYS must hold Fernet keys (32 url-safe base64 bytes)"
+                ) from exc
+        return self
+
+    @property
+    def encryption_keys(self) -> list[str]:
+        raw = self.integrations_encryption_keys.get_secret_value()
+        return [k.strip() for k in raw.split(",") if k.strip()]
 
     @model_validator(mode="after")
     def _check_production_safety(self) -> "Settings":

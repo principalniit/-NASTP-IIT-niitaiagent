@@ -18,6 +18,7 @@ from app.modules.organisations.schemas import (
     OrganisationSettings,
     OrganisationUpdate,
 )
+from app.modules.plans.service import enforce
 from app.modules.users.models import User
 from app.modules.users.service import build_user, get_by_email
 
@@ -163,6 +164,7 @@ async def add_member(
 ) -> OrganisationMember:
     _check_owner_privilege(access, data.role)
     org_id = access.organisation.id
+    await enforce(session, org_id, "members")
     user = await get_by_email(session, data.email)
     created_account = False
     if user is None:

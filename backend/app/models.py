@@ -5,8 +5,10 @@ from app.modules.audit_logs.models import AuditLog
 from app.modules.auth.models import RefreshToken
 from app.modules.crawler.models import CrawlJob, CrawlLink, CrawlPage
 from app.modules.drafts.models import Approval, ContentDraft, ContentDraftVersion
+from app.modules.integrations.models import Integration
 from app.modules.monitoring.models import CrawlSchedule
 from app.modules.organisations.models import Organisation, OrganisationMember, OrgRole
+from app.modules.plans.models import Plan
 from app.modules.projects.models import Project, ProjectSettings
 from app.modules.reports.models import Report
 from app.modules.seo.models import InternalLinkRecommendation, SchemaFinding, SeoIssue, SeoScore
@@ -22,10 +24,12 @@ __all__ = [
     "CrawlLink",
     "CrawlPage",
     "CrawlSchedule",
+    "Integration",
     "InternalLinkRecommendation",
     "OrgRole",
     "Organisation",
     "OrganisationMember",
+    "Plan",
     "Project",
     "ProjectSettings",
     "RefreshToken",

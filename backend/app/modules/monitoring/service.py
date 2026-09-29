@@ -22,6 +22,7 @@ from app.modules.monitoring.models import CrawlSchedule, Frequency
 from app.modules.monitoring.schemas import ScheduleIn, ScheduleOut
 from app.modules.organisations.dependencies import ProjectAccess
 from app.modules.organisations.models import Organisation
+from app.modules.plans.service import PlanLimitError, enforce
 from app.modules.projects.models import Project
 
 logger = logging.getLogger(__name__)
@@ -166,6 +167,14 @@ async def process_due_schedules(
             schedule.next_run_at = following_run(
                 schedule.next_run_at or now, now, schedule.frequency, schedule.hour, org.timezone
             )
+            try:
+                await enforce(session, org.id, "crawls_per_month")
+            except PlanLimitError:
+                logger.info(
+                    "Scheduled crawl skipped: plan limit reached",
+                    extra={"project_id": str(project.id)},
+                )
+                continue
             job = CrawlJob(
                 organisation_id=project.organisation_id,
                 project_id=project.id,

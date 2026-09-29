@@ -29,6 +29,10 @@ class Organisation(UUIDPrimaryKey, Timestamps, Base):
     language: Mapped[str] = mapped_column(String(16), default="en")
     # Validated through OrganisationSettings before every write.
     settings: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
+    # None follows the default plan.
+    plan_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("plans.id", ondelete="SET NULL"), index=True
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
 
 

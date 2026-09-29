@@ -13,6 +13,7 @@ from app.modules.audit_logs import service as audit
 from app.modules.organisations.dependencies import OrgAccess, ProjectAccess
 from app.modules.organisations.models import Organisation
 from app.modules.organisations.schemas import CrawlLimitCaps, OrganisationSettings
+from app.modules.plans.service import enforce
 from app.modules.projects.models import Project, ProjectSettings
 from app.modules.projects.schemas import (
     ProjectCreate,
@@ -80,6 +81,7 @@ async def create(
     session: AsyncSession, access: OrgAccess, data: ProjectCreate, meta: RequestMeta
 ) -> Project:
     root_url, domain = normalise_site_url(data.root_url)
+    await enforce(session, access.organisation.id, "projects")
     project = Project(
         organisation_id=access.organisation.id,
         name=data.name,

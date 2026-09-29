@@ -15,6 +15,7 @@ from app.core.request_context import RequestMeta
 from app.modules.audit_logs import service as audit
 from app.modules.organisations.dependencies import ProjectAccess, ReportAccess
 from app.modules.organisations.models import Organisation
+from app.modules.plans.service import enforce
 from app.modules.projects.models import Project
 from app.modules.reports import builder, render
 from app.modules.reports.models import PdfStatus, Report, ReportStatus
@@ -44,6 +45,7 @@ async def request_report(
         )
         or 0
     )
+    await enforce(session, project.organisation_id, "reports_per_month")
     if active >= MAX_ACTIVE_PER_ORG:
         raise RateLimitedError("Several reports are already being generated. Try again shortly.")
     report = Report(

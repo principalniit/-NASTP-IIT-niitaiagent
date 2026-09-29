@@ -14,6 +14,7 @@ from app.modules.ai.models import AIAnalysis, SeoRecommendation
 from app.modules.auth.dependencies import get_current_user
 from app.modules.crawler.models import CrawlJob
 from app.modules.drafts.models import ContentDraft
+from app.modules.integrations.models import Integration
 from app.modules.organisations.models import Organisation, OrganisationMember, OrgRole
 from app.modules.organisations.permissions import (
     PLATFORM_ADMIN_PERMISSIONS,
@@ -297,5 +298,32 @@ def require_report(permission: Permission) -> Callable[..., Awaitable[ReportAcce
             session, user, report.organisation_id, report.project_id, permission, "Report"
         )
         return ReportAccess(user, report, project, role)
+
+    return dependency
+
+
+@dataclass(frozen=True)
+class IntegrationAccess:
+    user: User
+    integration: Integration
+    organisation: Organisation
+
+
+def require_integration(permission: Permission) -> Callable[..., Awaitable[IntegrationAccess]]:
+    async def dependency(
+        integration_id: uuid.UUID,
+        user: User = Depends(get_current_user),
+        session: AsyncSession = Depends(get_session),
+    ) -> IntegrationAccess:
+        integration = await session.get(Integration, integration_id)
+        if integration is None:
+            raise NotFoundError("Integration not found")
+        member = await get_membership(session, integration.organisation_id, user.id)
+        org = await session.get(Organisation, integration.organisation_id)
+        if member is None or org is None or not org.is_active:
+            raise NotFoundError("Integration not found")
+        if not role_has(member.role, permission):
+            raise ForbiddenError("Your role does not permit this action")
+        return IntegrationAccess(user, integration, org)
 
     return dependency

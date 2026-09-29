@@ -35,6 +35,7 @@ from app.modules.crawler.urls import host_of, port_of
 from app.modules.organisations.dependencies import CrawlAccess, ProjectAccess
 from app.modules.organisations.models import Organisation
 from app.modules.organisations.schemas import OrganisationSettings
+from app.modules.plans.service import enforce, pages_cap
 from app.modules.projects.models import Project
 from app.modules.projects.schemas import ProjectSettingsData
 from app.modules.projects.service import get_settings_row
@@ -59,13 +60,14 @@ async def build_config(session: AsyncSession, project: Project) -> CrawlConfig:
         (await get_settings_row(session, project)).settings
     )
     crawl = settings.crawl
+    plan_pages = await pages_cap(session, org) if org else None
     root_host = host_of(project.root_url)
     port = port_of(project.root_url)
     return CrawlConfig(
         root_url=project.root_url,
         allowed_hosts=sorted({root_host, *settings.allowed_extra_hosts}),
         excluded_paths=settings.excluded_paths,
-        max_pages=min(crawl.max_pages, caps.max_pages),
+        max_pages=min(crawl.max_pages, caps.max_pages, plan_pages or caps.max_pages),
         max_depth=min(crawl.max_depth, caps.max_depth),
         concurrency=min(crawl.concurrency, caps.max_concurrency),
         timeout_seconds=crawl.timeout_seconds,
@@ -80,6 +82,7 @@ async def start(
     session: AsyncSession, access: ProjectAccess, incremental: bool, meta: RequestMeta
 ) -> CrawlJob:
     project = access.project
+    await enforce(session, project.organisation_id, "crawls_per_month")
     previous_id = None
     if incremental:
         previous_id = await session.scalar(

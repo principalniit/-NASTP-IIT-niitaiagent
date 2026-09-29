@@ -2,6 +2,8 @@
 
     uv run python -m app.cli create-admin --email you@example.org --name "Your Name"
     uv run python -m app.cli seed-niit --owner-email you@example.org
+    uv run python -m app.cli reset-password --email you@example.org
+    uv run python -m app.cli rotate-secrets
 
 Passwords are read from the ADMIN_PASSWORD environment variable or prompted for; they are
 never accepted as command-line arguments, which would leak into shell history.
@@ -143,6 +145,65 @@ async def seed_niit(owner_email: str) -> None:
         await session.commit()
 
 
+async def reset_password(email: str) -> None:
+    """Set a new password and sign the account out everywhere."""
+    from datetime import UTC, datetime
+
+    from sqlalchemy import update
+
+    from app.core.security import hash_password
+    from app.modules.auth.models import RefreshToken
+
+    async with get_session_factory()() as session:
+        user = await get_by_email(session, email)
+        if user is None:
+            sys.exit(f"No user with email {email}.")
+        user.password_hash = hash_password(_password())
+        await session.execute(
+            update(RefreshToken)
+            .where(RefreshToken.user_id == user.id, RefreshToken.revoked_at.is_(None))
+            .values(revoked_at=datetime.now(UTC))
+        )
+        audit.record(
+            session,
+            action="user.password_reset",
+            actor_id=None,
+            target_type="user",
+            target_id=user.id,
+            details={"via": "cli"},
+        )
+        await session.commit()
+        print(f"Password reset for {user.email}. Existing sessions were signed out.")
+
+
+async def rotate_secrets() -> None:
+    """Re-encrypt every stored integration credential with the first configured key."""
+    from sqlalchemy.orm import undefer
+
+    from app.core import crypto
+    from app.modules.integrations.models import Integration
+
+    async with get_session_factory()() as session:
+        rows = list(
+            await session.scalars(
+                select(Integration)
+                .where(Integration.secret_hint.is_not(None))
+                .options(undefer(Integration.secret))
+            )
+        )
+        for integration in rows:
+            if integration.secret is not None:
+                integration.secret = crypto.rotate(integration.secret)
+        audit.record(
+            session,
+            action="integration.secrets_rotated",
+            actor_id=None,
+            details={"count": len(rows)},
+        )
+        await session.commit()
+        print(f"Re-encrypted {len(rows)} stored credentials with the newest key.")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="app.cli")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -151,12 +212,19 @@ def main() -> None:
     p_admin.add_argument("--name", required=True)
     p_seed = sub.add_parser("seed-niit", help="Create the NIIT organisation and project")
     p_seed.add_argument("--owner-email", required=True)
+    p_reset = sub.add_parser("reset-password", help="Set a new password for an account")
+    p_reset.add_argument("--email", required=True)
+    sub.add_parser("rotate-secrets", help="Re-encrypt integration credentials with the newest key")
     args = parser.parse_args()
 
     async def run() -> None:
         try:
             if args.command == "create-admin":
                 await create_admin(args.email, args.name)
+            elif args.command == "reset-password":
+                await reset_password(args.email)
+            elif args.command == "rotate-secrets":
+                await rotate_secrets()
             else:
                 await seed_niit(args.owner_email)
         finally:

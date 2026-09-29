@@ -18,6 +18,7 @@ from app.modules.organisations.dependencies import ProjectAccess
 from app.modules.organisations.models import Organisation
 from app.modules.organisations.permissions import Permission, role_has
 from app.modules.organisations.schemas import OrganisationSettings
+from app.modules.plans.service import enforce
 from app.modules.seo.models import SeoIssue
 from app.modules.seo.service import latest_analysed_crawl
 
@@ -72,6 +73,7 @@ async def request_analysis(
         )
         or 0
     )
+    await enforce(session, org.id, "ai_tasks_per_day")
     if active >= get_settings().ai_max_active_jobs_per_org:
         raise RateLimitedError(
             "Too many AI tasks are already queued for this organisation. Try again shortly."
