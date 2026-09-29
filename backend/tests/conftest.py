@@ -21,7 +21,7 @@ from sqlalchemy import text
 from alembic import command
 from app.core.database import Base, get_session_factory
 from app.main import create_app
-from app.modules.auth.service import login_limiter
+from app.modules.auth.service import reset_login_limits
 from app.modules.users.service import build_user
 
 PASSWORD = "correct-horse-battery"
@@ -42,7 +42,7 @@ def migrated_database() -> Iterator[None]:
 @pytest.fixture(autouse=True)
 async def clean_tables() -> AsyncIterator[None]:
     yield
-    login_limiter.clear()
+    reset_login_limits()
     tables = ", ".join(t.name for t in reversed(Base.metadata.sorted_tables))
     async with get_session_factory()() as session:
         await session.execute(text(f"TRUNCATE {tables} RESTART IDENTITY CASCADE"))

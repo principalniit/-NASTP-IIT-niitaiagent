@@ -135,3 +135,19 @@ async def test_change_password(client: AsyncClient) -> None:
     assert (await client.post("/api/v1/auth/refresh", headers=XHR)).status_code == 401
     assert (await _login(client, "hal@example.org")).status_code == 401
     assert (await _login(client, "hal@example.org", "another-long-password")).status_code == 200
+
+
+async def test_address_limit_is_separate_and_higher_than_email_limit(client: AsyncClient) -> None:
+    # 20 failures spread across different emails from one address trip the address limit.
+    for i in range(20):
+        response = await _login(client, f"user{i}@example.org", "wrong-password-xx")
+        assert response.status_code == 401
+    blocked = await _login(client, "someone-new@example.org", "wrong-password-xx")
+    assert blocked.status_code == 429
+
+
+async def test_successful_login_is_not_blocked_by_other_users_failures(client: AsyncClient) -> None:
+    await make_user(client, "victim@example.org")
+    for _ in range(6):
+        await _login(client, "attacker-target@example.org", "wrong-password-xx")
+    assert (await _login(client, "victim@example.org")).status_code == 200

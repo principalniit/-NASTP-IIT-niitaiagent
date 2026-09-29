@@ -15,6 +15,7 @@ __pycache__/
 # Node / Next.js
 node_modules/
 .next/
+.next-e2e/
 out/
 next-env.d.ts
 *.tsbuildinfo

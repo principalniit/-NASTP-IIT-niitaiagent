@@ -14,10 +14,18 @@ class RequestMeta:
 
 
 def client_ip(request: Request) -> str | None:
+    """Return the caller's address.
+
+    Behind exactly one trusted reverse proxy (the Next.js server in the standard deployment)
+    the proxy appends the real client address to X-Forwarded-For, so the right-most entry is
+    the only trustworthy one. Earlier entries can be forged by the client.
+    """
     if get_settings().trust_proxy_headers:
         forwarded = request.headers.get("x-forwarded-for")
         if forwarded:
-            return forwarded.split(",")[0].strip()[:64]
+            last = forwarded.split(",")[-1].strip()
+            if last:
+                return last[:64]
     return request.client.host if request.client else None
 
 

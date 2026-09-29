@@ -23,9 +23,17 @@ from app.modules.users.models import User
 from app.modules.users.service import get_by_email, normalise_email
 
 _settings = get_settings()
-login_limiter = FailureLimiter(
+email_limiter = FailureLimiter(
     _settings.login_rate_limit_attempts, _settings.login_rate_limit_window_seconds
 )
+ip_limiter = FailureLimiter(
+    _settings.login_rate_limit_ip_attempts, _settings.login_rate_limit_window_seconds
+)
+
+
+def reset_login_limits() -> None:
+    email_limiter.clear()
+    ip_limiter.clear()
 
 
 @dataclass(frozen=True)
@@ -58,14 +66,15 @@ async def login(
     session: AsyncSession, email: str, password: str, meta: RequestMeta
 ) -> IssuedTokens:
     email = normalise_email(email)
-    keys = (f"email:{email}", f"ip:{meta.ip}")
-    if login_limiter.is_blocked(*keys):
+    ip_key = f"ip:{meta.ip}"
+    if email_limiter.is_blocked(email) or ip_limiter.is_blocked(ip_key):
         raise RateLimitedError("Too many failed login attempts. Try again later.")
 
     user = await get_by_email(session, email)
     valid = verify_password(user.password_hash if user else None, password)
     if user is None or not valid or not user.is_active:
-        login_limiter.record_failure(*keys)
+        email_limiter.record_failure(email)
+        ip_limiter.record_failure(ip_key)
         audit.record(
             session,
             action="auth.login_failed",
@@ -76,7 +85,7 @@ async def login(
         await session.commit()
         raise UnauthorizedError("Invalid email or password")
 
-    login_limiter.reset(*keys)
+    email_limiter.reset(email)
     if password_needs_rehash(user.password_hash):
         user.password_hash = hash_password(password)
     user.last_login_at = _now()

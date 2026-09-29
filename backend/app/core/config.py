@@ -30,7 +30,10 @@ class Settings(BaseSettings):
     # Only trust X-Forwarded-For when running behind a known reverse proxy.
     trust_proxy_headers: bool = False
 
+    # Failed logins allowed per email and per client address within the window. The address
+    # limit is higher because, without a trusted proxy, many users can share one address.
     login_rate_limit_attempts: int = 5
+    login_rate_limit_ip_attempts: int = 20
     login_rate_limit_window_seconds: int = 300
 
     # Default crawler identity for new projects; editable per project.

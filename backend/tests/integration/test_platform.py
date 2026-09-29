@@ -58,3 +58,29 @@ async def test_seed_niit_is_idempotent_and_adds_no_invented_facts(client: AsyncC
     assert all(ct["url_patterns"] == [] for ct in settings["content_types"])
     assert settings["institutional_profile"]["description"] is None
     assert settings["institutional_profile"]["approved_sources"] == []
+
+
+async def test_client_ip_uses_rightmost_forwarded_entry_only_when_trusted(
+    client: AsyncClient, monkeypatch
+) -> None:  # type: ignore[no-untyped-def]
+    from sqlalchemy import select
+
+    from app.core.config import get_settings
+    from app.core.database import get_session_factory
+    from app.modules.audit_logs.models import AuditLog
+
+    await make_user(client, "ip@example.org")
+    forged = {"X-Forwarded-For": "1.1.1.1, 198.51.100.7"}
+    body = {"email": "ip@example.org", "password": "wrong-password-xx"}
+    await client.post("/api/v1/auth/login", json=body, headers=forged)
+    monkeypatch.setattr(get_settings(), "trust_proxy_headers", True)
+    await client.post("/api/v1/auth/login", json=body, headers=forged)
+    async with get_session_factory()() as session:
+        ips = list(
+            await session.scalars(
+                select(AuditLog.ip_address)
+                .where(AuditLog.action == "auth.login_failed")
+                .order_by(AuditLog.created_at)
+            )
+        )
+    assert ips == ["203.0.113.10", "198.51.100.7"]

@@ -1,0 +1,127 @@
+// Browser API client. The access token lives only in memory; the refresh token is an
+// HttpOnly cookie the browser sends to /api/v1/auth automatically.
+
+export interface ApiErrorDetail {
+  loc?: (string | number)[];
+  msg?: string;
+}
+
+export class ApiError extends Error {
+  constructor(
+    public status: number,
+    public code: string,
+    message: string,
+    public details: unknown = null,
+    public requestId: string | null = null,
+  ) {
+    super(message);
+  }
+
+  fieldErrors(): ApiErrorDetail[] {
+    return Array.isArray(this.details) ? (this.details as ApiErrorDetail[]) : [];
+  }
+}
+
+let accessToken: string | null = null;
+let refreshInFlight: Promise<boolean> | null = null;
+let onSessionExpired: (() => void) | null = null;
+
+export function setAccessToken(token: string | null) {
+  accessToken = token;
+}
+
+export function setSessionExpiredHandler(handler: (() => void) | null) {
+  onSessionExpired = handler;
+}
+
+const XHR = { "X-Requested-With": "XMLHttpRequest" };
+
+async function toError(response: Response): Promise<ApiError> {
+  try {
+    const body = await response.json();
+    return new ApiError(
+      response.status,
+      body?.error?.code ?? "http_error",
+      body?.error?.message ?? response.statusText,
+      body?.error?.details ?? null,
+      body?.request_id ?? null,
+    );
+  } catch {
+    return new ApiError(response.status, "http_error", response.statusText || "Request failed");
+  }
+}
+
+/** Exchange the refresh cookie for a new access token. Concurrent callers share one request. */
+export function refreshSession(): Promise<boolean> {
+  refreshInFlight ??= (async () => {
+    try {
+      const response = await fetch("/api/v1/auth/refresh", {
+        method: "POST",
+        headers: XHR,
+        credentials: "same-origin",
+      });
+      if (!response.ok) {
+        setAccessToken(null);
+        return false;
+      }
+      const body = (await response.json()) as { access_token: string };
+      setAccessToken(body.access_token);
+      return true;
+    } catch {
+      return false;
+    } finally {
+      refreshInFlight = null;
+    }
+  })();
+  return refreshInFlight;
+}
+
+type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+
+export async function api<T>(
+  path: string,
+  options: { method?: Method; body?: unknown; query?: Record<string, string | number | undefined> } = {},
+): Promise<T> {
+  const url = new URL(`/api/v1${path}`, window.location.origin);
+  for (const [key, value] of Object.entries(options.query ?? {})) {
+    if (value !== undefined && value !== "") url.searchParams.set(key, String(value));
+  }
+  const send = () =>
+    fetch(url, {
+      method: options.method ?? "GET",
+      credentials: "same-origin",
+      headers: {
+        ...(options.body !== undefined ? { "Content-Type": "application/json" } : {}),
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      },
+      body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+    });
+
+  let response = await send();
+  if (response.status === 401 && !path.startsWith("/auth/login")) {
+    if (await refreshSession()) {
+      response = await send();
+    } else {
+      onSessionExpired?.();
+    }
+  }
+  if (!response.ok) throw await toError(response);
+  if (response.status === 204) return undefined as T;
+  return (await response.json()) as T;
+}
+
+export async function login(email: string, password: string): Promise<void> {
+  const body = await api<{ access_token: string }>("/auth/login", {
+    method: "POST",
+    body: { email, password },
+  });
+  setAccessToken(body.access_token);
+}
+
+export async function logout(): Promise<void> {
+  try {
+    await fetch("/api/v1/auth/logout", { method: "POST", headers: XHR, credentials: "same-origin" });
+  } finally {
+    setAccessToken(null);
+  }
+}
