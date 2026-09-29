@@ -20,8 +20,8 @@ Documented per rule 12 of the brief. Each can be changed without redesign.
 | # | Assumption |
 |---|------------|
 | A1 | Self-registration is disabled by default. The first platform administrator is created with a CLI command. |
-| A2 | Only platform administrators create organisations in Phase 1. Self-service sign-up is a Phase 6 concern. |
-| A3 | Logos are referenced by HTTPS URL. Reports fetch the logo once through the SSRF guard and embed it, so no upload store is needed; file upload remains a Phase 6 option. |
+| A2 | Only platform administrators create organisations in Phase 1. Self-service sign-up is deferred: it needs email verification and owner approval for commercial launch. |
+| A3 | Logos are referenced by HTTPS URL. Reports fetch the logo once through the SSRF guard and embed it, so no upload store is needed. Upload was not needed in Phase 6. |
 | A4 | NIIT's canonical website is `https://niit.edu.pk`. Authorised users can change it in project settings. |
 | A5 | The Next.js server proxies `/api/v1` to FastAPI, giving one origin and first-party cookies. |
 | A6 | Package managers: `uv` for Python, `pnpm` for Node. Both are free and fast; `pip` and `npm` also work. |
@@ -33,6 +33,12 @@ Documented per rule 12 of the brief. Each can be changed without redesign.
 | A12 | A report always covers the latest analysed crawl at the time it is requested, and is stored as a snapshot. Issue statuses in it are as recorded at generation time. |
 | A13 | PDF export is optional: it needs Chromium through Playwright on the server. Without it, reports are HTML (printable to PDF from a browser) and the PDF is marked unavailable. |
 | A14 | Scheduled crawls need two switches: `SCHEDULER_ENABLED` on the server and the project's own schedule. Both are off by default, and NIIT has no schedule. |
+| A15 | Plans are data, not offers. The seeded `internal` plan is the default and has no limits; the seeded `starter` and `professional` plans carry example numbers for the owner to replace before any commercial use. There is no payment processing. |
+| A16 | Monthly and daily usage limits use UTC calendar periods. |
+| A17 | Integrations are records only until the owner authorises a connection. Credentials can be stored only when the operator sets an encryption key outside the database. |
+| A18 | Data retention is off by default and only owners can turn it on. The minimums are 2 kept crawls and 30 days for reports. It runs hourly in the worker. |
+| A19 | Emails are not verified (no email provider is approved), so only platform administrators can add an account that already exists to an organisation. |
+| A20 | White-label reports replace the organisation's name with a display name and add a cover note; colour, footer and logo come from Phase 5 branding. |
 
 ## 3. Prerequisites for local development
 
@@ -132,11 +138,12 @@ HTML reports with the 13 sections in the brief, PDF export, crawl comparison,
 historical charts, issue resolution tracking, management summaries, scheduled crawl
 foundation (disabled by default). See section 13 for the report.
 
-### Phase 6: Commercial readiness
+### Phase 6: Commercial readiness (complete)
 
 Multi-tenant verification suite, organisation branding and white-label reports,
 plan and usage-limit architecture without payments, integration records with
-encrypted credentials, deployment guide, production security review.
+encrypted credentials, data retention, platform audit log and admin commands,
+deployment guide, production security review. See section 14 for the report.
 
 ## 5. Risks
 
@@ -168,17 +175,17 @@ tenancy and security before any crawl data exists.
 | SEO engine: rules, scoring, prioritisation, issues, SEO dashboards | Done |
 | AI agent: provider, tools, grounded tasks, recommendations, drafts and approvals | Done (not yet validated against a live Ollama model; see section 12) |
 | Reports and monitoring: 13-section reports, PDF export, score history, crawl comparison, schedule foundation | Done |
-| Commercial readiness | Not started |
+| Commercial readiness: tenant verification suite, plans and usage limits, integration records with encrypted credentials, white-label reports, retention, platform audit, deployment guide, security review | Done |
 
 ## 8. Known limitations after Phase 1
 
 | Limitation | Plan |
 |------------|------|
 | Login rate limiting is per process | Shared store before running several API instances |
-| Sign-in events are not shown in organisation audit views | Platform audit view in Phase 6 |
-| Members are added by email with an admin-set initial password; no invitation acceptance or forced password change | Invitations in Phase 6 |
-| Logos are referenced by HTTPS URL; no upload | Reports embed the logo through the SSRF guard (Phase 5); upload in Phase 6 if needed |
-| No user self-service profile page beyond the change-password API | Phase 6 |
+| Sign-in events are not shown in organisation audit views | Done: platform audit view (Phase 6) |
+| Members are added by email with an admin-set initial password; no invitation acceptance or forced password change | Invitations need an approved email provider; until then only platform administrators attach existing accounts (Phase 6) |
+| Logos are referenced by HTTPS URL; no upload | Reports embed the logo through the SSRF guard (Phase 5); no upload needed so far |
+| No user self-service profile page beyond the change-password API | Still open after Phase 6; with the interface uplift |
 | shadcn/ui components were written by hand because the component registry was not reachable from the build environment; `components.json` lets the CLI add more locally | None needed |
 | `API_ORIGIN` is fixed at frontend build time | Documented; rebuild when the API address changes |
 | Content types and page groups use a line-based editor | Richer editors when Phase 3 uses them |
@@ -224,7 +231,7 @@ the crawl instead of leaving it running.
 | External links are recorded but not checked | Optional, rate-limited external checks in a later phase |
 | Pages found only in a sitemap are crawled but their links are not followed | By design, to keep crawls bounded |
 | Orphans are not identified when a crawl hits its page limit | By design; raise the limit for a full picture |
-| No automatic cleanup of old crawl data | Retention settings in Phase 5 |
+| No automatic cleanup of old crawl data | Done: retention settings (Phase 6) |
 | Plain-text sitemaps are not read | Add if a site needs it |
 
 Recommended next step: Phase 3, the deterministic SEO rules engine, scoring and
@@ -424,7 +431,7 @@ Found and fixed during Phase 5:
 | Limitation | Plan |
 |------------|------|
 | PDF export needs Chromium installed on the server (`uv run playwright install chromium`) | Documented; HTML reports and browser printing work without it |
-| No automatic retention or cleanup of old crawls and reports | Phase 6 |
+| No automatic retention or cleanup of old crawls and reports | Done: retention settings (Phase 6) |
 | Scheduled crawls run from the worker's periodic check, so they can start up to about a minute late | Acceptable for daily to monthly schedules |
 | A scheduled run is skipped, not delayed, if a crawl is already active at that time | Documented in the schedule card |
 | Report history per project is a list; there is no side-by-side comparison of two reports | Crawl comparison on the Monitoring page covers the need |
@@ -439,3 +446,86 @@ Recommended next step: Phase 6, commercial readiness:
 - a deployment guide;
 - a production security review.
 
+## 14. Phase 6 report
+
+Delivered:
+- **Multi-tenant verification suite** (`tests/security/test_tenant_matrix.py`). It walks
+  every route in the OpenAPI schema, creates the resource in one organisation, and calls
+  it as an owner of another. It expects 404 with no data change. It also checks that
+  platform administrators have no project access and that global routes need an
+  administrator. It found one route that returned 422 before its access check; fixed.
+- **Plans and usage limits, without payments**:
+  - Limits cover projects, members, pages per crawl, crawls a month, AI tasks a day
+    and reports a month.
+  - They are enforced at every usage point, including scheduled crawls, under a
+    per-organisation lock. Blocked requests get a clear message (409
+    `plan_limit_reached`).
+  - Platform administrators create and assign plans. Owners see their usage under
+    Administration.
+- **Integration records** for Search Console, Analytics, WordPress, SMTP and webhooks:
+  - Settings are validated per provider. Credentials are encrypted with Fernet keys held
+    outside the database, are never returned, and can be rotated with a CLI command.
+  - Nothing connects to these services, and the screen says so.
+- **White-label reports**: a display name and a cover note.
+- **Data retention**: off by default and owner-only. It removes page-level data of older
+  crawls and deletes old reports. History, scores and the latest analysed crawl are
+  always kept. Every run is audit-logged.
+- **Platform administration**:
+  - a platform-wide audit log, including sign-ins;
+  - CLI `reset-password`, which ends the account's sessions;
+  - CLI `rotate-secrets`.
+- **Deployment guide** (`docs/DEPLOYMENT.md`) for a single Windows machine (for example
+  a GPU laptop) and a Linux server with nginx, TLS and systemd. It covers:
+  - secrets;
+  - Ollama with a GPU;
+  - PDF rendering;
+  - backups and restore;
+  - upgrades;
+  - key rotation;
+  - operations.
+- **Production security review** (`docs/SECURITY_REVIEW.md`). It found 1 high,
+  8 medium, 13 low and 4 informational findings. All high and medium findings are fixed,
+  and every fix has a regression test. Two items are accepted with documented residual
+  risk. Verdict: clear to deploy.
+
+Phase 6 acceptance criteria:
+
+| Criterion | How it is met |
+|-----------|---------------|
+| Every organisation's data isolated by backend authorisation | Route-walking suite over every API route, plus the module isolation tests |
+| Usage-limit architecture extensible, no payments | Plans are data; one `enforce()` hook per usage point; no payment code |
+| Credentials never in source or responses | Encrypted with operator-held keys; write-only API; tests read the raw column |
+| No paid service or connection without approval | Integrations are records only; the UI and docs say so |
+| Deployable by the institute | Deployment guide for Windows and Linux; production start-up checks |
+| No known high or medium security issue | Security review with fixes and tests |
+
+| Suite | Result |
+|-------|--------|
+| Backend unit, integration and security tests (pytest) | 339 passed, including real PDF rendering |
+| Backend lint and types (ruff, mypy strict), migration drift check | Clean |
+| Frontend lint, types, production build | Clean |
+| End-to-end (Playwright): every navigation section, plans and platform audit, integrations, the sign-in redirect and the content security policy | 15 passed |
+
+Found and fixed during Phase 6: see `docs/SECURITY_REVIEW.md`. The most important was
+account pre-hijacking across organisations (H1).
+
+### Known limitations after Phase 6
+
+| Limitation | Plan |
+|------------|------|
+| Invitations, forced first-sign-in password change and email verification need an email provider | After the owner approves a provider |
+| Organisation admins can learn that an email has an account | Removed with invitations |
+| Integrations are records only; nothing connects to Search Console, Analytics, the CMS or email | Each connection after owner authorisation |
+| Login rate limiting is per process | Single API process documented; shared store before scaling out |
+| Seeded `starter` and `professional` plans hold example numbers | Owner sets real numbers before commercial use |
+| The dashboard's CSP allows inline scripts | A nonce- or hash-based policy later |
+| Access tokens stay valid for up to 15 minutes after a password reset | Per-user token version later |
+| AI not yet validated against a live Ollama model on the owner's hardware | Owner validation (section 12) on the GPU laptop |
+| No profile page for users; notifications are preferences only | Profile page with the interface uplift; notifications need an approved provider |
+
+Recommended next step: the interface uplift the owner asked for:
+- interactive screens with tabs, tiles and live thumbnails;
+- a new sign-in screen with a high-quality, animated AI-and-SEO visual.
+
+It must keep the same data rules (no invented numbers, honest empty states), keep
+accessibility (reduced motion, keyboard, contrast), and keep every test passing.

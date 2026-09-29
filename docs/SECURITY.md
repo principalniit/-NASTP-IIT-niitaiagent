@@ -7,12 +7,12 @@ the project owner (principal@niit.edu.pk). Do not open public issues for them.
 
 | Asset | Threat | Primary controls |
 |-------|--------|------------------|
-| Tenant data | Cross-organisation access by ID tampering | Backend membership check on every request (organisations, projects, crawls, pages, issues, SEO results); `organisation_id` on every tenant row; 404 for foreign resources; isolation tests per module |
+| Tenant data | Cross-organisation access by ID tampering | Backend membership check on every request; `organisation_id` on every tenant row; 404 for foreign resources; isolation tests per module and a suite that walks every API route (`tests/security/test_tenant_matrix.py`) |
 | User accounts | Credential stuffing, token theft | Argon2id hashing, login rate limiting, short-lived access tokens, rotating refresh tokens with reuse detection, `HttpOnly` cookies |
 | Internal network | SSRF through the crawler | Connection-time address checks with pinning, port allowlist, per-redirect revalidation, host scope, proxies ignored |
 | Target websites | Being overloaded by our crawler | robots.txt, delay, low concurrency, page and depth caps |
 | Institutional reputation | AI-fabricated claims | Grounded prompts, output validation, human approval, no automatic publishing |
-| Secrets | Leakage in code, logs, errors | `.env` only, `.env.example` placeholders, redacted logs, generic error bodies |
+| Secrets | Leakage in code, logs, errors | `.env` only, `.env.example` placeholders, redacted logs, generic error bodies; integration credentials encrypted with keys held outside the database |
 | Supply chain | Malicious or vulnerable packages | Minimal dependencies, lockfiles, `pip-audit` and `pnpm audit` in CI, GitHub Actions pinned to commit SHAs with read-only token permissions |
 
 ## 2. Authentication and sessions
@@ -29,7 +29,14 @@ the project owner (principal@niit.edu.pk). Do not open public issues for them.
   cross-site forms cannot set.
 - Login responses are identical for unknown email and wrong password.
 - Failed logins are limited per email (default 5 per 5 minutes) and per client address
-  (default 20 per 5 minutes). A successful login clears only that email's counter.
+  (default 20 per 5 minutes). A successful login clears only that email's counter. When
+  proxy headers are not trusted, sign-ins through the dashboard all come from its
+  loopback address, so only the per-email limit applies; otherwise a few wrong passwords
+  would lock every user out. Production runs behind nginx with `TRUST_PROXY_HEADERS=true`
+  (see `docs/DEPLOYMENT.md`), where per-address limits work.
+- `JWT_SECRET` must be 32 or more random characters. In production the API refuses to
+  start without one. Elsewhere a missing or placeholder value is replaced by a random
+  secret for the life of the process, so no published value ever signs tokens.
 - Deactivated users cannot log in or refresh.
 
 ## 3. Authorisation
@@ -42,8 +49,14 @@ the project owner (principal@niit.edu.pk). Do not open public issues for them.
 - An organisation must always keep at least one owner. Only owners can grant or
   remove the owner role.
 - Platform administrators can manage any organisation's profile and memberships but
-  have no implicit access to its projects or SEO data. To support a tenant they add
-  themselves as a member, which is audit-logged.
+  have no implicit access to its projects, SEO data or integrations. To support a tenant
+  they add themselves as a member, which is audit-logged.
+- Emails are not verified, so only platform administrators can add an account that
+  already exists to an organisation. Organisation administrators can create new accounts
+  (with an initial password) but cannot attach existing ones, because such an account may
+  have been created by another organisation with a password it knows. Promoting an
+  existing account with `create-admin` always sets a new password and ends its sessions.
+- Only owners can change the data retention policy, because it deletes data permanently.
 
 ## 4. SSRF protection (crawler)
 
@@ -118,10 +131,17 @@ the platform acts on.
 - **Grounding.** Outputs with numbers not present in the evidence, unknown issue ids,
   or claims about rankings, traffic, search volumes, backlinks or guaranteed results
   are rejected after one retry, and nothing is saved.
-- **Approvals.** Only the defined state transitions are allowed. The author or
-  submitter of a version cannot approve it. Drafts touching fees, dates, eligibility
-  and similar official facts need a verified source reference. Every transition is
-  audit-logged with the actor. "Published" is a record of a human action; the platform
+- **Grounding evidence.** Answers are checked against what the tools returned, never
+  against the tool arguments the model chose. Output that fails grounding is not stored.
+  Page facts in prompts are capped so a hostile page cannot push out the instructions.
+- **Approvals.** Only the defined state transitions are allowed, and each locks the
+  draft row. Nobody who created a draft, requested it from the assistant, wrote any
+  version, or submitted the current version can approve it; edits that change nothing
+  are refused. Drafts touching fees, dates, eligibility and similar official facts need
+  a verified source reference: a page on one of the project's approved sources, or an
+  official document cited by name and reference. Protected facts are detected against
+  the crawled value, never against an "original" typed by the author. Every transition
+  is audit-logged with the actor. "Published" is a record of a human action; the platform
   has no write access to any website.
 - **Load.** AI tasks run in the worker with a per-request timeout
   (`AI_TIMEOUT_SECONDS`), and each organisation may have at most
@@ -135,9 +155,11 @@ the platform acts on.
   value. The document carries its own content security policy (no scripts, no remote
   loading), and the dashboard shows it in an iframe sandboxed with no permissions.
 - **No fetching during rendering.** The logo is the only external resource. It is
-  fetched once through the crawler's SSRF guard (HTTPS, image types only, size-capped)
-  and embedded. The PDF renderer runs with JavaScript disabled, offline, and refuses
-  every request; a security test checks that no request reaches a local server.
+  fetched once through the crawler's SSRF guard (HTTPS, image types only, uncompressed,
+  512 KB and 10 seconds at most, signature checked) and embedded. The PDF renderer runs
+  with JavaScript disabled, offline, and refuses every request; a security test checks
+  that no request reaches a local server. Chromium uses its own sandbox whenever the
+  worker does not run as root.
 - **Access.** Generating and deleting reports needs the reports permission (owner,
   admin, SEO manager); every organisation member can read them. Report ids from other
   organisations return 404. Requests and deletions are audit-logged.
@@ -147,6 +169,28 @@ the platform acts on.
   use the same limits, robots.txt handling and SSRF guard as manual ones, and are
   audit-logged as `crawl.scheduled`.
 
+## 5c. Plans, integrations and retention (Phase 6)
+
+- **Plans and usage limits.** Limits are enforced in the backend at every point where
+  usage grows: projects, members, crawls (manual and scheduled), pages per crawl, AI
+  tasks and reports. Checks take a per-organisation lock until the transaction commits,
+  so concurrent requests cannot overshoot. Report usage is counted from the audit log,
+  so deleting reports does not give quota back. Only platform administrators create,
+  change or assign plans. No payment processing exists.
+- **Integration credentials** are encrypted with Fernet (`INTEGRATIONS_ENCRYPTION_KEYS`,
+  kept outside the database). They are write-only: the API never returns or logs them,
+  and only long credentials show their last four characters. Without a key, credentials
+  cannot be saved. Keys rotate with `app.cli rotate-secrets`. Integration records are
+  for owners and administrators who are members; the platform makes no connection to
+  these services.
+- **Retention** is off by default and only owners can turn it on. It removes page-level
+  data of older crawls and deletes old reports, never the newest completed crawl, the
+  latest analysed crawl, or a crawl under analysis. A crawl whose pages were removed
+  cannot be analysed again, so no result is computed from missing data. Every run is
+  audit-logged, with the policy change recorded by whom and from what to what.
+- **Platform audit log.** Platform administrators can read every audit entry, including
+  sign-ins, which belong to no organisation.
+
 ## 6. Input, output and errors
 
 - Pydantic validates every request body, query parameter and configuration blob.
@@ -155,7 +199,12 @@ the platform acts on.
   user-visible error to server logs.
 - CORS allows only origins listed in `CORS_ORIGINS`.
 - Security headers on API responses: `X-Content-Type-Options`, `X-Frame-Options`,
-  `Referrer-Policy`, and a restrictive `Content-Security-Policy` for docs pages.
+  `Referrer-Policy`, and `Content-Security-Policy: default-src 'none'`. The interactive
+  API docs are not served in production.
+- The dashboard sends a Content Security Policy (self only, no framing, no plugins),
+  `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy` and
+  `Permissions-Policy`. HSTS is set by the TLS terminator.
+- After sign-in the dashboard only follows `next=` paths on its own origin.
 
 ## 7. Audit logging
 
@@ -165,38 +214,42 @@ approvals and publication records. Records include actor, organisation, action, 
 IP and a small metadata object. Passwords and tokens are never logged. Phase 4 adds
 `ai.requested`, `recommendation.updated` and `draft.<action>` for every draft
 transition. Phase 5 adds `report.requested`, `report.deleted`, `schedule.updated` and
-`crawl.scheduled`.
+`crawl.scheduled`. Phase 6 adds `organisation.plan_changed`, `plan.created`,
+`plan.updated`, `integration.created|updated|deleted`, `integration.secrets_rotated`,
+`retention.applied`, `user.password_reset` and `admin.platform_admin_granted`, and a
+platform-wide view for platform administrators (`GET /api/v1/admin/audit-logs`).
 
 ## 8. Secrets and configuration
 
 - All secrets come from environment variables. `.env` is git-ignored.
 - `.env.example` contains placeholders only.
-- The application refuses to start in production mode with the development
-  default `JWT_SECRET` or with `COOKIE_SECURE=false`.
+- The application refuses to start in production mode with a missing, placeholder or
+  short `JWT_SECRET`, or with `COOKIE_SECURE=false`.
+- `INTEGRATIONS_ENCRYPTION_KEYS` is validated at start-up. Back it up separately from
+  the database. `docs/DEPLOYMENT.md` covers rotation and backups.
 
 ## 9. Known limitations
 
-- Login rate limiting is in-process. It does not coordinate across multiple API
-  instances. Replace with a shared store before horizontal scaling.
-- Sign-in events are recorded without an organisation, so they appear in the database
-  audit log but not in any organisation's audit view. A platform-level audit view is
-  planned for Phase 6.
-- Organisation administrators can add an existing account to their organisation by
-  email and can create accounts with an initial password. Invitations that the invited
-  person must accept, and forced password change on first sign-in, are planned for
-  Phase 6.
+The latest review is `docs/SECURITY_REVIEW.md`; its accepted residual risks are listed
+here too.
+
+- Login rate limiting is in-process. Run a single API process, or replace it with a
+  shared store before horizontal scaling.
+- Organisation administrators can learn that an email already has an account (they
+  cannot see whose). Invitations with acceptance need an approved email provider.
+- Organisation administrators set new members' initial passwords. Forced password change
+  on first sign-in comes with invitations.
+- Access tokens stay valid for up to 15 minutes after a password reset.
+- The dashboard's policy allows inline scripts (Next.js needs them without nonces).
 - Row-level security in PostgreSQL is not enabled. Isolation is enforced in the
-  application layer and covered by tests.
-- Integration credentials (Phase 6) will need encryption at rest with a key held
-  outside the database.
+  application layer and covered by tests, including a suite that walks every route.
 - JavaScript rendering is not enabled because browser sub-requests would bypass the
   connection-level SSRF guard. It needs request interception and a dedicated review.
-- Crawl data volume is bounded by the organisation's page cap and 2,000 stored links
-  per page. Automatic retention and cleanup of old crawls and reports is not built
-  yet; it is planned for Phase 6.
 - Grounding checks are pattern-based. They catch invented numbers, unknown issue ids and
   the listed claim types, but cannot prove that every sentence is true. That is why AI
   output is labelled, drafts need human approval, and protected facts need a source.
+- Source references to official documents that are not online are the reviewer's
+  attestation, recorded under their name in the approval trail.
 - Protected-fact detection is keyword and pattern based, in English. It errs toward
   flagging; content in other languages needs reviewer attention.
 - A single-person organisation cannot approve drafts, by design. It needs a second

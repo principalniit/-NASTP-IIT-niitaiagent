@@ -6,8 +6,8 @@ It crawls websites, runs a deterministic SEO rules engine, scores and prioritise
 issues, and uses a local AI model only as an optional helper for explanations and
 drafts. Nothing is ever published to a live website automatically.
 
-**Status:** Phases 1 (foundation), 2 (crawler) and 3 (SEO engine) are complete. The AI
-agent, content drafts and approvals arrive in Phase 4. See
+**Status:** Phases 1 to 6 are complete: foundation, crawler, SEO engine, AI assistant
+with drafts and approvals, reports and monitoring, and commercial readiness. See
 [Feature status](#feature-status) and [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md).
 
 ## Contents
@@ -16,12 +16,13 @@ agent, content drafts and approvals arrive in Phase 4. See
 - [Implementation plan and roadmap](docs/IMPLEMENTATION_PLAN.md)
 - [Security](docs/SECURITY.md)
 - [NIIT configuration](docs/NIIT_CONFIGURATION.md)
+- [Deployment guide](docs/DEPLOYMENT.md) and [security review](docs/SECURITY_REVIEW.md)
 - [Local setup](#local-setup)
 - [Environment variables](#environment-variables)
 - [Database migrations](#database-migrations)
 - [Testing](#testing)
 - [Troubleshooting](#troubleshooting)
-- [Deployment notes](#deployment-notes)
+- [Deployment](#deployment)
 
 ## Local setup
 
@@ -71,10 +72,18 @@ uv run uvicorn app.main:app --reload --port 8000
 ```
 
 `create-admin` prompts for a password (12 or more characters) or reads it from the
-`ADMIN_PASSWORD` environment variable. `seed-niit` creates the NIIT organisation and
+`ADMIN_PASSWORD` environment variable. Used on an existing account, it sets a new
+password and signs that account out everywhere. `seed-niit` creates the NIIT organisation and
 website project with only the facts listed in `docs/NIIT_CONFIGURATION.md`.
 
-API documentation: http://localhost:8000/api/v1/docs
+API documentation (not served in production): http://localhost:8000/api/v1/docs
+
+Other administrative commands:
+
+```bash
+uv run python -m app.cli reset-password --email someone@niit.edu.pk   # also ends their sessions
+uv run python -m app.cli rotate-secrets   # after putting a new key first in INTEGRATIONS_ENCRYPTION_KEYS
+```
 
 On Windows PowerShell, use `Copy-Item .env.example .env` instead of `cp`.
 
@@ -139,7 +148,7 @@ Backend variables live in `backend/.env` (template: `backend/.env.example`).
 |----------|---------|---------|
 | `ENVIRONMENT` | `development` | `development`, `test` or `production`. Production refuses insecure settings. |
 | `DATABASE_URL` | `postgresql+asyncpg://niit:niit@localhost:5432/niit_seo` | PostgreSQL connection |
-| `JWT_SECRET` | development placeholder | Signing key for access tokens. 32+ random characters in production. |
+| `JWT_SECRET` | empty | Signing key for access tokens, 32+ random characters. Required in production; elsewhere an empty or placeholder value is replaced by a random one each time the API starts. |
 | `ACCESS_TOKEN_TTL_MINUTES` | `15` | Access token lifetime |
 | `REFRESH_TOKEN_TTL_DAYS` | `7` | Refresh token lifetime |
 | `COOKIE_SECURE` | `false` | Must be `true` in production (HTTPS) |
@@ -164,6 +173,7 @@ Backend variables live in `backend/.env` (template: `backend/.env.example`).
 | `SCHEDULER_ENABLED` | `false` | Allows scheduled crawls. Each project's schedule must also be turned on |
 | `AI_CONTEXT_TOKENS` | `8192` | Prompt window per request. Ollama may otherwise use a smaller default and cut off long prompts |
 | `AI_MAX_ACTIVE_JOBS_PER_ORG` | `3` | Queued or running AI tasks allowed per organisation |
+| `INTEGRATIONS_ENCRYPTION_KEYS` | empty | Comma-separated Fernet keys that encrypt integration credentials; the first encrypts. Empty means credentials cannot be stored. Back it up separately from the database |
 | `TEST_DATABASE_URL` | `…/niit_seo_test` | Used by the pytest suite only |
 
 Frontend variables:
@@ -235,23 +245,16 @@ and crawl schedules. Tests never contact live NIIT infrastructure or a real AI m
 | Scheduled crawls never start | Set `SCHEDULER_ENABLED=true` in `backend/.env`, restart the worker, and turn the schedule on for the project |
 | AI tasks stay "Waiting for the worker" | Start `uv run python -m app.worker`; AI tasks run there, not in the API |
 | An AI task failed with "claims not supported by the project data" | The model added numbers or claims that are not in the crawl evidence, so the result was discarded. Try again, or use a larger model |
-| "The author or submitter of this version cannot approve it" | Intended: a second person with an approving role must review |
+| "People who wrote or submitted this draft cannot approve it" | Intended: a second person with an approving role, who did not work on the draft, must review |
+| "This email already has an account. Ask a platform administrator…" | Intended: only platform administrators can add an existing account to an organisation (see `docs/SECURITY.md`) |
 | Production start fails with a `JWT_SECRET` or `COOKIE_SECURE` error | Intended safety check; set a strong secret and serve over HTTPS |
 
-## Deployment notes
+## Deployment
 
-Phase 1 targets local and single-server deployment. A full deployment guide arrives in
-Phase 6. Until then:
-
-- Run the API with `ENVIRONMENT=production`, a strong `JWT_SECRET` and `COOKIE_SECURE=true`.
-- Bind the API to `127.0.0.1` and expose only the Next.js server, behind an HTTPS reverse
-  proxy such as nginx. See `docs/SECURITY.md` for the required `X-Forwarded-For` setup.
-- Build the dashboard with `API_ORIGIN` pointing at the API, then `pnpm start`.
-- Run `alembic upgrade head` before starting a new version.
-- Run at least one `python -m app.worker` process under a supervisor such as systemd.
-  Stop it with SIGTERM; it finishes its current crawl first. If it is killed instead,
-  that crawl is marked failed after `WORKER_STALE_AFTER_SECONDS`. The same worker runs
-  analyses and AI tasks.
+See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for a single Windows machine and for a
+Linux server behind nginx with HTTPS and systemd, including secrets, backups, upgrades
+and key rotation. The latest security review is
+[`docs/SECURITY_REVIEW.md`](docs/SECURITY_REVIEW.md).
 
 ## Feature status
 
@@ -265,6 +268,6 @@ Phase 6. Until then:
 | SEO engine: 50 rules, scoring, prioritisation, issue lifecycle, SEO dashboards (Phase 3) | Done |
 | AI assistant, recommendations, content drafts, approvals (Phase 4) | Done; not yet validated against a live Ollama model |
 | Reports (13 sections, HTML and PDF), monitoring, crawl comparison, schedule foundation (Phase 5) | Done |
-| Commercial readiness (Phase 6) | Not started |
+| Commercial readiness: tenant verification suite, plans and usage limits, integration records with encrypted credentials, white-label reports, data retention, platform audit log, deployment guide, security review (Phase 6) | Done; integrations are records only, no payments |
 
 Known limitations are listed in `docs/IMPLEMENTATION_PLAN.md`.

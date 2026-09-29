@@ -101,8 +101,13 @@ Recommendations, Reports.
 - A resource in an organisation the caller does not belong to returns `404`, not
   `403`, so IDs cannot be used to probe for existence.
 - Platform administrators can manage organisations and memberships but have no implicit
-  access to projects or SEO data. To support a tenant they add themselves as a member,
-  which is audit-logged.
+  access to projects, SEO data or integrations. To support a tenant they add themselves
+  as a member, which is audit-logged. Only they can attach an account that already
+  exists to an organisation (see `docs/SECURITY.md`).
+- `backend/tests/security/test_tenant_matrix.py` walks every route in the OpenAPI
+  schema. For each one it creates the resource in one organisation and calls it as a
+  member of another, expecting 404 with no data change, so a new route cannot skip the
+  check unnoticed.
 
 ## 5. Authentication
 
@@ -147,7 +152,8 @@ UUID primary keys, `created_at`/`updated_at` timestamps, foreign keys with expli
 | approvals | 4 | Append-only trail: action, from and to status, actor, comment, source reference |
 | reports | 5 | Crawl, title, status, include-AI flag, data snapshot, rendered HTML, PDF and its status |
 | crawl_schedules | 5 | One per project: enabled, frequency, hour, next and last run |
-| integrations | 6 | Provider type, encrypted config, enabled flag |
+| plans | 6 | Key, name, limits (projects, members, pages per crawl, crawls a month, AI tasks a day, reports a month), default flag; `organisations.plan_id` (null means the default plan) |
+| integrations | 6 | Provider, name, validated settings, Fernet-encrypted credential (deferred column) and hint, enabled flag; records only, never connected |
 
 Entities are introduced in the phase that first uses them, each with its own
 migration. This keeps every migration small and tested against real code.
@@ -259,7 +265,7 @@ approved, rejected --reopen--> draft
   or mention fees, eligibility, deadlines and similar topics are marked protected. They
   can only be approved with a verified source reference.
 - "Published" and "rolled back" record what a person did in the CMS. The platform never
-  writes to a website; a CMS provider needs owner authorisation (Phase 6).
+  writes to a website. CMS integration records exist (Phase 6), but connecting one needs owner authorisation.
 - A person's draft must point at a page on the project's host or its subdomains.
 
 ## 10. Reports and monitoring (Phase 5, implemented)
@@ -279,6 +285,17 @@ Code: `backend/app/modules/reports/` and `backend/app/modules/monitoring/`.
 Monitoring in the dashboard uses the score history and the crawl comparison from Phase
 4 (`seo/compare.py`). Issues count as resolved only when a later crawl re-examined what
 they concerned.
+
+## 10a. Commercial readiness (Phase 6, implemented)
+
+| Part | Code | Behaviour |
+|------|------|-----------|
+| Plans and usage | `modules/plans/` | Plans are data. `enforce()` is called wherever usage grows (projects, members, manual and scheduled crawls, AI tasks, reports) and `pages_cap()` caps each crawl. Counts use UTC calendar months and days; report usage comes from the audit log. A per-organisation advisory lock serialises checks. The seeded `internal` plan is the default and has no limits. No payments. |
+| Integrations | `modules/integrations/`, `core/crypto.py` | A provider catalogue (Search Console, Analytics, WordPress, SMTP, webhook) validates each record's settings. Credentials are encrypted with `MultiFernet`; the first key in `INTEGRATIONS_ENCRYPTION_KEYS` encrypts and all decrypt, and `app.cli rotate-secrets` re-encrypts. Records only: nothing connects to these services. |
+| White-label reports | `organisations/schemas.py`, report template | A display name and cover note replace the organisation name on reports, with the existing colour, footer and logo. |
+| Retention | `monitoring/retention.py` | Off by default; owner-only. Run hourly by the worker. Removes page-level data of crawls older than the newest `keep_crawls` completed crawls (marking `pages_pruned_at`) and deletes reports older than `delete_reports_after_days`. Protected: the newest completed crawl, the latest analysed crawl, crawls under analysis. |
+| Platform administration | `audit_logs/router.py`, `app/cli.py` | Platform-wide audit log for platform administrators; CLI `reset-password` (ends sessions) and `rotate-secrets`. |
+| Deployment | `docs/DEPLOYMENT.md` | Windows single machine and Linux with nginx, TLS and systemd. |
 
 ## 11. Provider interfaces
 
@@ -307,8 +324,8 @@ Initial implementations: `OllamaProvider`, `LocalCrawlerProvider`,
   TanStack Query for server state, React Hook Form with Zod for forms, Recharts for
   charts.
 - An authenticated layout holds the sidebar with every navigation section from the
-  brief. Sections whose backend is not built yet show an honest "not available yet"
-  state naming the phase. No placeholder numbers are ever rendered.
+  brief; every section is a real page. No placeholder numbers are ever rendered.
+- Pages are served with a Content Security Policy (see `docs/SECURITY.md`).
 - AI output is always labelled "AI-generated", links the issues it cites, and shows
   why a task failed instead of partial output. When AI is off, screens say so and the
   deterministic views work unchanged. Review actions are shown only when the viewer's

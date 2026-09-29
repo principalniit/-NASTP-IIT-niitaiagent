@@ -135,6 +135,28 @@ the Phase 4 report in `docs/IMPLEMENTATION_PLAN.md`.
 - PDF export needs Chromium on the server: `uv run playwright install chromium` in the
   backend folder.
 
+## 5c. Plan, retention, integrations and branding for NIIT
+
+- **Plan.** NIIT uses the default `internal` plan, which has no limits. A platform
+  administrator can assign another plan under Administration; do not assign the example
+  `starter` or `professional` plans to NIIT.
+- **Data retention.** Off. Keep it off until the owner decides how much crawl history to
+  keep. If disk space becomes a concern, keeping page data for the newest 10 crawls and
+  reports for 365 days is a reasonable start. Only an owner can change it, and every run
+  is audit-logged.
+- **Integrations.** None recorded. A Search Console, Analytics, WordPress, email or
+  webhook record can be saved for later, but the platform does not connect to any of
+  them. Connecting one, and any paid service, needs the owner's authorisation. Storing a
+  credential needs `INTEGRATIONS_ENCRYPTION_KEYS` on the server.
+- **Report branding.** Colour, footer, logo URL, display name and cover note are empty
+  until an authorised user enters NIIT's official values. Nothing is pre-filled.
+- **Approved sources.** Enter NIIT's official pages (for example the admissions notices
+  page) under the project's institutional profile. A reviewer approving a draft that
+  changes fees, dates or eligibility must cite a page on one of these sources, or an
+  official document by name and reference.
+- **Accounts.** Owners and administrators can create accounts for new staff. Only a
+  platform administrator can add a person who already has an account.
+
 ## 6. Separation from future tenants
 
 NIIT data lives in its own organisation. Commercial tenants get their own
