@@ -63,6 +63,10 @@ class Settings(BaseSettings):
     # Tokens the model reads per request. Set explicitly because some Ollama versions
     # default to a small window and silently cut off the end of long prompts.
     ai_context_tokens: int = 8192
+    # Chromium executable for PDF reports. Empty uses Playwright's own installed browser.
+    report_pdf_browser_path: str = ""
+    # Scheduled crawls run only when this platform switch and the project's schedule are on.
+    scheduler_enabled: bool = False
     ai_max_active_jobs_per_org: int = 3
 
     @property

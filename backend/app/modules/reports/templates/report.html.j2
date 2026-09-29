@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:">
+<title>{{ d.meta.title }}</title>
+<style>
+  :root { --brand: {{ d.branding.primary_colour }}; --ink: #1f2937; --muted: #6b7280; --line: #e5e7eb; --soft: #f9fafb; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: var(--ink); background: #fff; font-size: 14px; line-height: 1.5; }
+  main { max-width: 880px; margin: 0 auto; padding: 32px 24px 48px; }
+  header.cover { border-bottom: 4px solid var(--brand); padding-bottom: 20px; margin-bottom: 28px; }
+  header.cover img { max-height: 56px; max-width: 220px; display: block; margin-bottom: 16px; }
+  .org { color: var(--muted); font-size: 13px; text-transform: uppercase; letter-spacing: .06em; margin: 0; }
+  h1 { font-size: 26px; margin: 4px 0 12px; }
+  h2 { font-size: 19px; margin: 36px 0 12px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+  h2 .num { color: var(--brand); margin-right: 6px; }
+  h3 { font-size: 15px; margin: 18px 0 6px; }
+  .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px 24px; margin: 0; }
+  .facts div { margin: 0; break-inside: avoid; }
+  .facts dt { color: var(--muted); font-size: 12px; }
+  .facts dd { margin: 0; font-weight: 600; }
+  .hero { display: flex; align-items: baseline; gap: 12px; margin: 8px 0 4px; }
+  .hero .value { font-size: 48px; font-weight: 700; color: var(--brand); line-height: 1; }
+  .muted { color: var(--muted); }
+  .small { font-size: 12px; }
+  table { width: 100%; border-collapse: collapse; margin: 8px 0 12px; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { background: var(--soft); font-weight: 600; }
+  td.num, th.num { text-align: right; white-space: nowrap; }
+  .issue { border: 1px solid var(--line); border-left: 4px solid var(--brand); border-radius: 6px; padding: 12px 14px; margin: 10px 0; page-break-inside: avoid; }
+  .issue h4 { margin: 0 0 4px; font-size: 14px; }
+  .issue p { margin: 6px 0; }
+  .tag { display: inline-block; border: 1px solid var(--line); border-radius: 4px; padding: 0 6px; font-size: 11px; font-weight: 600; margin-right: 4px; }
+  .sev-critical { border-color: #b91c1c; color: #b91c1c; }
+  .sev-high { border-color: #c2410c; color: #9a3412; }
+  .url { word-break: break-all; font-family: Consolas, "Courier New", monospace; font-size: 12px; }
+  ul, ol { padding-left: 20px; margin: 6px 0; }
+  .note { background: var(--soft); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; }
+  .ai { border: 1px dashed var(--brand); border-radius: 6px; padding: 12px 14px; }
+  footer { margin-top: 40px; padding-top: 12px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+  @page { size: A4; margin: 16mm 14mm 18mm; }
+  @media print {
+    main { padding: 0; max-width: none; }
+    h2 { page-break-after: avoid; }
+    section { page-break-inside: auto; }
+    .issue, table { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<main>
+{% macro severity(value) %}<span class="tag sev-{{ value }}">{{ value|capitalize }}</span>{% endmacro %}
+
+{% macro issue_card(i) %}
+<div class="issue">
+  <h4>{{ i.title }}</h4>
+  <div>{{ severity(i.severity) }}<span class="tag">Priority {{ i.priority }}</span><span class="tag">{{ "Whole site" if i.scope == "site" else i.affected_count ~ (" page" if i.affected_count == 1 else " pages") }}</span><span class="tag">Effort: {{ i.effort }}</span></div>
+  <p>{{ i.description }}</p>
+  {% if i.evidence %}
+  <table>
+    <tr><th colspan="2">Evidence</th></tr>
+    {% for e in i.evidence %}<tr><td style="width:32%">{{ e.label }}</td><td>{{ e.value }}</td></tr>{% endfor %}
+  </table>
+  {% endif %}
+  {% if i.affected_urls %}
+  <p class="small muted">{% if i.scope == "site" %}Applies across the site, for example:{% else %}Affected URLs{% if i.affected_count > i.affected_urls|length %} (first {{ i.affected_urls|length }} of {{ i.affected_count }}){% endif %}:{% endif %}</p>
+  <ul class="small">{% for u in i.affected_urls %}<li class="url">{{ u }}</li>{% endfor %}</ul>
+  {% endif %}
+  <p><strong>Recommendation:</strong> {{ i.recommendation }}</p>
+</div>
+{% endmacro %}
+
+<header class="cover">
+  {% if logo %}<img src="{{ logo }}" alt="{{ d.meta.organisation }} logo">{% endif %}
+  <p class="org">{{ d.meta.organisation }}</p>
+  <h1>{{ d.meta.title }}</h1>
+  <dl class="facts">
+    <div><dt>Website</dt><dd class="url">{{ d.meta.site }}</dd></div>
+    <div><dt>Crawl completed</dt><dd>{{ when(d.meta.crawl_finished_at) }}</dd></div>
+    <div><dt>Pages analysed</dt><dd>{{ d.meta.pages_analysed }}</dd></div>
+    <div><dt>Report generated</dt><dd>{{ when(d.meta.generated_at) }}</dd></div>
+  </dl>
+</header>
+
+<section id="executive-summary">
+  <h2><span class="num">1.</span>Executive summary</h2>
+  {% for line in d.executive_summary %}<p>{{ line }}</p>{% endfor %}
+</section>
+
+<section id="health">
+  <h2><span class="num">2.</span>Overall SEO health</h2>
+  <div class="hero"><span class="value">{{ score(d.health.overall) }}</span><span class="muted">out of 100</span></div>
+  <p class="small muted">
+    {% if d.health.change is not none %}Previous crawl: {{ score(d.health.previous_overall) }} (change {{ "%+.0f"|format(d.health.change) }}).{% else %}No earlier analysed crawl to compare with.{% endif %}
+    This is a site-health indicator for prioritising work, not a search ranking.
+  </p>
+  <table>
+    <tr><th>Category</th><th class="num">Score</th><th class="num">Weight</th><th>Note</th></tr>
+    {% for c in d.health.categories %}
+    <tr><td>{{ c.label }}</td><td class="num">{{ score(c.score) }}</td><td class="num">{{ c.weight if c.weight is not none else "—" }}</td><td class="small">{{ c.note or "" }}</td></tr>
+    {% endfor %}
+  </table>
+</section>
+
+<section id="crawl">
+  <h2><span class="num">3.</span>Crawl overview</h2>
+  <dl class="facts">
+    <div><dt>Pages recorded</dt><dd>{{ d.crawl.pages_total }}</dd></div>
+    <div><dt>Successful (2xx)</dt><dd>{{ d.crawl.status_classes.get("2xx", 0) }}</dd></div>
+    <div><dt>Redirects (3xx)</dt><dd>{{ d.crawl.status_classes.get("3xx", 0) }}</dd></div>
+    <div><dt>Client errors (4xx)</dt><dd>{{ d.crawl.status_classes.get("4xx", 0) }}</dd></div>
+    <div><dt>Server errors (5xx)</dt><dd>{{ d.crawl.status_classes.get("5xx", 0) }}</dd></div>
+    <div><dt>Blocked by robots.txt</dt><dd>{{ d.crawl.pages_blocked }}</dd></div>
+    <div><dt>Broken internal links</dt><dd>{{ d.crawl.broken_internal_links }}</dd></div>
+    <div><dt>Pages in sitemap</dt><dd>{{ d.crawl.pages_in_sitemap }}</dd></div>
+    <div><dt>Average response time</dt><dd>{{ (d.crawl.average_response_time_ms ~ " ms") if d.crawl.average_response_time_ms is not none else "not measured" }}</dd></div>
+  </dl>
+  <p class="small muted">Crawl limits: up to {{ d.crawl.config.max_pages }} pages, depth {{ d.crawl.config.max_depth }}, {{ d.crawl.config.delay_ms }} ms between requests. robots.txt: {{ d.crawl.robots_status or "not recorded" }}.</p>
+  {% if d.crawl.warnings %}<div class="note small"><strong>Crawl notes:</strong><ul>{% for w in d.crawl.warnings %}<li>{{ w }}</li>{% endfor %}</ul></div>{% endif %}
+  {% if d.changes %}
+  <h3>Changes since the previous crawl ({{ when(d.changes.from_finished_at) }})</h3>
+  <table>
+    <tr><th>Change</th><th class="num">Count</th></tr>
+    <tr><td>Newly detected issues</td><td class="num">{{ d.changes.new }}</td></tr>
+    <tr><td>Issues confirmed resolved</td><td class="num">{{ d.changes.resolved }}</td></tr>
+    <tr><td>Issues that came back</td><td class="num">{{ d.changes.recurring }}</td></tr>
+    <tr><td>Pages added / removed</td><td class="num">{{ d.changes.pages_added }} / {{ d.changes.pages_removed }}</td></tr>
+    <tr><td>Pages whose status code changed</td><td class="num">{{ d.changes.status_changes }}</td></tr>
+    <tr><td>Pages whose title changed</td><td class="num">{{ d.changes.title_changes }}</td></tr>
+    <tr><td>Pages whose content changed</td><td class="num">{{ d.changes.content_changed }}</td></tr>
+  </table>
+  {% endif %}
+</section>
+
+<section id="critical">
+  <h2><span class="num">4.</span>Critical issues</h2>
+  {% if d.critical.issues %}
+    {% for i in d.critical.issues %}{{ issue_card(i) }}{% endfor %}
+    {% if d.critical.total > d.critical.issues|length %}<p class="small muted">{{ d.critical.total - d.critical.issues|length }} more critical issues are listed in the platform.</p>{% endif %}
+  {% else %}<p>No open critical issues.</p>{% endif %}
+</section>
+
+<section id="high">
+  <h2><span class="num">5.</span>High-priority issues</h2>
+  {% if d.high.issues %}
+    {% for i in d.high.issues %}{{ issue_card(i) }}{% endfor %}
+    {% if d.high.total > d.high.issues|length %}<p class="small muted">{{ d.high.total - d.high.issues|length }} more high-severity issues are listed in the platform.</p>{% endif %}
+  {% else %}<p>No open high-severity issues.</p>{% endif %}
+</section>
+
+{% for key, number in [("technical", 6), ("on_page", 7), ("content", 8)] %}
+{% set c = d.categories[key] %}
+<section id="{{ key }}">
+  <h2><span class="num">{{ number }}.</span>{{ c.label }}</h2>
+  <p>Score: <strong>{{ score(c.score) }}</strong>. Open issues: {{ c.open }}{% if c.open %} ({{ c.by_severity.critical }} critical, {{ c.by_severity.high }} high, {{ c.by_severity.medium }} medium, {{ c.by_severity.low }} low){% endif %}.</p>
+  {% if c.issues %}
+    {% for i in c.issues %}{{ issue_card(i) }}{% endfor %}
+    {% if c.open > c.issues|length %}<p class="small muted">Showing the {{ c.issues|length }} highest-priority of {{ c.open }} open issues.</p>{% endif %}
+  {% else %}<p>No open issues in this category.</p>{% endif %}
+</section>
+{% endfor %}
+
+<section id="internal-linking">
+  {% set c = d.categories.internal_linking %}
+  <h2><span class="num">9.</span>Internal linking</h2>
+  <p>Score: <strong>{{ score(c.score) }}</strong>. Orphan pages (in the sitemap but not linked from other crawled pages): {{ d.internal_linking.orphan_pages }}. Broken internal links: {{ d.internal_linking.broken_internal_links }}.</p>
+  {% for i in c.issues %}{{ issue_card(i) }}{% endfor %}
+  {% if d.internal_linking.suggestions %}
+  <h3>Linking opportunities ({{ d.internal_linking.suggestions_total }} found)</h3>
+  <p class="small muted">Each suggestion is based on a page that already mentions another page's topic without linking to it.</p>
+  <table>
+    <tr><th>From</th><th>To</th><th>Suggested link text</th></tr>
+    {% for s in d.internal_linking.suggestions %}<tr><td class="url">{{ s.source }}</td><td class="url">{{ s.target }}</td><td>{{ s.anchor }}</td></tr>{% endfor %}
+  </table>
+  {% endif %}
+</section>
+
+<section id="structured-data">
+  {% set c = d.categories.structured_data %}
+  <h2><span class="num">10.</span>Structured data</h2>
+  <p>Score: <strong>{{ score(c.score) }}</strong>. Pages with structured data: {{ d.structured_data.pages_with_data }}. Blocks checked: {{ d.structured_data.blocks }}, of which {{ d.structured_data.invalid_blocks }} have errors.</p>
+  {% if d.structured_data.types %}
+  <p class="small">Types found: {% for t, n in d.structured_data.types.items() %}{{ t }} ({{ n }}){{ ", " if not loop.last }}{% endfor %}.</p>
+  {% endif %}
+  {% for i in c.issues %}{{ issue_card(i) }}{% endfor %}
+  {% if d.structured_data.errors %}
+  <h3>Blocks with errors</h3>
+  <table>
+    <tr><th>Page</th><th>Errors</th></tr>
+    {% for e in d.structured_data.errors %}<tr><td class="url">{{ e.url }}</td><td><ul>{% for x in e.errors %}<li>{{ x }}</li>{% endfor %}</ul></td></tr>{% endfor %}
+  </table>
+  {% endif %}
+</section>
+
+<section id="ai">
+  <h2><span class="num">11.</span>AI recommendations</h2>
+  {% if not d.ai.included %}
+    <p>AI-generated content was not included in this report.</p>
+  {% else %}
+    {% if d.ai.summary %}
+    {% set s = d.ai.summary.output %}
+    <div class="ai">
+      <p class="small muted">Written by an AI model ({{ d.ai.summary.model }}) on {{ when(d.ai.summary.generated_at) }}, using only this crawl's data, and checked for unsupported numbers and claims. Review before relying on it.</p>
+      <h3>{{ s.get("headline", "") }}</h3>
+      <p>{{ s.get("overview", "") }}</p>
+      {% if s.get("priorities") %}<ol>{% for p in s.get("priorities") %}<li><strong>{{ p.get("action", "") }}</strong> — {{ p.get("reason", "") }}</li>{% endfor %}</ol>{% endif %}
+    </div>
+    {% else %}
+    <p>No AI summary was generated for this crawl. Sections 1 and 12 are produced without AI.</p>
+    {% endif %}
+    {% if d.ai.recommendations %}
+    <h3>Recommendations accepted by the team</h3>
+    {% for r in d.ai.recommendations %}
+    <div class="issue">
+      <h4>{{ r.title }}</h4>
+      <p>{{ r.body }}</p>
+      {% if r.steps %}<ol>{% for step in r.steps %}<li>{{ step }}</li>{% endfor %}</ol>{% endif %}
+    </div>
+    {% endfor %}
+    {% endif %}
+  {% endif %}
+</section>
+
+<section id="action-plan">
+  <h2><span class="num">12.</span>Recommended action plan</h2>
+  <p class="small muted">Ordered by the platform's priority score, which combines severity, the number of pages affected, page importance and effort.</p>
+  {% for key, heading, empty in [("fix_first", "Fix first", "No critical or high-severity issues."), ("quick_wins", "Quick wins (low effort)", "No low-effort issues outstanding."), ("plan_next", "Plan next", "Nothing further to plan.")] %}
+  <h3>{{ heading }}</h3>
+  {% set items = d.action_plan[key] %}
+  {% if items %}
+  <table>
+    <tr><th>Issue</th><th>Severity</th><th class="num">Pages</th><th>What to do</th></tr>
+    {% for a in items %}<tr><td>{{ a.title }}</td><td>{{ severity(a.severity) }}</td><td class="num">{{ a.affected_count }}</td><td>{{ a.recommendation }}</td></tr>{% endfor %}
+  </table>
+  {% else %}<p>{{ empty }}</p>{% endif %}
+  {% endfor %}
+</section>
+
+<section id="methodology">
+  <h2><span class="num">13.</span>Methodology and limitations</h2>
+  <p>The website was crawled starting from {{ d.meta.site }}, following internal links and the XML sitemap, within the limits in section 3, while respecting robots.txt. Every page fetched was checked against {{ d.methodology.rules }} fixed rules covering technical, on-page, content, internal linking and structured data quality. Each finding records its evidence and a recommendation.</p>
+  <p>Each category score is 100 minus a penalty weighted by issue severity and the share of pages affected. The overall score is the weighted average of the category scores that could be calculated.</p>
+  <h3>Limitations</h3>
+  <ul>{% for l in d.methodology.limitations %}<li>{{ l }}</li>{% endfor %}</ul>
+</section>
+
+<footer>
+  {% if d.branding.get("footer_text") %}<p>{{ d.branding.footer_text }}</p>{% endif %}
+  <p>{{ d.meta.organisation }} · {{ d.meta.project }} · Crawl {{ d.meta.crawl_id }} · Generated {{ when(d.meta.generated_at) }}</p>
+</footer>
+</main>
+</body>
+</html>

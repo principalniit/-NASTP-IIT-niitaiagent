@@ -28,6 +28,9 @@ from app.modules.ai.models import AIAnalysis, AIStatus
 from app.modules.ai.runner import run_analysis
 from app.modules.crawler.engine import CrawlEngine
 from app.modules.crawler.models import AnalysisStatus, CrawlJob, CrawlStatus
+from app.modules.monitoring.service import process_due_schedules
+from app.modules.reports.models import PdfStatus, Report, ReportStatus
+from app.modules.reports.service import run_report
 from app.modules.seo.analysis import AnalysisError, analyse_crawl
 
 logger = logging.getLogger("app.worker")
@@ -74,6 +77,19 @@ CLAIM_AI_SQL = text(
 AI_STALE_TIMEOUTS = 2 * (MAX_TOOL_CALLS + 3) + 2
 
 
+CLAIM_REPORT_SQL = text(
+    """
+    UPDATE reports SET status = 'running', started_at = now()
+    WHERE id = (
+        SELECT id FROM reports WHERE status = 'queued'
+        ORDER BY created_at LIMIT 1 FOR UPDATE SKIP LOCKED
+    )
+    RETURNING id
+    """
+)
+REPORT_STALE_SECONDS = 1800
+
+
 def worker_identity() -> str:
     return f"{socket.gethostname()}:{os.getpid()}:{uuid.uuid4().hex[:6]}"
 
@@ -101,6 +117,19 @@ async def recover_stale_jobs(factory: async_sessionmaker[AsyncSession], stale_se
             .values(
                 status=AIStatus.FAILED,
                 error="The worker running this AI task stopped unexpectedly.",
+                finished_at=datetime.now(UTC),
+            )
+        )
+        await session.execute(
+            update(Report)
+            .where(
+                Report.status == ReportStatus.RUNNING,
+                Report.started_at < datetime.now(UTC) - timedelta(seconds=REPORT_STALE_SECONDS),
+            )
+            .values(
+                status=ReportStatus.FAILED,
+                pdf_status=PdfStatus.FAILED,
+                error="The worker generating this report stopped unexpectedly.",
                 finished_at=datetime.now(UTC),
             )
         )
@@ -212,6 +241,29 @@ async def process_next_ai_task(*, factory: async_sessionmaker[AsyncSession] | No
     return True
 
 
+async def process_next_report(*, factory: async_sessionmaker[AsyncSession] | None = None) -> bool:
+    """Claim and generate one queued report. Returns False when none was queued."""
+    factory = factory or get_session_factory()
+    async with factory() as session:
+        report_id: uuid.UUID | None = await session.scalar(CLAIM_REPORT_SQL)
+        await session.commit()
+    if report_id is None:
+        return False
+    try:
+        await run_report(report_id, factory=factory)
+    except Exception:
+        logger.exception("Report generation failed", extra={"report_id": str(report_id)})
+        async with factory() as session:
+            report = await session.get(Report, report_id)
+            if report is not None:
+                report.status = ReportStatus.FAILED
+                report.pdf_status = PdfStatus.FAILED
+                report.error = "The report failed because of an internal error. See worker logs."
+                report.finished_at = datetime.now(UTC)
+                await session.commit()
+    return True
+
+
 async def run_worker(stop: asyncio.Event) -> None:
     settings = get_settings()
     worker_id = worker_identity()
@@ -226,12 +278,18 @@ async def run_worker(stop: asyncio.Event) -> None:
             worked = await process_next_job(worker_id, factory=factory)
             worked = await process_next_analysis(factory=factory) or worked
             worked = await process_next_ai_task(factory=factory) or worked
+            worked = await process_next_report(factory=factory) or worked
         except Exception:
             logger.exception("Worker loop error")
             worked = False
         now = asyncio.get_running_loop().time()
         if now - last_recovery > 60:
             await recover_stale_jobs(factory, settings.worker_stale_after_seconds)
+            try:
+                if await process_due_schedules(factory):
+                    worked = True
+            except Exception:
+                logger.exception("Scheduled crawl check failed")
             last_recovery = now
         if not worked:
             with contextlib.suppress(TimeoutError):

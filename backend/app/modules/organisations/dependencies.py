@@ -21,6 +21,7 @@ from app.modules.organisations.permissions import (
     role_has,
 )
 from app.modules.projects.models import Project
+from app.modules.reports.models import Report
 from app.modules.seo.models import SeoIssue
 from app.modules.users.models import User
 
@@ -271,5 +272,30 @@ def require_recommendation(
             session, user, rec.organisation_id, rec.project_id, permission, "Recommendation"
         )
         return RecommendationAccess(user, rec, project, role)
+
+    return dependency
+
+
+@dataclass(frozen=True)
+class ReportAccess:
+    user: User
+    report: Report
+    project: Project
+    role: OrgRole
+
+
+def require_report(permission: Permission) -> Callable[..., Awaitable[ReportAccess]]:
+    async def dependency(
+        report_id: uuid.UUID,
+        user: User = Depends(get_current_user),
+        session: AsyncSession = Depends(get_session),
+    ) -> ReportAccess:
+        report = await session.get(Report, report_id)
+        if report is None:
+            raise NotFoundError("Report not found")
+        project, role = await _scoped_project(
+            session, user, report.organisation_id, report.project_id, permission, "Report"
+        )
+        return ReportAccess(user, report, project, role)
 
     return dependency
