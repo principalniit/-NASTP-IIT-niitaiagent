@@ -2,12 +2,16 @@
 
 from app.modules.audit_logs.models import AuditLog
 from app.modules.auth.models import RefreshToken
+from app.modules.crawler.models import CrawlJob, CrawlLink, CrawlPage
 from app.modules.organisations.models import Organisation, OrganisationMember, OrgRole
 from app.modules.projects.models import Project, ProjectSettings
 from app.modules.users.models import User
 
 __all__ = [
     "AuditLog",
+    "CrawlJob",
+    "CrawlLink",
+    "CrawlPage",
     "OrgRole",
     "Organisation",
     "OrganisationMember",

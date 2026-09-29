@@ -1,10 +1,13 @@
 """Application settings loaded from environment variables and an optional .env file."""
 
 from functools import lru_cache
+from ipaddress import IPv4Network, IPv6Network, ip_network
 from typing import Literal
 
 from pydantic import SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_METADATA_NET = ip_network("169.254.0.0/16")
 
 DEV_JWT_SECRET = "dev-only-insecure-secret-change-me-0000000000"  # noqa: S105
 
@@ -38,9 +41,29 @@ class Settings(BaseSettings):
 
     # Default crawler identity for new projects; editable per project.
     crawler_user_agent: str = "NIIT-SEO-Agent/0.1 (+https://niit.edu.pk)"
+    # Comma-separated CIDR ranges the crawler may reach even though they are not public,
+    # for example an on-premises staging server. Empty by default. Loopback and link-local
+    # ranges are refused in production because they expose the host and cloud metadata.
+    crawler_allowed_private_networks: str = ""
+    crawler_max_response_bytes: int = 5_000_000
+    crawler_max_redirects: int = 10
+    crawler_max_sitemaps: int = 20
+    crawler_max_sitemap_bytes: int = 50_000_000
+    crawler_max_duration_seconds: int = 3600
+    worker_poll_seconds: float = 2.0
+    # A running crawl whose heartbeat is older than this is treated as abandoned.
+    worker_stale_after_seconds: int = 300
 
     ai_provider: Literal["none", "ollama"] = "none"
     ollama_base_url: str = "http://localhost:11434"
+
+    @property
+    def crawler_private_networks(self) -> list[IPv4Network | IPv6Network]:
+        return [
+            ip_network(part.strip(), strict=False)
+            for part in self.crawler_allowed_private_networks.split(",")
+            if part.strip()
+        ]
 
     @property
     def cors_origin_list(self) -> list[str]:
@@ -54,6 +77,12 @@ class Settings(BaseSettings):
                 raise ValueError("JWT_SECRET must be set to a random value of 32+ characters")
             if not self.cookie_secure:
                 raise ValueError("COOKIE_SECURE must be true in production")
+            for net in self.crawler_private_networks:
+                if net.is_loopback or net.is_link_local or net.overlaps(_METADATA_NET):
+                    raise ValueError(
+                        "CRAWLER_ALLOWED_PRIVATE_NETWORKS must not include loopback or "
+                        "link-local ranges in production"
+                    )
         return self
 
 

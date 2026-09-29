@@ -1,0 +1,529 @@
+"""Crawl orchestration: robots.txt, sitemaps, a polite breadth-first frontier,
+persistence of pages and links, progress, cancellation and finalisation."""
+
+import asyncio
+import logging
+import time
+import uuid
+from collections.abc import Callable
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from typing import Any
+from urllib.parse import urlsplit
+
+from sqlalchemy import select, text, update
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+from app.core.config import get_settings
+from app.core.database import get_session_factory
+from app.modules.crawler.config import CrawlConfig
+from app.modules.crawler.fetcher import Fetcher, FetchResult
+from app.modules.crawler.models import CrawlJob, CrawlLink, CrawlPage, CrawlStatus, FetchStatus
+from app.modules.crawler.parser import ParsedPage, parse_html, robots_directives
+from app.modules.crawler.robots import RobotsPolicy, RobotsTxt
+from app.modules.crawler.sitemaps import SitemapError, parse_sitemap
+from app.modules.crawler.url_safety import Resolver, SafetyPolicy, system_resolve
+from app.modules.crawler.urls import host_of, is_excluded, normalise_url, path_with_query
+
+logger = logging.getLogger(__name__)
+
+FAILED_OUTCOMES = {
+    "error": FetchStatus.ERROR,
+    "too_large": FetchStatus.TOO_LARGE,
+    "blocked_destination": FetchStatus.BLOCKED_DESTINATION,
+}
+# Page fields copied from the previous crawl when the server answers 304 Not Modified.
+COPIED_FIELDS = (
+    "status_code", "content_type", "content_length", "title", "title_count",
+    "meta_description", "meta_description_count", "meta_robots", "x_robots_tag",
+    "is_noindex", "is_nofollow", "canonical_url", "canonical_count", "lang", "headings",
+    "h1_count", "word_count", "content_hash", "images", "image_count", "images_missing_alt",
+    "structured_data", "hreflang", "internal_links_count", "external_links_count",
+)  # fmt: skip
+
+
+class HostThrottle:
+    """Guarantees a minimum delay between request starts to the same host."""
+
+    def __init__(self) -> None:
+        self._next_allowed: dict[str, float] = {}
+        self._locks: dict[str, asyncio.Lock] = {}
+
+    async def wait(self, host: str, delay: float) -> None:
+        lock = self._locks.setdefault(host, asyncio.Lock())
+        async with lock:
+            pause = self._next_allowed.get(host, 0.0) - time.monotonic()
+            if pause > 0:
+                await asyncio.sleep(pause)
+            self._next_allowed[host] = time.monotonic() + delay
+
+
+@dataclass
+class QueueItem:
+    url: str
+    depth: int | None  # None for pages found only in a sitemap
+    via: str  # root | link | sitemap
+
+
+def _now() -> datetime:
+    return datetime.now(UTC)
+
+
+class CrawlEngine:
+    def __init__(
+        self,
+        job_id: uuid.UUID,
+        *,
+        session_factory: async_sessionmaker[AsyncSession] | None = None,
+        policy: SafetyPolicy | None = None,
+        resolver: Resolver = system_resolve,
+    ) -> None:
+        self.job_id = job_id
+        self.factory = session_factory or get_session_factory()
+        self._policy_override = policy
+        self.resolver = resolver
+        self.settings = get_settings()
+        self.throttle = HostThrottle()
+        self.queue: asyncio.Queue[QueueItem] = asyncio.Queue()
+        self.seen: set[str] = set()
+        self.sitemap_urls: dict[str, None] = {}
+        self.robots: dict[str, RobotsPolicy] = {}
+        self._robots_locks: dict[str, asyncio.Lock] = {}
+        self.previous: dict[str, CrawlPage] = {}
+        self.warnings: list[str] = []
+        self.sitemap_log: list[dict[str, Any]] = []
+        self.counts = {"crawled": 0, "failed": 0, "blocked": 0}
+        self.stop_reason: str | None = None
+        self.limit_reached = False
+
+    # ------------------------------------------------------------------ helpers
+
+    def in_scope(self, url: str) -> bool:
+        return host_of(url) in self.allowed_hosts
+
+    def _can_enqueue(self, url: str) -> bool:
+        return (
+            url not in self.seen
+            and self.in_scope(url)
+            and not is_excluded(url, self.config.excluded_paths)
+        )
+
+    def _claim_budget(self, url: str) -> bool:
+        """Reserve a page slot for url. Returns False when the page limit is reached."""
+        if len(self.seen) >= self.config.max_pages:
+            self.limit_reached = True
+            return False
+        self.seen.add(url)
+        return True
+
+    def _enqueue(self, url: str, depth: int | None, via: str) -> None:
+        if self._can_enqueue(url) and self._claim_budget(url):
+            self.queue.put_nowait(QueueItem(url, depth, via))
+
+    async def _host_delay(self, host: str) -> float:
+        robots = await self._robots_for(host)
+        delay = self.config.delay_ms / 1000
+        crawl_delay = robots.crawl_delay(self.config.user_agent)
+        return max(delay, crawl_delay or 0.0)
+
+    async def _wait_turn(self, url: str) -> None:
+        host = host_of(url)
+        await self.throttle.wait(host, await self._host_delay(host))
+
+    async def _fetch(self, url: str, **kwargs: Any) -> FetchResult:
+        return await self.fetcher.fetch(
+            url, in_scope=self.in_scope, before_request=self._wait_turn, **kwargs
+        )
+
+    # ------------------------------------------------------------------ robots and sitemaps
+
+    async def _robots_for(self, host: str) -> RobotsPolicy:
+        if host in self.robots:
+            return self.robots[host]
+        lock = self._robots_locks.setdefault(host, asyncio.Lock())
+        async with lock:
+            if host in self.robots:
+                return self.robots[host]
+            scheme = urlsplit(self.config.root_url).scheme
+            port = urlsplit(self.config.root_url).port if host == self.root_host else None
+            netloc = f"{host}:{port}" if port else host
+            url = f"{scheme}://{netloc}/robots.txt"
+            result = await self.fetcher.fetch(
+                url,
+                in_scope=lambda u: host_of(u) == host,
+                read_body=lambda _: True,
+                before_request=lambda u: self.throttle.wait(host, self.config.delay_ms / 1000),
+            )
+            if result.outcome == "ok" and result.status_code and 200 <= result.status_code < 300:
+                body = (result.body or b"").decode("utf-8", errors="replace")
+                policy = RobotsPolicy("found", RobotsTxt.parse(body))
+            elif result.outcome == "ok" and result.status_code and 400 <= result.status_code < 500:
+                policy = RobotsPolicy("not_found")
+            elif result.outcome == "redirect_out_of_scope":
+                policy = RobotsPolicy("not_found")
+                self.warnings.append(f"robots.txt on {host} redirects to another host; ignored.")
+            else:
+                policy = RobotsPolicy("unreachable")
+                self.warnings.append(
+                    f"robots.txt on {host} could not be fetched "
+                    f"({result.error or result.status_code}); as required by RFC 9309 no "
+                    "pages on this host were crawled."
+                )
+            self.robots[host] = policy
+            return policy
+
+    async def _load_sitemaps(self) -> None:
+        robots = await self._robots_for(self.root_host)
+        root = urlsplit(self.config.root_url)
+        pending = [u for u in (normalise_url(s) for s in robots.sitemaps) if u]
+        if not pending:
+            pending = [f"{root.scheme}://{root.netloc}/sitemap.xml"]
+        fetched = 0
+        visited: set[str] = set()
+        while pending and fetched < self.settings.crawler_max_sitemaps:
+            url = pending.pop(0)
+            if url in visited:
+                continue
+            visited.add(url)
+            entry: dict[str, Any] = {"url": url, "status": "error", "url_count": 0, "error": None}
+            self.sitemap_log.append(entry)
+            if not self.in_scope(url):
+                entry.update(status="skipped", error="Sitemap is on a host outside the crawl scope")
+                continue
+            fetched += 1
+            result = await self._fetch(
+                url, read_body=lambda _: True, max_bytes=self.settings.crawler_max_sitemap_bytes
+            )
+            if result.outcome != "ok" or not result.status_code or result.status_code >= 400:
+                entry.update(
+                    status="not_found" if result.status_code == 404 else "error",
+                    error=result.error or f"HTTP {result.status_code}",
+                )
+                continue
+            try:
+                content = parse_sitemap(result.body or b"")
+            except SitemapError as exc:
+                entry["error"] = str(exc)
+                continue
+            entry["status"] = "ok"
+            if content.kind == "index":
+                entry["kind"] = "index"
+                pending.extend(u for u in (normalise_url(s) for s in content.sitemaps) if u)
+                continue
+            for loc in content.urls:
+                normalised = normalise_url(loc)
+                if normalised and self.in_scope(normalised):
+                    self.sitemap_urls.setdefault(normalised, None)
+                    entry["url_count"] += 1
+        if pending:
+            self.warnings.append(
+                f"Only the first {self.settings.crawler_max_sitemaps} sitemap files were read."
+            )
+
+    # ------------------------------------------------------------------ page processing
+
+    async def _process(self, item: QueueItem) -> None:
+        robots = await self._robots_for(host_of(item.url))
+        if not robots.can_fetch(self.config.user_agent, path_with_query(item.url)):
+            self.counts["blocked"] += 1
+            await self._save(self._page(item, FetchStatus.BLOCKED_BY_ROBOTS), [])
+            return
+        previous = self.previous.get(item.url)
+        conditional: dict[str, str] = {}
+        if previous is not None and previous.etag:
+            conditional["If-None-Match"] = previous.etag
+        if previous is not None and previous.last_modified:
+            conditional["If-Modified-Since"] = previous.last_modified
+        result = await self._fetch(item.url, conditional=conditional or None)
+
+        if result.outcome in FAILED_OUTCOMES:
+            self.counts["failed"] += 1
+            page = self._page(item, FAILED_OUTCOMES[result.outcome], result)
+            await self._save(page, [])
+            return
+
+        if result.redirect_chain:
+            first = result.redirect_chain[0]
+            redirect = self._page(item, FetchStatus.FETCHED, result)
+            redirect.status_code = first["status_code"]
+            redirect.response_time_ms = first["elapsed_ms"]
+            redirect.content_type = None
+            if result.outcome == "redirect_out_of_scope":
+                redirect.fetch_status = FetchStatus.REDIRECT_OUT_OF_SCOPE
+            self.counts["crawled"] += 1
+            await self._save(redirect, [])
+            target = result.final_url
+            if (
+                result.outcome == "redirect_out_of_scope"
+                or target is None
+                or not self._can_enqueue(target)
+                or not self._claim_budget(target)
+            ):
+                return
+            item = QueueItem(target, item.depth, item.via)
+            result.redirect_chain = []
+            previous = None
+
+        await self._record_response(item, result, previous)
+
+    async def _record_response(
+        self, item: QueueItem, result: FetchResult, previous: CrawlPage | None
+    ) -> None:
+        page = self._page(item, FetchStatus.FETCHED, result)
+        links: list[CrawlLink] = []
+        extracted: list[tuple[str, bool]] = []
+        if result.outcome == "not_modified" and previous is not None:
+            page.fetch_status = FetchStatus.NOT_MODIFIED
+            for name in COPIED_FIELDS:
+                setattr(page, name, getattr(previous, name))
+            async with self.factory() as session:
+                rows = await session.scalars(
+                    select(CrawlLink).where(CrawlLink.source_page_id == previous.id)
+                )
+                for old in rows:
+                    links.append(self._link(page, old.target_url, old.anchor_text, old.nofollow))
+                    extracted.append((old.target_url, old.nofollow))
+        elif result.status_code and 200 <= result.status_code < 300 and result.is_html:
+            parsed = parse_html(result.body or b"", result.final_url or item.url)
+            self._apply_parsed(page, parsed, result)
+            for link in parsed.links:
+                links.append(self._link(page, link.url, link.anchor_text, link.nofollow))
+                extracted.append((link.url, link.nofollow))
+        elif result.status_code and 200 <= result.status_code < 300:
+            page.fetch_status = FetchStatus.SKIPPED_CONTENT_TYPE
+        self.counts["crawled"] += 1
+        await self._save(page, links)
+        # Links on sitemap-only pages are recorded but not followed, which keeps the
+        # crawl bounded by link depth from the root.
+        if item.depth is not None and item.depth < self.config.max_depth:
+            for url, _ in extracted:
+                self._enqueue(url, item.depth + 1, "link")
+
+    def _apply_parsed(self, page: CrawlPage, parsed: ParsedPage, result: FetchResult) -> None:
+        directives = robots_directives(parsed.meta_robots) | robots_directives(
+            result.headers.get("x-robots-tag")
+        )
+        page.title = parsed.title
+        page.title_count = parsed.title_count
+        page.meta_description = parsed.meta_description
+        page.meta_description_count = parsed.meta_description_count
+        page.meta_robots = parsed.meta_robots
+        page.is_noindex = bool(directives & {"noindex", "none"})
+        page.is_nofollow = bool(directives & {"nofollow", "none"})
+        page.canonical_url = parsed.canonical_url
+        page.canonical_count = parsed.canonical_count
+        page.lang = parsed.lang
+        page.headings = parsed.headings
+        page.h1_count = parsed.h1_count
+        page.word_count = parsed.word_count
+        page.content_hash = parsed.content_hash
+        page.images = parsed.images
+        page.image_count = parsed.image_count
+        page.images_missing_alt = parsed.images_missing_alt
+        page.structured_data = parsed.structured_data
+        page.hreflang = parsed.hreflang
+        page.internal_links_count = sum(1 for link in parsed.links if self.in_scope(link.url))
+        page.external_links_count = len(parsed.links) - page.internal_links_count
+
+    def _page(
+        self, item: QueueItem, status: FetchStatus, result: FetchResult | None = None
+    ) -> CrawlPage:
+        page = CrawlPage(
+            id=uuid.uuid4(),
+            organisation_id=self.organisation_id,
+            crawl_job_id=self.job_id,
+            url=item.url,
+            depth=item.depth,
+            discovered_via=item.via,
+            fetch_status=status,
+            in_sitemap=item.url in self.sitemap_urls,
+            fetched_at=_now(),
+        )
+        if result is not None:
+            length = result.headers.get("content-length", "")
+            page.final_url = result.final_url
+            page.status_code = result.status_code
+            page.error = result.error
+            page.content_type = result.content_type or None
+            page.response_time_ms = result.elapsed_ms
+            page.content_length = (
+                len(result.body)
+                if result.body is not None
+                else (int(length) if length.isdigit() else None)
+            )
+            page.redirect_chain = result.redirect_chain
+            page.etag = result.headers.get("etag", "")[:300] or None
+            page.last_modified = result.headers.get("last-modified", "")[:100] or None
+            page.x_robots_tag = result.headers.get("x-robots-tag", "")[:300] or None
+        return page
+
+    def _link(self, page: CrawlPage, target: str, anchor: str | None, nofollow: bool) -> CrawlLink:
+        return CrawlLink(
+            organisation_id=self.organisation_id,
+            crawl_job_id=self.job_id,
+            source_page_id=page.id,
+            target_url=target,
+            is_internal=self.in_scope(target),
+            nofollow=nofollow,
+            anchor_text=(anchor or None),
+        )
+
+    async def _save(self, page: CrawlPage, links: list[CrawlLink]) -> None:
+        async with self.factory() as session:
+            session.add(page)
+            await session.flush()
+            session.add_all(links)
+            await session.commit()
+
+    # ------------------------------------------------------------------ run loop
+
+    async def _worker(self) -> None:
+        while True:
+            item = await self.queue.get()
+            try:
+                if self.stop_reason is None:
+                    await self._process(item)
+            except Exception:
+                logger.exception("Error while processing %s", item.url)
+                self.counts["failed"] += 1
+                page = self._page(item, FetchStatus.ERROR)
+                page.error = "Internal error while processing this page"
+                try:
+                    await self._save(page, [])
+                except Exception:
+                    logger.exception("Could not record failed page %s", item.url)
+            finally:
+                self.queue.task_done()
+
+    async def _flush_progress(self) -> None:
+        async with self.factory() as session:
+            job = await session.get(CrawlJob, self.job_id)
+            if job is None:
+                self.stop_reason = "deleted"
+                return
+            if job.status == CrawlStatus.CANCELLING:
+                self.stop_reason = "cancelled"
+            job.pages_discovered = len(self.seen)
+            job.pages_crawled = self.counts["crawled"]
+            job.pages_failed = self.counts["failed"]
+            job.pages_blocked = self.counts["blocked"]
+            job.heartbeat_at = _now()
+            await session.commit()
+
+    async def _monitor(self) -> None:
+        started = time.monotonic()
+        while True:
+            await asyncio.sleep(1.0)
+            await self._flush_progress()
+            if time.monotonic() - started > self.settings.crawler_max_duration_seconds:
+                self.stop_reason = self.stop_reason or "time_limit"
+
+    async def run(self) -> CrawlStatus:
+        async with self.factory() as session:
+            job = await session.get(CrawlJob, self.job_id)
+            if job is None:
+                raise LookupError(f"Crawl job {self.job_id} not found")
+            self.organisation_id = job.organisation_id
+            self.config = CrawlConfig.model_validate(job.config)
+            if job.incremental and job.previous_crawl_id:
+                rows = await session.scalars(
+                    select(CrawlPage).where(CrawlPage.crawl_job_id == job.previous_crawl_id)
+                )
+                self.previous = {p.url: p for p in rows}
+        self.root_host = host_of(self.config.root_url)
+        self.allowed_hosts = set(self.config.allowed_hosts)
+        policy = self._policy_override or SafetyPolicy.from_settings(self.config.extra_ports)
+        self.fetcher = Fetcher(
+            user_agent=self.config.user_agent,
+            timeout_seconds=self.config.timeout_seconds,
+            max_bytes=self.settings.crawler_max_response_bytes,
+            max_redirects=self.settings.crawler_max_redirects,
+            policy=policy,
+            resolver=self.resolver,
+            max_connections=self.config.concurrency * 2,
+        )
+        if self.config.render_javascript:
+            self.warnings.append(
+                "JavaScript rendering was requested but is not available yet; pages were "
+                "analysed as served, without running scripts."
+            )
+        monitor = asyncio.create_task(self._monitor())
+        workers = [asyncio.create_task(self._worker()) for _ in range(self.config.concurrency)]
+        try:
+            await self._load_sitemaps()
+            self._enqueue(self.config.root_url, 0, "root")
+            await self.queue.join()
+            # Pages listed only in sitemaps are crawled once link discovery is exhausted.
+            for url in self.sitemap_urls:
+                if self.stop_reason:
+                    break
+                self._enqueue(url, None, "sitemap")
+            await self.queue.join()
+        finally:
+            for task in (*workers, monitor):
+                task.cancel()
+            await asyncio.gather(*workers, monitor, return_exceptions=True)
+            await self.fetcher.aclose()
+        return await self._finalise()
+
+    async def _finalise(self) -> CrawlStatus:
+        params = {"job": self.job_id}
+        async with self.factory() as session:
+            await session.execute(
+                text(
+                    "UPDATE crawl_links l SET target_page_id = p.id FROM crawl_pages p "
+                    "WHERE l.crawl_job_id = :job AND p.crawl_job_id = :job AND p.url = l.target_url"
+                ),
+                params,
+            )
+            await session.execute(
+                text(
+                    "UPDATE crawl_pages p SET inlinks_count = s.n FROM ("
+                    " SELECT target_page_id, count(DISTINCT source_page_id) AS n FROM crawl_links"
+                    " WHERE crawl_job_id = :job AND is_internal AND target_page_id IS NOT NULL"
+                    " AND target_page_id <> source_page_id GROUP BY target_page_id) s "
+                    "WHERE p.id = s.target_page_id"
+                ),
+                params,
+            )
+            if self.limit_reached:
+                self.warnings.append(
+                    f"The page limit ({self.config.max_pages}) was reached before the whole site "
+                    "was crawled. Orphan pages were not identified because unvisited pages may "
+                    "link to them."
+                )
+            elif self.stop_reason is None:
+                await session.execute(
+                    update(CrawlPage)
+                    .where(
+                        CrawlPage.crawl_job_id == self.job_id,
+                        CrawlPage.in_sitemap.is_(True),
+                        CrawlPage.inlinks_count == 0,
+                        CrawlPage.url != self.config.root_url,
+                        CrawlPage.fetch_status.in_([FetchStatus.FETCHED, FetchStatus.NOT_MODIFIED]),
+                    )
+                    .values(is_orphan=True)
+                )
+            if self.stop_reason == "time_limit":
+                self.warnings.append("The crawl stopped at the maximum crawl duration.")
+            job = await session.get(CrawlJob, self.job_id)
+            if job is None:
+                return CrawlStatus.FAILED
+            job.status = (
+                CrawlStatus.CANCELLED if self.stop_reason == "cancelled" else CrawlStatus.COMPLETED
+            )
+            job.pages_discovered = len(self.seen)
+            job.pages_crawled = self.counts["crawled"]
+            job.pages_failed = self.counts["failed"]
+            job.pages_blocked = self.counts["blocked"]
+            job.robots_status = self.robots.get(self.root_host, RobotsPolicy("unreachable")).status
+            job.sitemaps = self.sitemap_log
+            job.sitemap_url_count = len(self.sitemap_urls)
+            job.warnings = self.warnings
+            job.finished_at = _now()
+            job.heartbeat_at = job.finished_at
+            await session.commit()
+            return job.status
+
+
+EngineFactory = Callable[[uuid.UUID], CrawlEngine]
