@@ -42,6 +42,7 @@ async def test_structured_output_is_requested_and_validated(ollama: FakeOllama) 
     assert request["model"] == "llama3.1" and request["stream"] is False
     assert request["format"]["title"] == "MetadataDraftOutput"
     assert request["options"]["temperature"] == 0
+    assert request["options"]["num_ctx"] == get_settings().ai_context_tokens
 
 
 async def test_invalid_output_is_retried_with_the_errors(ollama: FakeOllama) -> None:

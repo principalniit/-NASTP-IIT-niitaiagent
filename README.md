@@ -147,7 +147,8 @@ Backend variables live in `backend/.env` (template: `backend/.env.example`).
 | `AI_PROVIDER` | `none` | `none` or `ollama` |
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama address. Operator-only; organisations cannot change it. |
 | `OLLAMA_DEFAULT_MODEL` | empty | Model used when an organisation does not name one, for example `llama3.1:8b` |
-| `AI_TIMEOUT_SECONDS` | `180` | Longest wait for one model reply |
+| `AI_TIMEOUT_SECONDS` | `180` | Longest wait for one model reply. Use `600` on a PC without a GPU |
+| `AI_CONTEXT_TOKENS` | `8192` | Prompt window per request. Ollama may otherwise use a smaller default and cut off long prompts |
 | `AI_MAX_ACTIVE_JOBS_PER_ORG` | `3` | Queued or running AI tasks allowed per organisation |
 | `TEST_DATABASE_URL` | `…/niit_seo_test` | Used by the pytest suite only |
 
@@ -213,6 +214,7 @@ approval workflow. Tests never contact live NIIT infrastructure or a real AI mod
 | Crawl pages show "Blocked destination" | The host resolves to a private address. Use `CRAWLER_ALLOWED_PRIVATE_NETWORKS` only for servers you own. |
 | AI assistant shows "Unavailable" | Ollama is not reachable at `OLLAMA_BASE_URL`, or the model is not pulled (`ollama list`). The platform keeps working. |
 | AI assistant shows "off" | Set `AI_PROVIDER=ollama` on the server and turn AI on in organisation settings |
+| AI task failed: "The AI model did not respond in time" | Normal on a PC without a GPU. Set `AI_TIMEOUT_SECONDS=600` in `backend/.env` and restart the API and worker, or use a smaller model such as `llama3.2:3b`, or a PC with an NVIDIA GPU |
 | AI tasks stay "Waiting for the worker" | Start `uv run python -m app.worker`; AI tasks run there, not in the API |
 | An AI task failed with "claims not supported by the project data" | The model added numbers or claims that are not in the crawl evidence, so the result was discarded. Try again, or use a larger model |
 | "The author or submitter of this version cannot approve it" | Intended: a second person with an approving role must review |

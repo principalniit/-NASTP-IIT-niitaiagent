@@ -60,6 +60,9 @@ class Settings(BaseSettings):
     ollama_base_url: str = "http://localhost:11434"
     ollama_default_model: str = ""
     ai_timeout_seconds: int = 180
+    # Tokens the model reads per request. Set explicitly because some Ollama versions
+    # default to a small window and silently cut off the end of long prompts.
+    ai_context_tokens: int = 8192
     ai_max_active_jobs_per_org: int = 3
 
     @property

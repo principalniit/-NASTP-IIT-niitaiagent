@@ -67,6 +67,7 @@ class OllamaProvider:
         self.model = model
         self.base_url = (base_url or settings.ollama_base_url).rstrip("/")
         self.timeout = timeout or settings.ai_timeout_seconds
+        self.context_tokens = settings.ai_context_tokens
         self._transport = transport
 
     def _client(self, timeout: float) -> httpx.AsyncClient:
@@ -105,7 +106,7 @@ class OllamaProvider:
                 "messages": conversation,
                 "stream": False,
                 "format": schema.model_json_schema(),
-                "options": {"temperature": 0},
+                "options": {"temperature": 0, "num_ctx": self.context_tokens},
             }
             try:
                 async with self._client(self.timeout) as client:
