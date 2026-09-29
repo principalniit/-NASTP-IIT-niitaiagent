@@ -11,6 +11,7 @@ class AuditLogOut(BaseModel):
     id: uuid.UUID
     created_at: datetime
     actor_user_id: uuid.UUID | None
+    organisation_id: uuid.UUID | None = None
     action: str
     target_type: str | None
     target_id: str | None

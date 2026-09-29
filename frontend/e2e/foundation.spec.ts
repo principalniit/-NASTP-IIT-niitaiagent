@@ -71,12 +71,16 @@ test("create a project, validate input and save crawl settings", async ({ page }
   await expect(page.getByLabel("Excluded paths")).toHaveValue("/wp-admin/*");
 });
 
-test("unbuilt sections say so instead of showing sample data", async ({ page }) => {
+test("every navigation section opens a real page", async ({ page }) => {
   await signIn(page);
-  await page.getByRole("link", { name: /Integrations/ }).click();
-  await expect(page.getByRole("heading", { level: 1, name: "Integrations" })).toBeVisible();
-  await expect(page.getByText("Not available yet")).toBeVisible();
-  await expect(page.getByText("Phase 6", { exact: true }).last()).toBeVisible();
+  const nav = page.getByRole("navigation", { name: "Main" });
+  const labels = await nav.getByRole("link").allTextContents();
+  expect(labels.length).toBeGreaterThanOrEqual(16);
+  for (const label of labels) {
+    await nav.getByRole("link", { name: label.trim(), exact: true }).click();
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    await expect(page.getByText("Not available yet")).toHaveCount(0);
+  }
 });
 
 test("administration lists members and the audit trail", async ({ page }) => {
@@ -85,6 +89,13 @@ test("administration lists members and the audit trail", async ({ page }) => {
   await expect(page.getByRole("cell", { name: ADMIN_EMAIL })).toBeVisible();
   // Organisation audit entries (sign-in events are account-level and not listed here).
   await expect(page.getByRole("cell", { name: "project.created" }).first()).toBeVisible();
+  // Plan and usage: NIIT follows the Internal plan, which has no limits.
+  await expect(page.getByRole("heading", { name: "Plan and usage" })).toBeVisible();
+  await expect(page.getByText("Internal plan (default)")).toBeVisible();
+  await expect(page.getByLabel("Plan (platform administrators only)")).toBeVisible();
+  // Sign-ins belong to no organisation, so they appear in the platform log only.
+  await expect(page.getByRole("heading", { name: "Platform audit log" })).toBeVisible();
+  await expect(page.getByRole("cell", { name: "auth.login" }).first()).toBeVisible();
 });
 
 test("signing out ends the session", async ({ page }) => {

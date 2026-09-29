@@ -13,6 +13,10 @@ import {
   type DraftDetail,
   type DraftStatus,
   type Comparison,
+  type Integration,
+  type IntegrationProvider,
+  type Plan,
+  type Usage,
   type Recommendation,
   type RecommendationStatus,
   type Report,
@@ -384,5 +388,54 @@ export function useComparison(projectId: string | null, fromCrawl?: string, toCr
       api<Comparison>(`/projects/${projectId}/compare`, { query: { from_crawl: fromCrawl, to_crawl: toCrawl } }),
     enabled: !!projectId && enabled,
     retry: false,
+  });
+}
+
+// ---------------------------------------------------------------- plans, integrations, platform audit
+
+export function useUsage(orgId: string | null) {
+  return useQuery({
+    queryKey: ["organisations", orgId ?? "", "usage"],
+    queryFn: () => api<Usage>(`/organisations/${orgId}/usage`),
+    enabled: !!orgId,
+  });
+}
+
+export function usePlans(enabled: boolean) {
+  return useQuery({ queryKey: ["plans"], queryFn: () => api<Plan[]>("/plans"), enabled });
+}
+
+export function useIntegrationProviders() {
+  return useQuery({
+    queryKey: ["integration-providers"],
+    queryFn: () => api<IntegrationProvider[]>("/integration-providers"),
+    staleTime: Infinity,
+  });
+}
+
+export function useIntegrations(orgId: string | null, enabled = true) {
+  return useQuery({
+    queryKey: ["organisations", orgId ?? "", "integrations"],
+    queryFn: () => api<Integration[]>(`/organisations/${orgId}/integrations`),
+    enabled: !!orgId && enabled,
+  });
+}
+
+export function useEncryptionStatus(orgId: string | null, enabled = true) {
+  return useQuery({
+    queryKey: ["organisations", orgId ?? "", "integrations", "encryption"],
+    queryFn: () => api<{ available: boolean }>(`/organisations/${orgId}/integrations/encryption`),
+    enabled: !!orgId && enabled,
+  });
+}
+
+export function usePlatformAudit(page: number, platformOnly: boolean, enabled: boolean) {
+  return useQuery({
+    queryKey: ["admin", "audit", page, platformOnly],
+    queryFn: () =>
+      api<Page<AuditLogEntry>>("/admin/audit-logs", {
+        query: { page, page_size: 20, platform_only: platformOnly ? "true" : undefined },
+      }),
+    enabled,
   });
 }

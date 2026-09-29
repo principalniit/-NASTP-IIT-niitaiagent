@@ -157,8 +157,14 @@ async def compare_crawls(
             "id": str(old.id),
             "finished_at": old.finished_at,
             "pages": len(before_pages),
+            "page_data_removed": old.pages_pruned_at is not None,
         },
-        "to_crawl": {"id": str(new.id), "finished_at": new.finished_at, "pages": len(after_pages)},
+        "to_crawl": {
+            "id": str(new.id),
+            "finished_at": new.finished_at,
+            "pages": len(after_pages),
+            "page_data_removed": new.pages_pruned_at is not None,
+        },
         "score_change": score_change,
         "issues": {"new": cap(new_issues), "resolved": cap(resolved), "recurring": cap(recurring)},
         "pages": {

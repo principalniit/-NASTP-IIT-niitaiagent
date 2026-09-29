@@ -118,6 +118,8 @@ class CrawlJob(UUIDPrimaryKey, Timestamps, Base):
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Set when data retention deleted this crawl's page-level data.
+    pages_pruned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class CrawlPage(UUIDPrimaryKey, Base):

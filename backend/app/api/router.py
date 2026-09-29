@@ -2,6 +2,7 @@ from fastapi import APIRouter
 
 from app.api.health import router as health_router
 from app.modules.ai.router import router as ai_router
+from app.modules.audit_logs.router import router as audit_router
 from app.modules.auth.router import router as auth_router
 from app.modules.crawler.router import router as crawler_router
 from app.modules.drafts.router import router as drafts_router
@@ -26,3 +27,4 @@ api_router.include_router(reports_router)
 api_router.include_router(monitoring_router)
 api_router.include_router(plans_router)
 api_router.include_router(integrations_router)
+api_router.include_router(audit_router)

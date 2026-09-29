@@ -28,6 +28,7 @@ from app.modules.ai.models import AIAnalysis, AIStatus
 from app.modules.ai.runner import run_analysis
 from app.modules.crawler.engine import CrawlEngine
 from app.modules.crawler.models import AnalysisStatus, CrawlJob, CrawlStatus
+from app.modules.monitoring.retention import apply_retention
 from app.modules.monitoring.service import process_due_schedules
 from app.modules.reports.models import PdfStatus, Report, ReportStatus
 from app.modules.reports.service import run_report
@@ -88,6 +89,7 @@ CLAIM_REPORT_SQL = text(
     """
 )
 REPORT_STALE_SECONDS = 1800
+RETENTION_INTERVAL_SECONDS = 3600
 
 
 def worker_identity() -> str:
@@ -273,6 +275,7 @@ async def run_worker(stop: asyncio.Event) -> None:
     if recovered:
         logger.warning("Marked abandoned crawls as failed", extra={"count": recovered})
     last_recovery = asyncio.get_running_loop().time()
+    last_retention = 0.0
     while not stop.is_set():
         try:
             worked = await process_next_job(worker_id, factory=factory)
@@ -290,6 +293,12 @@ async def run_worker(stop: asyncio.Event) -> None:
                     worked = True
             except Exception:
                 logger.exception("Scheduled crawl check failed")
+            if now - last_retention > RETENTION_INTERVAL_SECONDS:
+                try:
+                    await apply_retention(factory)
+                except Exception:
+                    logger.exception("Data retention failed")
+                last_retention = now
             last_recovery = now
         if not worked:
             with contextlib.suppress(TimeoutError):

@@ -13,6 +13,8 @@ import { PageHeader } from "@/components/app/page-header";
 import { EmptyState, ErrorState, LoadingState } from "@/components/app/states";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { PlanCard } from "@/components/admin/plan-card";
+import { PlatformAuditCard } from "@/components/admin/platform-audit-card";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
@@ -29,6 +31,7 @@ const ROLES = Object.keys(ROLE_LABELS) as OrgRole[];
 
 export function AdministrationView() {
   const { current, can, isLoading } = useCurrentOrg();
+  const { me } = useSession();
   if (isLoading) return <LoadingState />;
   if (!current) return <NoOrganisation />;
   return (
@@ -36,7 +39,9 @@ export function AdministrationView() {
       <PageHeader title="Administration" description={`Members and audit trail for ${current.name}.`} />
       <div className="space-y-6">
         <MembersCard org={current} canManage={can("members:manage")} />
+        <PlanCard org={current} />
         {can("audit:read") ? <AuditCard org={current} /> : null}
+        {me?.user.is_platform_admin ? <PlatformAuditCard /> : null}
       </div>
     </>
   );

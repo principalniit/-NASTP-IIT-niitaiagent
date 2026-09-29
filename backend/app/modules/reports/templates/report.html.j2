@@ -73,9 +73,10 @@
 {% endmacro %}
 
 <header class="cover">
-  {% if logo %}<img src="{{ logo }}" alt="{{ d.meta.organisation }} logo">{% endif %}
-  <p class="org">{{ d.meta.organisation }}</p>
+  {% if logo %}<img src="{{ logo }}" alt="{{ d.branding.get("display_name") or d.meta.organisation }} logo">{% endif %}
+  <p class="org">{{ d.branding.get("display_name") or d.meta.organisation }}</p>
   <h1>{{ d.meta.title }}</h1>
+  {% if d.branding.get("cover_note") %}<p class="muted">{{ d.branding.cover_note }}</p>{% endif %}
   <dl class="facts">
     <div><dt>Website</dt><dd class="url">{{ d.meta.site }}</dd></div>
     <div><dt>Crawl completed</dt><dd>{{ when(d.meta.crawl_finished_at) }}</dd></div>
@@ -248,7 +249,7 @@
 
 <footer>
   {% if d.branding.get("footer_text") %}<p>{{ d.branding.footer_text }}</p>{% endif %}
-  <p>{{ d.meta.organisation }} · {{ d.meta.project }} · Crawl {{ d.meta.crawl_id }} · Generated {{ when(d.meta.generated_at) }}</p>
+  <p>{{ d.branding.get("display_name") or d.meta.organisation }} · {{ d.meta.project }} · Crawl {{ d.meta.crawl_id }} · Generated {{ when(d.meta.generated_at) }}</p>
 </footer>
 </main>
 </body>

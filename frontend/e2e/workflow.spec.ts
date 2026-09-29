@@ -160,3 +160,23 @@ test("management reports, crawl-to-crawl monitoring and schedules", async ({ pag
   await expect(page.getByText("Schedule saved")).toBeVisible();
   await expect(page.getByText(/Next crawl:/)).toBeVisible();
 });
+
+test("integration records keep credentials encrypted and never connect", async ({ page }) => {
+  await signIn(page, ADMIN_EMAIL);
+  await nav(page, "Integrations").click();
+  await expect(page.getByText("Records only")).toBeVisible();
+  await page.getByRole("button", { name: "Add integration" }).click();
+  await page.getByLabel("Service", { exact: true }).selectOption({ label: "WordPress" });
+  await page.getByLabel("Name", { exact: true }).fill("NIIT website CMS");
+  await page.getByLabel("Site Url").fill("https://niit.edu.pk");
+  await page.getByLabel("Username").fill("seo-bot");
+  await page.getByLabel("Application password (optional)").fill("app-password-9876");
+  await page.getByRole("button", { name: "Save integration" }).click();
+
+  await expect(page.getByText("NIIT website CMS")).toBeVisible();
+  await expect(page.getByText("Credential stored (…9876)")).toBeVisible();
+  await expect(page.getByText("app-password-9876")).toHaveCount(0);
+  await expect(page.getByText("Not connected: the platform does not contact this service.")).toBeVisible();
+  await page.getByRole("button", { name: "Turn on" }).click();
+  await expect(page.getByText("Enabled (recorded only)")).toBeVisible();
+});

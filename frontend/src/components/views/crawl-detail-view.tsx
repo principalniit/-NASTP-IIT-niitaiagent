@@ -52,6 +52,14 @@ export function CrawlDetailView({ crawlId }: { crawlId: string }) {
         actions={active && can("crawls:start") && job.status !== "cancelling" ? <CancelButton job={job} /> : null}
       />
       <div className="space-y-6">
+        {job.pages_pruned_at ? (
+          <Alert>
+            <AlertDescription>
+              Page-level data for this crawl was removed on {formatDateTime(job.pages_pruned_at, current?.timezone)} under the
+              organisation&apos;s data retention setting. The summary, score and issue history are kept.
+            </AlertDescription>
+          </Alert>
+        ) : null}
         <Card>
           <CardHeader>
             <div className="flex flex-wrap items-center gap-2">

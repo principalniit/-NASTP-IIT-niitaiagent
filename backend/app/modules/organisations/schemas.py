@@ -43,6 +43,19 @@ class CrawlLimitCaps(_Strict):
 class ReportBranding(_Strict):
     primary_colour: HexColour | None = None
     footer_text: str | None = Field(default=None, max_length=300)
+    # White-label: the name reports show instead of the organisation's own name, and an
+    # optional line on the cover such as "Prepared by the web team for the Board".
+    display_name: str | None = Field(default=None, max_length=200)
+    cover_note: str | None = Field(default=None, max_length=300)
+
+
+class DataRetention(_Strict):
+    """Off by default: nothing is deleted unless an owner sets these."""
+
+    # Keep full page data for this many most recent crawls per project. Older crawls keep
+    # their summary, score and issues; their page-level data is deleted.
+    keep_crawls: int | None = Field(default=None, ge=2, le=1000)
+    delete_reports_after_days: int | None = Field(default=None, ge=30, le=3650)
 
 
 NotificationEvent = Literal["crawl_completed", "critical_issue_detected", "report_ready"]
@@ -60,6 +73,7 @@ class OrganisationSettings(_Strict):
     crawl_limits: CrawlLimitCaps = Field(default_factory=CrawlLimitCaps)
     report_branding: ReportBranding = Field(default_factory=ReportBranding)
     notifications: NotificationPreferences = Field(default_factory=NotificationPreferences)
+    data_retention: DataRetention = Field(default_factory=DataRetention)
 
 
 class OrganisationCreate(_Strict):

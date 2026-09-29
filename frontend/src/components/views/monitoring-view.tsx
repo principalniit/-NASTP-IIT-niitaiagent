@@ -282,6 +282,11 @@ function CrawlComparison({ project }: { project: Project }) {
               <IssueList title="Resolved (verified)" list={c.issues.resolved} empty="None resolved." />
               <IssueList title="Came back" list={c.issues.recurring} empty="No recurring issues." />
             </div>
+            {c.from_crawl.page_data_removed || c.to_crawl.page_data_removed ? (
+              <p className="text-sm text-muted-foreground">
+                Page-level data of one of these crawls was removed by data retention, so page changes are incomplete.
+              </p>
+            ) : null}
             <div className="space-y-2">
               <h3 className="text-sm font-semibold">
                 Page changes <span className="font-normal text-muted-foreground">({c.from_crawl.pages} → {c.to_crawl.pages} pages)</span>

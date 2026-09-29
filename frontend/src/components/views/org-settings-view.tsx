@@ -40,6 +40,10 @@ const schema = z.object({
   max_concurrency: int(1, 20),
   primary_colour: z.union([z.literal(""), z.string().regex(/^#[0-9a-fA-F]{6}$/, "Use a hex colour such as #1f3a8a")]),
   footer_text: z.string().max(300),
+  display_name: z.string().max(200),
+  cover_note: z.string().max(300),
+  keep_crawls: z.string().trim().regex(/^$|^\d+$/, "Enter a whole number or leave empty"),
+  delete_reports_after_days: z.string().trim().regex(/^$|^\d+$/, "Enter a whole number or leave empty"),
 });
 type Values = z.infer<typeof schema>;
 
@@ -60,6 +64,10 @@ function toForm(org: Organisation): Values {
     max_concurrency: s.crawl_limits.max_concurrency,
     primary_colour: s.report_branding.primary_colour ?? "",
     footer_text: s.report_branding.footer_text ?? "",
+    display_name: s.report_branding.display_name ?? "",
+    cover_note: s.report_branding.cover_note ?? "",
+    keep_crawls: s.data_retention?.keep_crawls?.toString() ?? "",
+    delete_reports_after_days: s.data_retention?.delete_reports_after_days?.toString() ?? "",
   };
 }
 
@@ -71,7 +79,11 @@ const API_FIELDS: Record<string, keyof Values> = {
   language: "language",
   "settings.brand_tone": "brand_tone",
   "settings.report_branding.primary_colour": "primary_colour",
+  "settings.data_retention.keep_crawls": "keep_crawls",
+  "settings.data_retention.delete_reports_after_days": "delete_reports_after_days",
 };
+
+const optionalNumber = (value: string) => (value.trim() ? Number(value) : null);
 
 export function OrgSettingsView() {
   const { current, can, isLoading } = useCurrentOrg();
@@ -103,7 +115,16 @@ function OrgSettingsForm({ org, canEdit }: { org: Organisation; canEdit: boolean
             approved_terminology: parseTerminology(v.terminology),
             ai: { provider: v.ai_provider, model: v.ai_model.trim() || null },
             crawl_limits: { max_pages: v.max_pages, max_depth: v.max_depth, max_concurrency: v.max_concurrency },
-            report_branding: { primary_colour: v.primary_colour || null, footer_text: v.footer_text.trim() || null },
+            report_branding: {
+              primary_colour: v.primary_colour || null,
+              footer_text: v.footer_text.trim() || null,
+              display_name: v.display_name.trim() || null,
+              cover_note: v.cover_note.trim() || null,
+            },
+            data_retention: {
+              keep_crawls: optionalNumber(v.keep_crawls),
+              delete_reports_after_days: optionalNumber(v.delete_reports_after_days),
+            },
           },
         },
       }),
@@ -207,6 +228,21 @@ function OrgSettingsForm({ org, canEdit }: { org: Organisation; canEdit: boolean
             <CardContent className="grid gap-4 sm:grid-cols-2">
               {text("primary_colour", "Primary colour", "Hex, e.g. #1f3a8a")}
               {text("footer_text", "Footer text")}
+              {text("display_name", "Name shown on reports", "Leave empty to use the organisation name")}
+              {text("cover_note", "Cover note", "For example: Prepared by the web team for the Board")}
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>Data retention</CardTitle>
+              <CardDescription>
+                Off unless set. When set, old data is deleted permanently. Crawl records, scores and issue history are
+                always kept; only page-level detail of older crawls is removed, never the latest analysed crawl.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4 sm:grid-cols-2">
+              {text("keep_crawls", "Keep page data for the newest crawls", "Per project, 2 or more. Empty keeps everything")}
+              {text("delete_reports_after_days", "Delete reports older than (days)", "30 or more. Empty keeps every report")}
             </CardContent>
           </Card>
         </fieldset>

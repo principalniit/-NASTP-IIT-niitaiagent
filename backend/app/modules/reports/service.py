@@ -130,7 +130,10 @@ async def run_report(
         report.data, report.html = data, html
         try:
             report.pdf = await render_pdf(
-                html, data["branding"].get("footer_text") or data["meta"]["organisation"]
+                html,
+                data["branding"].get("footer_text")
+                or data["branding"].get("display_name")
+                or data["meta"]["organisation"],
             )
             report.pdf_status, report.pdf_error = PdfStatus.READY, None
         except PdfUnavailableError as exc:

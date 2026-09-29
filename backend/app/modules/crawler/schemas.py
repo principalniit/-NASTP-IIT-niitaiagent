@@ -37,6 +37,7 @@ class CrawlJobOut(BaseModel):
     analysis_status: AnalysisStatus
     analysed_at: datetime | None
     analysis_error: str | None
+    pages_pruned_at: datetime | None = None
     requested_by_id: uuid.UUID | None
     created_at: datetime
     started_at: datetime | None

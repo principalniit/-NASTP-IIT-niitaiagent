@@ -90,11 +90,6 @@ function Shell({ children }: { children: React.ReactNode }) {
                   >
                     <Icon className="size-4 shrink-0" aria-hidden />
                     <span className="flex-1">{item.label}</span>
-                    {item.phase ? (
-                      <span className="text-[10px] uppercase tracking-wide text-sidebar-muted">
-                        Phase {item.phase}
-                      </span>
-                    ) : null}
                   </Link>
                 </li>
               );

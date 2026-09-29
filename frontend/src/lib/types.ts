@@ -44,7 +44,13 @@ export interface OrganisationSettings {
   approved_terminology: { preferred: string; avoid: string[]; note: string | null }[];
   ai: { provider: "none" | "ollama"; model: string | null };
   crawl_limits: { max_pages: number; max_depth: number; max_concurrency: number };
-  report_branding: { primary_colour: string | null; footer_text: string | null };
+  report_branding: {
+    primary_colour: string | null;
+    footer_text: string | null;
+    display_name?: string | null;
+    cover_note?: string | null;
+  };
+  data_retention?: { keep_crawls: number | null; delete_reports_after_days: number | null };
   notifications: { enabled: boolean; events: string[] };
 }
 
@@ -124,6 +130,7 @@ export interface AuditLogEntry {
   id: string;
   created_at: string;
   actor_user_id: string | null;
+  organisation_id?: string | null;
   action: string;
   target_type: string | null;
   target_id: string | null;
@@ -183,6 +190,7 @@ export interface CrawlJob {
   analysis_status: AnalysisStatus;
   analysed_at: string | null;
   analysis_error: string | null;
+  pages_pruned_at?: string | null;
   requested_by_id: string | null;
   created_at: string;
   started_at: string | null;
@@ -631,8 +639,8 @@ export interface ComparedIssue {
 }
 
 export interface Comparison {
-  from_crawl: { id: string; finished_at: string | null; pages: number };
-  to_crawl: { id: string; finished_at: string | null; pages: number };
+  from_crawl: { id: string; finished_at: string | null; pages: number; page_data_removed?: boolean };
+  to_crawl: { id: string; finished_at: string | null; pages: number; page_data_removed?: boolean };
   score_change: Record<string, { from: number | null; to: number | null; change: number | null }>;
   issues: { new: Capped<ComparedIssue>; resolved: Capped<ComparedIssue>; recurring: Capped<ComparedIssue> };
   pages: {
@@ -646,4 +654,57 @@ export interface Comparison {
     inbound_link_changes: Capped<ChangedValue<number>>;
   };
   note: string;
+}
+
+// ---------------------------------------------------------------- plans and integrations
+
+export interface PlanLimits {
+  max_projects: number | null;
+  max_members: number | null;
+  max_pages_per_crawl: number | null;
+  max_crawls_per_month: number | null;
+  max_ai_tasks_per_day: number | null;
+  max_reports_per_month: number | null;
+}
+
+export interface Plan {
+  id: string;
+  key: string;
+  name: string;
+  description: string | null;
+  limits: PlanLimits;
+  is_default: boolean;
+}
+
+export type UsageResource = "projects" | "members" | "crawls_per_month" | "ai_tasks_per_day" | "reports_per_month";
+
+export interface Usage {
+  plan: Plan;
+  plan_assigned: boolean;
+  usage: Record<UsageResource, { used: number; limit: number | null }>;
+  max_pages_per_crawl: number | null;
+  month_starts: string;
+  day_starts: string;
+}
+
+export interface IntegrationProvider {
+  key: string;
+  name: string;
+  category: "search_data" | "analytics" | "cms" | "notifications";
+  description: string;
+  config_schema: { properties: Record<string, { title?: string; type?: string; description?: string; default?: unknown }>; required?: string[] };
+  secret_label: string;
+}
+
+export interface Integration {
+  id: string;
+  provider: string;
+  name: string;
+  enabled: boolean;
+  config: Record<string, unknown>;
+  secret_set: boolean;
+  secret_hint: string | null;
+  connected: boolean;
+  created_at: string;
+  updated_at: string;
 }
