@@ -85,7 +85,7 @@ Tooling
 Exit criteria: fresh clone to running app using README commands only; cross-tenant
 access tests pass; E2E login and create-project pass.
 
-### Phase 2: Crawler
+### Phase 2: Crawler (complete)
 
 URL normalisation and validation, SSRF guard with IP pinning and per-hop
 revalidation, robots.txt, sitemap discovery and parsing (including indexes and gzip),
@@ -146,7 +146,7 @@ tenancy and security before any crawl data exists.
 |------|--------|
 | Discovery documents | Done |
 | Foundation (auth, organisations, projects, RBAC, dashboard shell) | Done |
-| Crawler | Not started |
+| Crawler, crawl explorer and page browser | Done |
 | SEO engine | Not started |
 | AI agent | Not started |
 | Reports and monitoring | Not started |
@@ -177,6 +177,37 @@ Tests at completion of Phase 1:
 | End-to-end (Playwright, Chromium) | 7 passed |
 | Dependency audit (pip-audit, pnpm audit) | No known vulnerabilities |
 
-Recommended next step: Phase 2, starting with the URL safety module and its SSRF tests,
-then robots.txt and sitemap handling, the database-backed job queue, and the crawl
-explorer.
+## 10. Phase 2 report
+
+Delivered: SSRF-guarded fetching, RFC 9309 robots.txt, sitemap and sitemap index
+parsing, breadth-first crawling with page, depth, concurrency, timeout, delay and
+duration limits, HTML extraction, content hashing, redirect chains, broken internal
+links, orphan detection, incremental recrawls, a PostgreSQL-backed worker with
+cancellation and recovery, crawl API endpoints, the Crawl Explorer, crawl results,
+the Pages browser and page detail, and live crawl data on the Overview.
+
+| Suite | Result |
+|-------|--------|
+| Backend unit, integration and security tests (pytest) | 171 passed |
+| Backend lint and types (ruff, mypy strict), migration drift check | Clean |
+| Frontend lint, types, production build | Clean |
+| End-to-end (Playwright), including a full crawl of a local fixture site | 8 passed |
+
+Defect found and fixed during Phase 2 end-to-end testing: the worker process did not
+register every database model, so all page saves failed and the crawl appeared stuck.
+Entry points now import all models, a test checks this, and storage failures now fail
+the crawl instead of leaving it running.
+
+### Known limitations after Phase 2
+
+| Limitation | Plan |
+|------------|------|
+| JavaScript rendering is not available (security review needed for browser sub-requests) | Later phase, with request interception |
+| External links are recorded but not checked | Optional, rate-limited external checks in Phase 3 |
+| Pages found only in a sitemap are crawled but their links are not followed | By design, to keep crawls bounded |
+| Orphans are not identified when a crawl hits its page limit | By design; raise the limit for a full picture |
+| No automatic cleanup of old crawl data | Retention settings in Phase 5 |
+| Plain-text sitemaps are not read | Add if a site needs it |
+
+Recommended next step: Phase 3, the deterministic SEO rules engine, scoring and
+prioritisation, using the observations Phase 2 now stores.

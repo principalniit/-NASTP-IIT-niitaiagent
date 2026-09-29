@@ -52,7 +52,7 @@ backend/
       organisations/ organisations, members, roles, permissions
       projects/      projects and project settings
       audit_logs/    append-only audit trail
-      crawler/       (Phase 2) fetcher, URL safety, robots, sitemaps, parser
+      crawler/       fetcher, URL safety, robots, sitemaps, parser, engine
       seo_rules/     (Phase 3) rule registry and rule implementations
       seo_scoring/   (Phase 3) scoring and prioritisation
       ai/            (Phase 4) provider interface, Ollama provider, agent tools
@@ -60,6 +60,7 @@ backend/
     providers/       abstract provider interfaces (AIProvider, KeywordProvider, ...)
     api/             router aggregation under /api/v1
     cli.py           admin bootstrap and seed commands
+    worker.py        background crawl worker
     main.py          application factory
   alembic/           migrations
   tests/             unit, integration and security tests
@@ -152,23 +153,34 @@ Structured configuration (organisation settings, project settings) is stored as
 `JSONB` but always read and written through Pydantic models, so the database never
 holds unvalidated configuration.
 
-## 7. Crawler design (Phase 2)
+## 7. Crawler (Phase 2, implemented)
 
-- `url_safety`: scheme allowlist (`http`, `https`), IDNA normalisation, port
-  allowlist, DNS resolution of every hop, rejection of loopback, private, link-local,
-  multicast, reserved, CGNAT and cloud-metadata addresses. The resolved IP is pinned
-  for the actual connection so DNS rebinding between check and connect is not
-  possible. Redirects are followed manually and revalidated each hop.
-- Scope: same host as the project by default; other hosts only if listed in project
-  settings by an authorised user.
-- Politeness: robots.txt honoured for the configured user agent, per-host delay,
-  bounded concurrency, request timeout, response size cap, content-type filter.
-- Frontier: breadth-first with depth tracking, deduplication on normalised URL,
-  seeded from the root URL and sitemaps.
-- Parsing with `selectolax` for HTML and `lxml` for sitemaps. Playwright rendering is
-  opt-in per project.
-- Progress counters are written to `crawl_jobs` so the UI can poll. Cancellation is
-  a status flag checked between fetches.
+Code: `backend/app/modules/crawler/` and `backend/app/worker.py`.
+
+| Part | File | Behaviour |
+|------|------|-----------|
+| SSRF guard | `url_safety.py` | A custom httpx network backend resolves each hostname, rejects the connection if any resolved address is not public (or explicitly allowed), and connects to the exact address it checked. Environment proxies are ignored. See `docs/SECURITY.md`. |
+| Fetcher | `fetcher.py` | Follows redirects one hop at a time (each hop scope-checked and SSRF-checked, each hop waits for the per-host delay), caps body size after decompression, supports conditional requests. |
+| robots.txt | `robots.py` | RFC 9309 parser with `*` and `$` wildcards, longest-match precedence, agent groups, `Crawl-delay` (capped at 30 s). 4xx means allow all; 5xx or network failure means disallow all. |
+| Sitemaps | `sitemaps.py` | `urlset` and `sitemapindex`, gzip, 50 MB decompressed limit, entity resolution and network access disabled. Sitemaps are read from robots.txt `Sitemap:` lines, or `/sitemap.xml` if none are listed; only in-scope sitemaps are fetched. |
+| Parser | `parser.py` | Title(s), meta description(s), meta robots, X-Robots-Tag, canonical(s), hreflang, `lang`, H1 to H6 in order, word count and SHA-256 hash of visible text, images with ALT state, links with anchor text and `nofollow`, JSON-LD (validity and `@type`s) and microdata types. |
+| Engine | `engine.py` | Breadth-first frontier with depth, page and concurrency limits. Pages found only in sitemaps are crawled after link discovery; their links are recorded but not followed. A redirecting URL is stored with its chain and its in-scope destination is stored as its own page from the same response. Progress and heartbeat every second; cancellation and a maximum duration are checked there. |
+| Worker | `app/worker.py` | Claims queued jobs with `FOR UPDATE SKIP LOCKED`; fails jobs whose heartbeat is older than `WORKER_STALE_AFTER_SECONDS`; fails a crawl if its results cannot be stored rather than reporting it complete. |
+
+Finalisation resolves link targets to pages, counts distinct inbound internal links
+per page, and marks orphan pages (in a sitemap, fetched, not the root, no inbound
+internal links). Orphans are only marked when the crawl was not cut short by the page
+limit, cancellation or the time limit, because unvisited pages could link to them.
+
+Incremental recrawls send `If-None-Match` and `If-Modified-Since` from the previous
+completed crawl. On `304 Not Modified` the page's observations and outgoing links are
+copied forward, so discovery continues.
+
+Deferred: JavaScript rendering. A headless browser makes its own sub-requests that
+would bypass the connection-level SSRF guard, so it needs request interception and
+its own review before it is enabled. The project setting is kept; crawls that request
+it record a warning and analyse pages as served. External links are recorded but not
+fetched, so broken external links are not reported.
 
 ## 8. Rules engine and scoring (Phase 3)
 

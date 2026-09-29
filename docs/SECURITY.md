@@ -9,7 +9,7 @@ the project owner (principal@niit.edu.pk). Do not open public issues for them.
 |-------|--------|------------------|
 | Tenant data | Cross-organisation access by ID tampering | Backend membership check on every request; `organisation_id` on every tenant row; 404 for foreign resources; isolation tests |
 | User accounts | Credential stuffing, token theft | Argon2id hashing, login rate limiting, short-lived access tokens, rotating refresh tokens with reuse detection, `HttpOnly` cookies |
-| Internal network | SSRF through the crawler | Scheme and port allowlist, DNS resolution and IP blocklist, IP pinning, per-redirect revalidation, domain scope |
+| Internal network | SSRF through the crawler | Connection-time address checks with pinning, port allowlist, per-redirect revalidation, host scope, proxies ignored |
 | Target websites | Being overloaded by our crawler | robots.txt, delay, low concurrency, page and depth caps |
 | Institutional reputation | AI-fabricated claims | Grounded prompts, output validation, human approval, no automatic publishing |
 | Secrets | Leakage in code, logs, errors | `.env` only, `.env.example` placeholders, redacted logs, generic error bodies |
@@ -45,16 +45,38 @@ the project owner (principal@niit.edu.pk). Do not open public issues for them.
   have no implicit access to its projects or SEO data. To support a tenant they add
   themselves as a member, which is audit-logged.
 
-## 4. SSRF protection (crawler, Phase 2)
+## 4. SSRF protection (crawler)
 
-Blocked destinations: loopback, RFC 1918 private ranges, link-local (including
-`169.254.169.254` and other metadata endpoints), CGNAT `100.64.0.0/10`, multicast,
-reserved and unspecified addresses, IPv6 equivalents including unique-local and
-IPv4-mapped forms. Only `http` and `https` on ports 80 and 443 (plus explicitly
-configured ports) are allowed. Every hostname is resolved, every resolved address
-is checked, and the connection is made to the checked address so DNS rebinding
-cannot swap it. Redirects are followed manually with the same checks on each hop.
-The crawler only fetches hosts in the project's scope.
+The crawler fetches URLs chosen by tenants and by the websites it crawls, so it must
+never reach the platform's own network. Controls, all covered by
+`backend/tests/security/test_ssrf.py` and `tests/integration/test_crawl_engine.py`:
+
+- **Connection-time checks.** The check runs inside the HTTP client's network backend,
+  not before the request, so no code path can skip it. Every resolved address is
+  checked; if any is not public the connection is refused.
+- **Address pinning.** The socket is opened to the address that was checked. A second
+  DNS answer (DNS rebinding) is never used. TLS still verifies the original hostname.
+- **Blocked ranges.** Loopback, RFC 1918, link-local (including `169.254.169.254`
+  metadata), CGNAT `100.64.0.0/10`, multicast, reserved, unspecified, benchmarking
+  `198.18.0.0/15`, IPv6 loopback, link-local, unique-local, and IPv4-mapped forms of
+  all of these.
+- **Ports.** 80 and 443, plus the explicit port of the project's root URL.
+- **Redirects** are followed manually, one hop at a time, each scope-checked and
+  SSRF-checked. Redirects to hosts outside the project scope are recorded, not followed.
+- **Scope.** Only the project's host and hosts an authorised user added to the project
+  are fetched. Sitemaps on other hosts are skipped.
+- **Proxies.** Environment proxy variables are ignored by the crawler, because a proxy
+  would make the connected address differ from the checked one.
+- **Explicit exceptions.** `CRAWLER_ALLOWED_PRIVATE_NETWORKS` can allow specific
+  private ranges (for example an on-premises staging server). It is empty by default,
+  and production refuses loopback or link-local ranges in it.
+- **Resource limits.** Response bodies are capped at `CRAWLER_MAX_RESPONSE_BYTES`
+  after decompression; sitemaps at 50 MB; sitemap XML is parsed with entity
+  resolution, DTD loading and network access disabled; crawls stop at
+  `CRAWLER_MAX_DURATION_SECONDS`.
+- **Politeness.** robots.txt is always respected, an unreachable robots.txt blocks the
+  host, and requests to one host are spaced by the larger of the project delay and the
+  site's `Crawl-delay`.
 
 ## 5. Client addresses behind proxies
 
@@ -115,3 +137,7 @@ IP and a small metadata object. Passwords and tokens are never logged.
   application layer and covered by tests.
 - Integration credentials (Phase 6) will need encryption at rest with a key held
   outside the database.
+- JavaScript rendering is not enabled because browser sub-requests would bypass the
+  connection-level SSRF guard. It needs request interception and a dedicated review.
+- Crawl data volume is bounded by the organisation's page cap and 2,000 stored links
+  per page. Retention and cleanup of old crawls are planned for Phase 5.

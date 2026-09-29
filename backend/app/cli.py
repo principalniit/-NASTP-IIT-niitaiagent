@@ -15,6 +15,7 @@ import sys
 
 from sqlalchemy import select
 
+import app.models  # noqa: F401  (registers every model so foreign keys resolve)
 from app.core.database import dispose_engine, get_session_factory
 from app.modules.audit_logs import service as audit
 from app.modules.organisations.models import Organisation, OrganisationMember, OrgRole

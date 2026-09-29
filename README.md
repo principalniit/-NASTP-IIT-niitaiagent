@@ -6,7 +6,8 @@ It crawls websites, runs a deterministic SEO rules engine, scores and prioritise
 issues, and uses a local AI model only as an optional helper for explanations and
 drafts. Nothing is ever published to a live website automatically.
 
-**Status:** Phase 1 (foundation) is complete. Crawling starts in Phase 2. See
+**Status:** Phases 1 (foundation) and 2 (crawler) are complete. The SEO rules engine
+and scoring arrive in Phase 3. See
 [Feature status](#feature-status) and [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md).
 
 ## Contents
@@ -77,7 +78,18 @@ API documentation: http://localhost:8000/api/v1/docs
 
 On Windows PowerShell, use `Copy-Item .env.example .env` instead of `cp`.
 
-### 4. Dashboard
+### 4. Crawl worker
+
+Crawls run in a separate worker process. In another terminal:
+
+```bash
+cd backend
+uv run python -m app.worker
+```
+
+Several workers can run at once. Without a worker, crawls stay queued.
+
+### 5. Dashboard
 
 In a second terminal:
 
@@ -89,7 +101,7 @@ pnpm dev
 
 Open http://localhost:3000 and sign in with the administrator account.
 
-### 5. Ollama (optional, used from Phase 4)
+### 6. Ollama (optional, used from Phase 4)
 
 ```bash
 docker compose --profile ai up -d ollama   # or install Ollama natively
@@ -117,6 +129,13 @@ Backend variables live in `backend/.env` (template: `backend/.env.example`).
 | `LOGIN_RATE_LIMIT_IP_ATTEMPTS` | `20` | Failed logins per client address per window |
 | `LOGIN_RATE_LIMIT_WINDOW_SECONDS` | `300` | Rate-limit window |
 | `CRAWLER_USER_AGENT` | `NIIT-SEO-Agent/0.1 (+https://niit.edu.pk)` | Default crawler identity for new projects |
+| `CRAWLER_ALLOWED_PRIVATE_NETWORKS` | empty | Comma-separated CIDRs the crawler may reach although not public. Loopback and link-local are refused in production. |
+| `CRAWLER_MAX_RESPONSE_BYTES` | `5000000` | Largest page body read, after decompression |
+| `CRAWLER_MAX_REDIRECTS` | `10` | Redirect hops followed per URL |
+| `CRAWLER_MAX_SITEMAPS` | `20` | Sitemap files read per crawl |
+| `CRAWLER_MAX_DURATION_SECONDS` | `3600` | A crawl stops after this long |
+| `WORKER_POLL_SECONDS` | `2.0` | How often an idle worker checks for queued crawls |
+| `WORKER_STALE_AFTER_SECONDS` | `300` | Running crawls without a heartbeat for this long are marked failed |
 | `AI_PROVIDER` | `none` | `none` or `ollama` |
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama address |
 | `TEST_DATABASE_URL` | `…/niit_seo_test` | Used by the pytest suite only |
@@ -151,7 +170,8 @@ uv run ruff check . && uv run ruff format --check . && uv run mypy app && uv run
 cd frontend
 pnpm lint && pnpm typecheck && pnpm build
 
-# End-to-end: resets niit_seo_e2e, starts the API on :8001 and a build on :3100
+# End-to-end: resets niit_seo_e2e, starts a local fixture website on :8123, a worker,
+# the API on :8001 and a production build on :3100
 cd frontend
 pnpm exec playwright install chromium   # first time only
 pnpm test:e2e
@@ -159,7 +179,8 @@ pnpm test:e2e
 
 The backend suite runs every migration down and up, then tests authentication, token
 rotation and reuse detection, rate limiting, role permissions, cross-organisation
-isolation, URL safety, settings validation and the NIIT seed. Tests never contact live
+isolation, URL safety, settings validation, the NIIT seed, SSRF protection, robots.txt
+and sitemap parsing, HTML extraction, and full crawls of a local fixture website. Tests never contact live
 NIIT infrastructure. CI runs all of the above on every pull request
 (`.github/workflows/ci.yml`), plus `pip-audit` and `pnpm audit`.
 
@@ -172,6 +193,9 @@ NIIT infrastructure. CI runs all of the above on every pull request
 | Dashboard shows "Could not load data" | Check the API is running on port 8000 and `API_ORIGIN` matches; rebuild after changing it |
 | Signed out after every page reload | Access tokens live in memory by design; the refresh cookie restores the session. If it does not, check that you open the dashboard via `localhost:3000`, not the API port. |
 | `Too many failed login attempts` | Wait five minutes, or restart the API in development |
+| A crawl stays "Queued" | Start a worker: `uv run python -m app.worker` |
+| Crawl finishes with nothing crawled and a robots.txt note | The site's robots.txt returned a server error or timed out; RFC 9309 then forbids crawling. Try again later. |
+| Crawl pages show "Blocked destination" | The host resolves to a private address. Use `CRAWLER_ALLOWED_PRIVATE_NETWORKS` only for servers you own. |
 | AI assistant shows "Unavailable" | Ollama is not reachable at `OLLAMA_BASE_URL`. The platform keeps working. |
 | Production start fails with a `JWT_SECRET` or `COOKIE_SECURE` error | Intended safety check; set a strong secret and serve over HTTPS |
 
@@ -185,6 +209,9 @@ Phase 6. Until then:
   proxy such as nginx. See `docs/SECURITY.md` for the required `X-Forwarded-For` setup.
 - Build the dashboard with `API_ORIGIN` pointing at the API, then `pnpm start`.
 - Run `alembic upgrade head` before starting a new version.
+- Run at least one `python -m app.worker` process under a supervisor such as systemd.
+  Stop it with SIGTERM; it finishes its current crawl first. If it is killed instead,
+  that crawl is marked failed after `WORKER_STALE_AFTER_SECONDS`.
 
 ## Feature status
 
@@ -194,7 +221,7 @@ Phase 6. Until then:
 | Organisations, members, roles, audit log | Done |
 | Projects and project settings (including NIIT configuration) | Done |
 | Dashboard shell, overview, projects, settings, administration | Done |
-| Crawler (Phase 2) | Not started |
+| Crawler, Crawl Explorer, Pages browser (Phase 2) | Done; JavaScript rendering deferred |
 | SEO rules, scoring, issues (Phase 3) | Not started |
 | AI agent, drafts, approvals (Phase 4) | Not started; health check only |
 | Reports and monitoring (Phase 5) | Not started |

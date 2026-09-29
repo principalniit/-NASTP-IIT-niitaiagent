@@ -9,10 +9,19 @@ import { ErrorState, LoadingState } from "@/components/app/states";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useCurrentOrg } from "@/lib/current-org";
-import { useHealth, useMembers, useProjects } from "@/lib/queries";
+import { useCrawls, useHealth, useMembers, useProjects } from "@/lib/queries";
 
 const NO_CRAWL = "No crawl data yet";
-const CRAWL_HINT = "Appears after the first crawl (Phase 2) and analysis (Phase 3).";
+const NOT_SCORED = "Not scored yet";
+const SCORE_HINT = "Scores are calculated by the SEO engine, delivered in Phase 3.";
+const STATUS_LABELS: Record<string, string> = {
+  queued: "Queued",
+  running: "Running",
+  cancelling: "Cancelling",
+  completed: "Completed",
+  failed: "Failed",
+  cancelled: "Cancelled",
+};
 
 export function OverviewView() {
   const { current, isLoading, error, refetch, can } = useCurrentOrg();
@@ -20,10 +29,18 @@ export function OverviewView() {
   const projects = useProjects(current?.id ?? null, { page: 1 }, canReadProjects);
   const members = useMembers(current?.id ?? null, can("members:read"));
   const health = useHealth();
+  const latestCrawl = useCrawls(current?.id ?? null, { page_size: 1 }, canReadProjects);
+  const latestCompleted = useCrawls(
+    current?.id ?? null,
+    { page_size: 1, status: "completed" },
+    canReadProjects,
+  );
 
   if (isLoading) return <LoadingState rows={4} />;
   if (error) return <ErrorState error={error} onRetry={refetch} />;
   if (!current) return <NoOrganisation />;
+  const newest = latestCrawl.data?.items[0];
+  const completed = latestCompleted.data?.items[0];
 
   return (
     <>
@@ -89,14 +106,26 @@ export function OverviewView() {
           SEO health
         </h2>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <StatTile label="Overall SEO health score" value={null} emptyText={NO_CRAWL} hint={CRAWL_HINT} />
-          <StatTile label="Technical SEO score" value={null} emptyText={NO_CRAWL} />
-          <StatTile label="On-page score" value={null} emptyText={NO_CRAWL} />
-          <StatTile label="Content score" value={null} emptyText={NO_CRAWL} />
-          <StatTile label="Critical and high-priority issues" value={null} emptyText={NO_CRAWL} />
-          <StatTile label="Pages crawled" value={null} emptyText={NO_CRAWL} />
-          <StatTile label="Crawl status" value={null} emptyText="No crawls run" />
-          <StatTile label="Resolved issues" value={null} emptyText="Needs two crawls" />
+          <StatTile label="Overall SEO health score" value={null} emptyText={NOT_SCORED} hint={SCORE_HINT} />
+          <StatTile label="Technical SEO score" value={null} emptyText={NOT_SCORED} />
+          <StatTile label="On-page score" value={null} emptyText={NOT_SCORED} />
+          <StatTile label="Content score" value={null} emptyText={NOT_SCORED} />
+          <StatTile label="Critical and high-priority issues" value={null} emptyText={NOT_SCORED} />
+          <StatTile
+            label="Pages crawled"
+            value={completed ? completed.pages_crawled : null}
+            loading={latestCompleted.isLoading}
+            emptyText={NO_CRAWL}
+            hint={completed ? `Latest completed crawl: ${completed.project_name}` : undefined}
+          />
+          <StatTile
+            label="Crawl status"
+            value={newest ? STATUS_LABELS[newest.status] : null}
+            loading={latestCrawl.isLoading}
+            emptyText="No crawls run"
+            hint={newest ? `${newest.project_name}` : undefined}
+          />
+          <StatTile label="Resolved issues" value={null} emptyText="Needs two analysed crawls" />
         </div>
       </section>
 

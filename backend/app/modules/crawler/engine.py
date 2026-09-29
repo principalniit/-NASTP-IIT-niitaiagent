@@ -391,7 +391,10 @@ class CrawlEngine:
                 try:
                     await self._save(page, [])
                 except Exception:
+                    # Results cannot be stored at all: stop rather than report a
+                    # misleading "completed" crawl.
                     logger.exception("Could not record failed page %s", item.url)
+                    self.stop_reason = "internal_error"
             finally:
                 self.queue.task_done()
 
@@ -412,9 +415,17 @@ class CrawlEngine:
 
     async def _monitor(self) -> None:
         started = time.monotonic()
+        failures = 0
         while True:
             await asyncio.sleep(1.0)
-            await self._flush_progress()
+            try:
+                await self._flush_progress()
+                failures = 0
+            except Exception:
+                failures += 1
+                logger.exception("Could not record crawl progress")
+                if failures >= 3:
+                    self.stop_reason = "internal_error"
             if time.monotonic() - started > self.settings.crawler_max_duration_seconds:
                 self.stop_reason = self.stop_reason or "time_limit"
 
@@ -464,6 +475,8 @@ class CrawlEngine:
                 task.cancel()
             await asyncio.gather(*workers, monitor, return_exceptions=True)
             await self.fetcher.aclose()
+        if self.stop_reason == "internal_error":
+            raise RuntimeError("Crawl results could not be stored")
         return await self._finalise()
 
     async def _finalise(self) -> CrawlStatus:

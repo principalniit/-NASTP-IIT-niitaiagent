@@ -31,13 +31,13 @@ test("overview shows real counts and honest empty states", async ({ page }) => {
   await expect(page.getByLabel("Current organisation").locator("option:checked")).toHaveText(
     "NASTP Institute of Information Technology",
   );
-  // Seeded tenant: one project and one member. No crawl metrics are invented.
-  await expect(page.getByRole("group", { name: "Projects" })).toContainText("1");
+  // Seeded tenant: the NIIT website and the local fixture site, and one member.
+  await expect(page.getByRole("group", { name: "Projects" })).toContainText("2");
   await expect(page.getByRole("group", { name: "Members" })).toContainText("1");
+  // Scores need the Phase 3 engine, so none are shown.
   await expect(page.getByRole("group", { name: "Overall SEO health score" })).toContainText(
-    "No crawl data yet",
+    "Not scored yet",
   );
-  await expect(page.getByRole("group", { name: "Pages crawled" })).toContainText("No crawl data yet");
   await expect(page.getByText("Disabled", { exact: true })).toBeVisible();
 });
 

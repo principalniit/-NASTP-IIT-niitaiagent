@@ -42,6 +42,7 @@ frontend code, read `frontend/AGENTS.md` and the bundled docs in
 uv sync
 uv run alembic upgrade head
 uv run uvicorn app.main:app --reload
+uv run python -m app.worker          # crawl worker
 uv run ruff check . && uv run ruff format --check . && uv run mypy app && uv run pytest
 
 # frontend (from frontend/)

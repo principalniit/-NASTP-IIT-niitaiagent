@@ -3,6 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ExternalLink, Trash2 } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -10,6 +11,8 @@ import { z } from "zod";
 
 import { describedBy, Field } from "@/components/app/field";
 import { PageHeader } from "@/components/app/page-header";
+import { CrawlStatusBadge } from "@/components/crawls/crawl-status";
+import { StartCrawlButton } from "@/components/crawls/start-crawl";
 import { EmptyState, ErrorState, LoadingState } from "@/components/app/states";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -28,7 +31,7 @@ import {
   parseSources,
   splitLines,
 } from "@/lib/line-formats";
-import { keys, useProject, useProjectSettings } from "@/lib/queries";
+import { isActiveCrawl, keys, useCrawls, useProject, useProjectSettings } from "@/lib/queries";
 import type { Project, ProjectSettings, ProjectSettingsData } from "@/lib/types";
 import { formatDateTime } from "@/lib/utils";
 
@@ -73,16 +76,52 @@ export function ProjectDetailView({ projectId }: { projectId: string }) {
         </div>
         <div className="space-y-6">
           <DetailsCard project={p} canEdit={can("projects:update")} timeZone={current?.timezone} />
-          <Card>
-            <CardHeader>
-              <CardTitle>Crawl history</CardTitle>
-              <CardDescription>No crawls have been run. Crawling arrives in Phase 2.</CardDescription>
-            </CardHeader>
-          </Card>
+          <CrawlHistoryCard project={p} canStart={can("crawls:start")} timeZone={current?.timezone} />
           {can("projects:delete") ? <DeleteCard project={p} /> : null}
         </div>
       </div>
     </>
+  );
+}
+
+function CrawlHistoryCard({ project, canStart, timeZone }: { project: Project; canStart: boolean; timeZone?: string }) {
+  const crawls = useCrawls(project.organisation_id, { project_id: project.id, page_size: 5 });
+  const busy = crawls.data?.items.some((job) => isActiveCrawl(job)) ?? false;
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Crawls</CardTitle>
+        <CardDescription>The most recent crawls of this project.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {crawls.isLoading ? (
+          <LoadingState rows={2} />
+        ) : !crawls.data?.items.length ? (
+          <p className="text-sm text-muted-foreground">No crawls have been run yet.</p>
+        ) : (
+          <ul className="space-y-2 text-sm">
+            {crawls.data.items.map((job) => (
+              <li key={job.id} className="flex items-center justify-between gap-2">
+                <Link href={`/crawls/${job.id}`} className="text-primary underline-offset-4 hover:underline">
+                  {formatDateTime(job.created_at, timeZone)}
+                </Link>
+                <span className="flex items-center gap-2">
+                  <span className="tabular-nums text-muted-foreground">{job.pages_discovered} pages</span>
+                  <CrawlStatusBadge status={job.status} />
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+        {canStart ? (
+          busy ? (
+            <p className="text-sm text-muted-foreground">A crawl is in progress.</p>
+          ) : (
+            <StartCrawlButton projectId={project.id} organisationId={project.organisation_id} />
+          )
+        ) : null}
+      </CardContent>
+    </Card>
   );
 }
 

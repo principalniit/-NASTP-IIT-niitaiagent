@@ -32,10 +32,10 @@ class RequestRecord:
 
 
 class FixtureSite:
-    def __init__(self) -> None:
+    def __init__(self, port: int = 0) -> None:
         self.routes: dict[str, Response] = {}
         self.requests: list[RequestRecord] = []
-        self._server = ThreadingHTTPServer(("127.0.0.1", 0), self._handler())
+        self._server = ThreadingHTTPServer(("127.0.0.1", port), self._handler())
         self.port = self._server.server_address[1]
         self.base = f"http://127.0.0.1:{self.port}"
         self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
@@ -159,3 +159,13 @@ def build_standard_site(site: FixtureSite) -> None:
     site.page("/orphan", "Orphan", "<h1>Orphan</h1><p>Only in the sitemap</p>")
     for i in range(1, 8):
         site.page(f"/deep/{i}", f"Deep {i}", f"<p>Level {i}</p><a href='/deep/{i + 1}'>Next</a>")
+
+
+if __name__ == "__main__":
+    # Serve the standard fixture site for end-to-end tests: python -m tests.fixtures.site 8123
+    import sys
+
+    with FixtureSite(int(sys.argv[1]) if len(sys.argv) > 1 else 8123) as fixture:
+        build_standard_site(fixture)
+        print(f"Fixture site on {fixture.base}", flush=True)
+        threading.Event().wait()

@@ -138,3 +138,136 @@ export interface Health {
   ai: { provider: string; status: "disabled" | "available" | "unavailable"; detail: string | null };
   version: string;
 }
+
+export type CrawlStatus = "queued" | "running" | "cancelling" | "completed" | "failed" | "cancelled";
+export const ACTIVE_CRAWL_STATUSES: CrawlStatus[] = ["queued", "running", "cancelling"];
+
+export type FetchStatus =
+  | "fetched"
+  | "not_modified"
+  | "blocked_by_robots"
+  | "blocked_destination"
+  | "redirect_out_of_scope"
+  | "skipped_content_type"
+  | "too_large"
+  | "error";
+
+export const FETCH_STATUS_LABELS: Record<FetchStatus, string> = {
+  fetched: "Fetched",
+  not_modified: "Not modified",
+  blocked_by_robots: "Blocked by robots.txt",
+  blocked_destination: "Blocked destination",
+  redirect_out_of_scope: "Redirects off-site",
+  skipped_content_type: "Not HTML",
+  too_large: "Too large",
+  error: "Error",
+};
+
+export interface CrawlJob {
+  id: string;
+  project_id: string;
+  project_name: string | null;
+  status: CrawlStatus;
+  incremental: boolean;
+  previous_crawl_id: string | null;
+  config: { max_pages: number; max_depth: number; root_url: string; [key: string]: unknown };
+  pages_discovered: number;
+  pages_crawled: number;
+  pages_failed: number;
+  pages_blocked: number;
+  robots_status: string | null;
+  sitemaps: { url: string; status: string; url_count: number; error: string | null; kind?: string }[];
+  sitemap_url_count: number;
+  warnings: string[];
+  error_message: string | null;
+  requested_by_id: string | null;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+}
+
+export interface CrawlPageRow {
+  id: string;
+  url: string;
+  final_url: string | null;
+  status_code: number | null;
+  fetch_status: FetchStatus;
+  depth: number | null;
+  discovered_via: string;
+  content_type: string | null;
+  title: string | null;
+  word_count: number | null;
+  response_time_ms: number | null;
+  h1_count: number;
+  images_missing_alt: number;
+  internal_links_count: number;
+  inlinks_count: number;
+  is_noindex: boolean;
+  in_sitemap: boolean;
+  is_orphan: boolean;
+}
+
+export interface CrawlLinkRef {
+  url: string;
+  anchor_text: string | null;
+  nofollow: boolean;
+  is_internal: boolean;
+  page_id: string | null;
+  status_code: number | null;
+}
+
+export interface JsonLdBlock {
+  valid: boolean;
+  error: string | null;
+  types: string[];
+  data: unknown;
+}
+
+export interface CrawlPageDetail extends CrawlPageRow {
+  error: string | null;
+  content_length: number | null;
+  redirect_chain: { url: string; status_code: number; elapsed_ms: number }[];
+  title_count: number;
+  meta_description: string | null;
+  meta_description_count: number;
+  meta_robots: string | null;
+  x_robots_tag: string | null;
+  is_nofollow: boolean;
+  canonical_url: string | null;
+  canonical_count: number;
+  lang: string | null;
+  headings: { level: number; text: string }[];
+  content_hash: string | null;
+  images: { src: string; alt: string | null; has_alt: boolean }[];
+  image_count: number;
+  structured_data: { json_ld?: JsonLdBlock[]; microdata?: { count: number; types: string[] } };
+  hreflang: { hreflang: string; href: string }[];
+  external_links_count: number;
+  fetched_at: string | null;
+  outlinks: CrawlLinkRef[];
+  inlinks: CrawlLinkRef[];
+}
+
+export interface CrawlSummary {
+  pages_total: number;
+  status_classes: Record<string, number>;
+  fetch_statuses: Record<string, number>;
+  average_response_time_ms: number | null;
+  slowest_response_time_ms: number | null;
+  noindex_pages: number;
+  pages_in_sitemap: number;
+  orphan_pages: number;
+  broken_internal_links: number;
+  redirects: number;
+  duplicate_content_groups: { content_hash: string; urls: string[] }[];
+}
+
+export interface BrokenLink {
+  source_page_id: string;
+  source_url: string;
+  target_page_id: string;
+  target_url: string;
+  anchor_text: string | null;
+  status_code: number | null;
+  fetch_status: FetchStatus;
+}

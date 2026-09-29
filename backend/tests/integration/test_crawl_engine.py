@@ -304,3 +304,38 @@ async def test_loopback_is_blocked_without_an_explicit_allowance(
     assert site.requests == []
     assert job is not None and job.robots_status == "unreachable"
     assert all(p.fetch_status != FetchStatus.FETCHED for p in pages)
+
+
+async def test_storage_failure_fails_the_crawl_instead_of_completing(
+    site: FixtureSite, project, monkeypatch
+) -> None:  # type: ignore[no-untyped-def]
+    org_id, project_id = project
+    config = CrawlConfig(
+        root_url=f"{site.base}/",
+        allowed_hosts=["127.0.0.1"],
+        max_pages=5,
+        max_depth=1,
+        concurrency=1,
+        timeout_seconds=2,
+        delay_ms=0,
+        user_agent=UA,
+        extra_ports=[site.port],
+    )
+    async with get_session_factory()() as session:
+        job = CrawlJob(
+            organisation_id=org_id,
+            project_id=project_id,
+            status=CrawlStatus.RUNNING,
+            config=config.model_dump(),
+        )
+        session.add(job)
+        await session.commit()
+        job_id = job.id
+    engine = CrawlEngine(job_id, policy=policy_for(site))
+
+    async def broken_save(page: CrawlPage, links: list[CrawlLink]) -> None:
+        raise RuntimeError("database unavailable")
+
+    monkeypatch.setattr(engine, "_save", broken_save)
+    with pytest.raises(RuntimeError, match="could not be stored"):
+        await engine.run()

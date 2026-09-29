@@ -19,6 +19,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import text, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+import app.models  # noqa: F401  (registers every model so foreign keys resolve)
 from app.core.config import get_settings
 from app.core.database import dispose_engine, get_session_factory
 from app.core.logging import configure_logging
