@@ -10,10 +10,12 @@ from app.modules.ai.refs import IssueRefs
 from app.modules.ai.tasks import issue_ids_in
 from app.modules.ai.tools import (
     TOOLS,
+    IssuesArgs,
     NoArgs,
     ToolContext,
     ToolError,
     get_project_summary,
+    get_seo_issues,
     run_tool,
 )
 from app.providers.interfaces import AIProvider
@@ -33,6 +35,7 @@ def _grounding_facts(evidence: dict[str, Any]) -> dict[str, Any]:
     arguments or error messages, which echo text the model chose."""
     return {
         "project_summary": evidence["project_summary"],
+        "top_open_issues": evidence.get("top_open_issues"),
         "tool_results": [
             {"tool": call["tool"], "result": call["result"]}
             for call in evidence["tool_results"]
@@ -48,6 +51,12 @@ async def answer_question(
         "project_summary": await get_project_summary(tools, NoArgs()),
         "tool_results": [],
     }
+    # The highest-priority open issues, so questions about what to do next can be answered
+    # even by a model that does not call a tool first.
+    try:
+        evidence["top_open_issues"] = await get_seo_issues(tools, IssuesArgs(limit=10))
+    except ToolError:
+        evidence["top_open_issues"] = None
     refs = IssueRefs()  # the model sees short issue references; evidence keeps real ids
     messages: list[Message] = [
         {"role": "system", "content": system},
@@ -58,8 +67,13 @@ async def answer_question(
                 f"TOOLS you may call, one at a time:\n{json.dumps(tool_catalogue())}\n\n"
                 f"EVIDENCE so far:\n{json.dumps(refs.shorten(evidence), default=str)}\n\n"
                 "Reply with JSON. To look something up, use action 'call_tool' with the tool name and "
-                "arguments. When the evidence is enough, or the data does not exist, use action "
-                "'answer'. Put the references of issues you rely on (such as issue-a) in issue_ids."
+                "arguments. When the evidence is enough, use action 'answer'. Put the references of "
+                "issues you rely on (such as issue-a) in issue_ids.\n"
+                "For questions about priorities, next steps, where to start or the way forward, "
+                "answer from top_open_issues (already ordered by priority) and the scores: name the "
+                "most important issues by title, say briefly why each matters and what to do, and "
+                "cite them. Say that the data has no answer only when the question needs data this "
+                "platform does not have, such as traffic, rankings, keywords or competitors."
             ),
         },
     ]

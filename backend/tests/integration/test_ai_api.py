@@ -496,3 +496,33 @@ async def test_summary_after_two_crawls_is_stored(
     assert result["status"] == "completed", result["error"]
     comparison = result["evidence"]["comparison"]
     assert isinstance(comparison["to_crawl"]["finished_at"], str)
+
+
+async def test_way_forward_questions_are_answered_from_top_issues(
+    client: AsyncClient, site: FixtureSite, ollama: FakeOllama
+) -> None:
+    """The agent starts with the top open issues, so a model that answers straight away can
+    still give grounded next steps instead of saying the data has no answer."""
+
+    def reply(request: dict[str, Any]) -> dict[str, Any]:
+        prompt = request["messages"][1]["content"]
+        assert "top_open_issues" in prompt and "way forward" in prompt
+        first = re.findall(r"issue-[a-z]+", prompt)[0]
+        return {"action": "answer", "answer": f"Start with {first}.", "issue_ids": [first]}
+
+    owner, org, project = await analysed(client, site)
+    await enable_ai(client, owner, org["id"])
+    ollama.script(reply)
+    result = await run(
+        client,
+        owner,
+        project["id"],
+        kind="question",
+        question="So what should be the way forward now?",
+    )
+    assert result["status"] == "completed", result["error"]
+    top = (
+        await client.get(f"/api/v1/projects/{project['id']}/issues", headers=owner.headers)
+    ).json()["items"][0]
+    assert result["output"]["issue_ids"] == [top["id"]]  # the highest-priority issue
+    assert result["output"]["answer"] == f"Start with “{top['title']}”."
