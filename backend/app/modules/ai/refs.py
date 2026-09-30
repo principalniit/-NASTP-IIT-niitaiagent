@@ -10,7 +10,7 @@ references never add numbers that the grounding check would treat as facts.
 import re
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 _REF = re.compile(r"\bissue-([a-z]{1,3})\b", re.I)
 
@@ -59,17 +59,22 @@ class IssueRefs:
     def expand_arguments(self, arguments: dict[str, Any]) -> dict[str, Any]:
         return {k: self.resolve(v) if isinstance(v, str) else v for k, v in arguments.items()}
 
-    def _readable(self, text: str) -> str:
-        """Replace references the model wrote in prose with the issue's title."""
+    def _with_titles(self, text: str) -> str:
+        """References the model wrote in prose, replaced by the issue's title."""
 
         def title(match: re.Match[str]) -> str:
-            ref = match.group(0).lower()
-            name = self._title_of.get(ref)
+            name = self._title_of.get(match.group(0).lower())
             return f"“{name}”" if name else match.group(0)
 
         return _REF.sub(title, text)
 
+    @staticmethod
+    def _same_length(text: str) -> str:
+        """References in prose as "issue A": readable, and never longer than the original."""
+        return _REF.sub(lambda m: f"issue {m.group(1).upper()}", text)
+
     def _expand(self, value: Any, key: str | None = None) -> Any:
+        """Real ids in issue_ids fields; prose references in the short "issue A" form."""
         if isinstance(value, dict):
             return {k: self._expand(v, k) for k, v in value.items()}
         if isinstance(value, list):
@@ -77,9 +82,44 @@ class IssueRefs:
                 return [self.resolve(v) if isinstance(v, str) else v for v in value]
             return [self._expand(v) for v in value]
         if isinstance(value, str):
-            return self._readable(value)
+            return self._same_length(value)
         return value
 
+    def _prose_slots(self, value: Any, path: tuple[Any, ...] = ()) -> list[tuple[Any, ...]]:
+        """Paths of the text fields that mention a known reference."""
+        if isinstance(value, dict):
+            return [
+                p
+                for k, v in value.items()
+                if k != "issue_ids"
+                for p in self._prose_slots(v, (*path, k))
+            ]
+        if isinstance(value, list):
+            return [p for i, v in enumerate(value) for p in self._prose_slots(v, (*path, i))]
+        if isinstance(value, str) and any(
+            m.group(0).lower() in self._title_of for m in _REF.finditer(value)
+        ):
+            return [path]
+        return []
+
     def expand[M: BaseModel](self, output: M) -> M:
-        """The model's output with references turned back into real ids (and titles in prose)."""
-        return type(output).model_validate(self._expand(output.model_dump(mode="json")))
+        """The model's output with references turned back into real ids.
+
+        Each sentence that mentions an issue gets the issue's title when the text still fits
+        its length limit, and keeps the short "issue A" form otherwise, so expanding never
+        fails however close to a limit the model wrote.
+        """
+        original = output.model_dump(mode="json")
+        data = self._expand(original)
+        result = type(output).model_validate(data)
+        for path in self._prose_slots(original):
+            holder, source = data, original
+            for step in path[:-1]:
+                holder, source = holder[step], source[step]
+            short = holder[path[-1]]
+            holder[path[-1]] = self._with_titles(source[path[-1]])
+            try:
+                result = type(output).model_validate(data)
+            except ValidationError:
+                holder[path[-1]] = short
+        return result

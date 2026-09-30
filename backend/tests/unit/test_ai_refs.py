@@ -46,3 +46,24 @@ def test_references_run_past_z_without_digits() -> None:
     shown = refs.shorten([{"id": f"id-{n}", "rule_id": "r"} for n in range(30)])
     assert shown[25]["id"] == "issue-z" and shown[26]["id"] == "issue-aa"
     assert not any(ch.isdigit() for item in shown for ch in item["id"])
+
+
+def test_titles_never_push_text_past_its_limit() -> None:
+    from app.modules.ai.outputs import KeyFinding, ManagementSummaryOutput, PriorityAction
+
+    refs = IssueRefs()
+    long_title = "Pages are missing a meta description, so search engines pick their own text"
+    refs.shorten([{"id": A, "rule_id": "r", "title": long_title}])
+    near_limit = ("Fix issue-a on the admissions pages. " * 11)[:398]
+    summary = ManagementSummaryOutput(
+        headline="Health summary",
+        overview="The site needs a few metadata fixes.",
+        key_findings=[KeyFinding(statement=near_limit, issue_ids=["issue-a"])],
+        priorities=[PriorityAction(action="Fix issue-a", reason="See issue-a", issue_ids=[])],
+    )
+    expanded = refs.expand(summary)  # must not raise
+    assert expanded.key_findings[0].issue_ids == [A]
+    assert len(expanded.key_findings[0].statement) <= 400
+    assert "issue A" in expanded.key_findings[0].statement
+    # Short text still gets the readable title.
+    assert expanded.priorities[0].action == f"Fix “{long_title}”"
