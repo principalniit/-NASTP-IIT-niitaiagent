@@ -23,6 +23,7 @@ import app.models  # noqa: F401  (registers every model so foreign keys resolve)
 from app.core.config import get_settings
 from app.core.database import dispose_engine, get_session_factory
 from app.core.logging import configure_logging
+from app.core.schema import SchemaOutOfDateError, check_schema
 from app.modules.ai.agent import MAX_TOOL_CALLS
 from app.modules.ai.models import AIAnalysis, AIStatus
 from app.modules.ai.runner import run_analysis
@@ -316,7 +317,11 @@ def main() -> None:
             with contextlib.suppress(NotImplementedError):  # not supported on Windows
                 loop.add_signal_handler(sig, stop.set)
         try:
+            await check_schema()
             await run_worker(stop)
+        except SchemaOutOfDateError as exc:
+            logger.error(str(exc))
+            raise SystemExit(1) from exc
         finally:
             await dispose_engine()
 

@@ -58,13 +58,19 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     };
   }, [queryClient, reload]);
 
-  const signIn = useCallback(
-    async (email: string, password: string) => {
-      await apiLogin(email, password);
-      await reload();
-    },
-    [reload],
-  );
+  const signIn = useCallback(async (email: string, password: string) => {
+    await apiLogin(email, password);
+    try {
+      setMe(await api<Me>("/auth/me"));
+      setStatus("authenticated");
+    } catch (error) {
+      // The password was accepted but the account could not be loaded (for example the
+      // server's database needs upgrading). Report it instead of silently staying signed out.
+      setMe(null);
+      setStatus("anonymous");
+      throw error;
+    }
+  }, []);
 
   const signOut = useCallback(async () => {
     await apiLogout();

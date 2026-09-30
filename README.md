@@ -247,6 +247,7 @@ and crawl schedules. Tests never contact live NIIT infrastructure or a real AI m
 | An AI task failed with "claims not supported by the project data" | The model added numbers or claims that are not in the crawl evidence, so the result was discarded. Try again, or use a larger model |
 | "People who wrote or submitted this draft cannot approve it" | Intended: a second person with an approving role, who did not work on the draft, must review |
 | "This email already has an account. Ask a platform administrator…" | Intended: only platform administrators can add an existing account to an organisation (see `docs/SECURITY.md`) |
+| Sign-in does not get past the sign-in page after updating, or the API or worker stops with "The database schema is out of date" | Run `uv run alembic upgrade head` in `backend`, then restart the API and the worker. Run it after every `git pull` |
 | Production start fails with a `JWT_SECRET` or `COOKIE_SECURE` error | Intended safety check; set a strong secret and serve over HTTPS |
 
 ## Deployment

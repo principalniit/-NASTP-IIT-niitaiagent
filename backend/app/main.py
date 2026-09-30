@@ -1,5 +1,6 @@
 """FastAPI application factory."""
 
+import logging
 import re
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
@@ -13,12 +14,19 @@ from app.core.config import get_settings
 from app.core.database import dispose_engine
 from app.core.errors import register_error_handlers
 from app.core.logging import configure_logging, request_id_var
+from app.core.schema import SchemaOutOfDateError, check_schema
 
 _REQUEST_ID = re.compile(r"^[A-Za-z0-9-]{8,64}$")
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    try:
+        await check_schema()
+    except SchemaOutOfDateError as exc:
+        logging.getLogger(__name__).error(str(exc))
+        await dispose_engine()
+        raise
     yield
     await dispose_engine()
 
