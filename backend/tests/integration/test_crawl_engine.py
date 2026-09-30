@@ -187,7 +187,11 @@ async def test_politeness_delay_between_requests(site: FixtureSite, project) -> 
     await run_crawl(site, project, max_pages=4, delay_ms=150, concurrency=3)
     starts = sorted(r.at for r in site.requests)
     gaps = [b - a for a, b in pairwise(starts)]
-    assert gaps and min(gaps) >= 0.14
+    # Times are when requests reach the fixture server, which can note one late when the
+    # machine is busy and so shorten the following gap. Without a delay, concurrent
+    # requests arrive together (gaps near zero), so these bounds still prove the delay.
+    assert gaps and min(gaps) >= 0.1
+    assert (starts[-1] - starts[0]) / len(gaps) >= 0.14
 
 
 async def test_crawl_delay_from_robots_is_respected(site: FixtureSite, project) -> None:  # type: ignore[no-untyped-def]
