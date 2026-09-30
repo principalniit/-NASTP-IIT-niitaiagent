@@ -113,7 +113,7 @@ async def plan_summary(env: TaskEnv) -> TaskPlan:
         task=(
             "Write a short management summary of this website's SEO health for institutional "
             "leadership who are not SEO specialists. Explain the most important findings and the "
-            "recommended priorities in plain language, citing issue ids. Mention what changed since "
+            "recommended priorities in plain language, citing issue references. Mention what changed since "
             "the previous crawl only if a comparison is provided. List data limitations, including "
             "that the score is a site-health indicator and not a search ranking."
         ),
@@ -144,7 +144,7 @@ async def plan_issue(env: TaskEnv) -> TaskPlan:
         task=(
             "Explain this issue to a website editor in plain language: what was found, why it "
             "matters, the concrete steps to fix it on this site, and how to verify the fix (a new "
-            "crawl). Put the issue id in issue_ids."
+            "crawl). Put the issue reference in issue_ids."
         ),
         evidence=evidence,
         schema=IssueExplanationOutput,
@@ -184,7 +184,7 @@ async def plan_page(env: TaskEnv) -> TaskPlan:
     return TaskPlan(
         task=(
             "Suggest specific improvements for this page, based only on its open issues and the page "
-            "facts. Each improvement must name the area and cite the related issue ids."
+            "facts. Each improvement must name the area and cite the related issue references."
         ),
         evidence=evidence,
         schema=PagePlanOutput,

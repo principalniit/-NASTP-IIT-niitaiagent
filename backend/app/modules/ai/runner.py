@@ -14,6 +14,7 @@ from app.modules.ai.grounding import check_output
 from app.modules.ai.models import AIAnalysis, AIKind, AIStatus
 from app.modules.ai.prompts import PROMPT_VERSION, system_prompt, user_prompt
 from app.modules.ai.provider import AIError, build_provider, choose_provider
+from app.modules.ai.refs import IssueRefs
 from app.modules.ai.tasks import TASKS, TaskEnv, issue_ids_in
 from app.modules.ai.tools import ToolContext, ToolError
 from app.modules.organisations.models import Organisation
@@ -109,11 +110,16 @@ async def _execute(session: AsyncSession, analysis: AIAnalysis) -> None:
     analysis.evidence = plan.evidence
     analysis.crawl_job_id = plan.crawl_id or analysis.crawl_job_id
     known = issue_ids_in(plan.evidence)
+    refs = IssueRefs()  # the model sees short issue references, mapped back below
     messages = [
         {"role": "system", "content": system},
-        {"role": "user", "content": user_prompt(plan.task, plan.evidence, plan.schema)},
+        {
+            "role": "user",
+            "content": user_prompt(plan.task, refs.shorten(plan.evidence), plan.schema),
+        },
     ]
     output, attempts, raw = await provider.chat_structured(messages, plan.schema)
+    output = refs.expand(output)
     report = check_output(output, plan.evidence, known)
     if not report.passed:
         messages += [
@@ -123,11 +129,13 @@ async def _execute(session: AsyncSession, analysis: AIAnalysis) -> None:
                 "content": (
                     "Your reply is not grounded in the evidence: "
                     + "; ".join(report.violations)
-                    + ". Reply again using only facts, numbers and issue ids that appear in the evidence."
+                    + ". Reply again using only facts, numbers and issue references (such as "
+                    "issue-a) that appear in the evidence."
                 ),
             },
         ]
         output, more, raw = await provider.chat_structured(messages, plan.schema)
+        output = refs.expand(output)
         attempts += more
         report = check_output(output, plan.evidence, known)
     analysis.attempts = attempts

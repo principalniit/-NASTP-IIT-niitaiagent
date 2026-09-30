@@ -7,7 +7,7 @@ from pydantic import BaseModel
 
 from app.modules.organisations.schemas import OrganisationSettings
 
-PROMPT_VERSION = "2026-09.1"
+PROMPT_VERSION = "2026-09.2"
 
 RULES = """Rules you must follow:
 1. Use only facts contained in EVIDENCE. If the answer is not in the evidence, say that the
@@ -19,7 +19,9 @@ RULES = """Rules you must follow:
 5. Do not state or change official facts such as dates, fees, eligibility, admission
    requirements or institutional claims. Where content needs such a fact, write
    [verify: <what is needed>] instead.
-6. Refer to issues only by the ids given in the evidence, in the issue_ids fields.
+6. Issues in the evidence have short references such as issue-a. Put the references of the
+   issues you rely on in the issue_ids fields, copied exactly; in sentences, name issues by
+   their title. Never cite an issue that is not in the evidence.
 7. Reply with JSON only, matching the requested schema."""
 
 

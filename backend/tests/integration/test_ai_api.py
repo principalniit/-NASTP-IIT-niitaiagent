@@ -119,6 +119,9 @@ async def test_ai_tasks_produce_grounded_results_and_drafts(
     assert explained["status"] == "completed" and explained["subject_id"] == issue["id"]
     recs = (await client.get(f"/api/v1/projects/{pid}/recommendations", headers=h)).json()
     assert recs["total"] == 1 and recs["items"][0]["issue_ids"] == [issue["id"]]
+    # The model saw a short reference, not the long id it could mistype.
+    sent = ollama.requests[-1]["messages"][1]["content"]
+    assert '"issue-a"' in sent and issue["id"] not in sent
     accepted = await client.patch(
         f"/api/v1/recommendations/{recs['items'][0]['id']}", json={"status": "accepted"}, headers=h
     )

@@ -6,6 +6,7 @@ from typing import Any
 from app.modules.ai.grounding import GroundingReport, check_output
 from app.modules.ai.outputs import AgentAnswer, AgentStep
 from app.modules.ai.provider import Message
+from app.modules.ai.refs import IssueRefs
 from app.modules.ai.tasks import issue_ids_in
 from app.modules.ai.tools import (
     TOOLS,
@@ -47,6 +48,7 @@ async def answer_question(
         "project_summary": await get_project_summary(tools, NoArgs()),
         "tool_results": [],
     }
+    refs = IssueRefs()  # the model sees short issue references; evidence keeps real ids
     messages: list[Message] = [
         {"role": "system", "content": system},
         {
@@ -54,10 +56,10 @@ async def answer_question(
             "content": (
                 f"QUESTION: {question}\n\n"
                 f"TOOLS you may call, one at a time:\n{json.dumps(tool_catalogue())}\n\n"
-                f"EVIDENCE so far:\n{json.dumps(evidence, default=str)}\n\n"
+                f"EVIDENCE so far:\n{json.dumps(refs.shorten(evidence), default=str)}\n\n"
                 "Reply with JSON. To look something up, use action 'call_tool' with the tool name and "
                 "arguments. When the evidence is enough, or the data does not exist, use action "
-                "'answer'. Cite issue ids in issue_ids."
+                "'answer'. Put the references of issues you rely on (such as issue-a) in issue_ids."
             ),
         },
     ]
@@ -72,7 +74,7 @@ async def answer_question(
         if step.action == "call_tool" and not must_answer:
             name = step.tool or ""
             try:
-                result = await run_tool(tools, name, step.arguments)
+                result = await run_tool(tools, name, refs.expand_arguments(step.arguments))
             except ToolError as exc:
                 result = {"error": str(exc)}
             tools_used.append(name)
@@ -89,7 +91,9 @@ async def answer_question(
             messages.append(
                 {
                     "role": "user",
-                    "content": f"TOOL RESULT ({name}):\n{json.dumps(result, default=str)}",
+                    "content": (
+                        f"TOOL RESULT ({name}):\n{json.dumps(refs.shorten(result), default=str)}"
+                    ),
                 }
             )
             continue
@@ -101,10 +105,13 @@ async def answer_question(
                 }
             )
             continue
-        answer = AgentAnswer(
-            answer=step.answer or "The project data does not contain an answer to this question.",
-            issue_ids=step.issue_ids,
-            tools_used=tools_used,
+        answer = refs.expand(
+            AgentAnswer(
+                answer=step.answer
+                or "The project data does not contain an answer to this question.",
+                issue_ids=step.issue_ids,
+                tools_used=tools_used,
+            )
         )
         facts = _grounding_facts(evidence)
         report = check_output(
