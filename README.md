@@ -83,7 +83,12 @@ Other administrative commands:
 ```bash
 uv run python -m app.cli reset-password --email someone@niit.edu.pk   # also ends their sessions
 uv run python -m app.cli rotate-secrets   # after putting a new key first in INTEGRATIONS_ENCRYPTION_KEYS
+uv run python -m app.cli add-projects --org niit --owner-email you@niit.edu.pk --file sites.csv
 ```
+
+`add-projects` creates one project per line of `Name, https://address` (lines starting
+with `#` are ignored), with the same address checks, plan limits and audit entries as
+**New project** in the dashboard. Existing domains are skipped.
 
 On Windows PowerShell, use `Copy-Item .env.example .env` instead of `cp`.
 

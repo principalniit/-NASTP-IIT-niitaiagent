@@ -4,6 +4,7 @@
     uv run python -m app.cli seed-niit --owner-email you@example.org
     uv run python -m app.cli reset-password --email you@example.org
     uv run python -m app.cli rotate-secrets
+    uv run python -m app.cli add-projects --org niit --owner-email you@example.org --file sites.csv
 
 Passwords are read from the ADMIN_PASSWORD environment variable or prompted for; they are
 never accepted as command-line arguments, which would leak into shell history.
@@ -16,6 +17,7 @@ import os
 import sys
 import uuid
 from datetime import UTC, datetime
+from pathlib import Path
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -211,6 +213,69 @@ async def rotate_secrets() -> None:
         print(f"Re-encrypted {len(rows)} stored credentials with the newest key.")
 
 
+def read_sites(path: str) -> list[tuple[str, str]]:
+    """Lines of "Name, https://address". Blank lines and lines starting with # are skipped."""
+    sites = []
+    for number, line in enumerate(Path(path).read_text(encoding="utf-8-sig").splitlines(), 1):
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        name, sep, url = line.rpartition(",")
+        if not sep or not name.strip() or not url.strip():
+            sys.exit(f"Line {number}: expected 'Name, https://address', got: {line}")
+        sites.append((name.strip(), url.strip()))
+    return sites
+
+
+async def add_projects(org_slug: str, owner_email: str, path: str) -> None:
+    """Create a project per line, with the same checks and limits as the dashboard."""
+    from pydantic import ValidationError
+
+    from app.core.errors import AppError
+    from app.core.request_context import RequestMeta
+    from app.modules.organisations.dependencies import OrgAccess
+    from app.modules.projects import service as projects
+    from app.modules.projects.schemas import ProjectCreate
+
+    sites = read_sites(path)
+    meta = RequestMeta(ip=None, user_agent="app.cli add-projects")
+    created = 0
+    for name, url in sites:
+        # A fresh session per site: a duplicate rolls its session back, which must not
+        # affect the others.
+        async with get_session_factory()() as session:
+            org = await session.scalar(select(Organisation).where(Organisation.slug == org_slug))
+            if org is None:
+                sys.exit(f"No organisation with slug '{org_slug}'.")
+            user = await get_by_email(session, owner_email)
+            if user is None:
+                sys.exit(f"No user with email {owner_email}.")
+            member = await session.scalar(
+                select(OrganisationMember).where(
+                    OrganisationMember.organisation_id == org.id,
+                    OrganisationMember.user_id == user.id,
+                )
+            )
+            if member is None and not user.is_platform_admin:
+                sys.exit(f"{owner_email} is not a member of {org.name}.")
+            if member is not None and member.role not in (OrgRole.OWNER, OrgRole.ADMIN):
+                sys.exit(f"{owner_email} must be an owner or administrator of {org.name}.")
+            access = OrgAccess(user=user, organisation=org, role=member.role if member else None)
+            try:
+                project = await projects.create(
+                    session, access, ProjectCreate(name=name, root_url=url), meta
+                )
+            except ValidationError as exc:
+                print(f"Skipped {name}: {exc.errors()[0]['msg']}")
+                continue
+            except AppError as exc:
+                print(f"Skipped {name}: {exc.message}")
+                continue
+            created += 1
+            print(f"Created {project.name}: {project.root_url}")
+    print(f"{created} of {len(sites)} projects created.")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="app.cli")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -222,6 +287,10 @@ def main() -> None:
     p_reset = sub.add_parser("reset-password", help="Set a new password for an account")
     p_reset.add_argument("--email", required=True)
     sub.add_parser("rotate-secrets", help="Re-encrypt integration credentials with the newest key")
+    p_add = sub.add_parser("add-projects", help="Create projects from a 'Name, address' list")
+    p_add.add_argument("--org", required=True, help="Organisation slug, for example niit")
+    p_add.add_argument("--owner-email", required=True, help="Owner or admin recorded as creator")
+    p_add.add_argument("--file", required=True, help="Text file with one 'Name, address' per line")
     args = parser.parse_args()
 
     async def run() -> None:
@@ -232,6 +301,8 @@ def main() -> None:
                 await reset_password(args.email)
             elif args.command == "rotate-secrets":
                 await rotate_secrets()
+            elif args.command == "add-projects":
+                await add_projects(args.org, args.owner_email, args.file)
             else:
                 await seed_niit(args.owner_email)
         finally:
