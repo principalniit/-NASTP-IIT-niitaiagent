@@ -480,3 +480,19 @@ async def test_a_model_citing_references_in_prose_gets_titles_and_real_ids(
     assert cited and cited <= known  # real ids, including the one written in capitals
     assert "issue-" not in json.dumps(output).lower()  # prose shows titles, not references
     assert output["key_findings"][0]["statement"].startswith("“")
+
+
+async def test_summary_after_two_crawls_is_stored(
+    client: AsyncClient, site: FixtureSite, ollama: FakeOllama
+) -> None:
+    """With two analysed crawls the evidence includes the crawl comparison, whose dates
+    must be stored as plain JSON (this failed as an internal error before)."""
+    owner, org, project = await analysed(client, site)
+    await client.post(f"/api/v1/projects/{project['id']}/crawls", headers=owner.headers)
+    await process_next_job("w", engine_factory=engine_for(site))
+    assert await process_next_analysis()
+    await enable_ai(client, owner, org["id"])
+    result = await run(client, owner, project["id"], kind="management_summary")
+    assert result["status"] == "completed", result["error"]
+    comparison = result["evidence"]["comparison"]
+    assert isinstance(comparison["to_crawl"]["finished_at"], str)

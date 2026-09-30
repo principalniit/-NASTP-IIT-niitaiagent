@@ -5,6 +5,7 @@ import logging
 import time
 import uuid
 from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -25,6 +26,12 @@ from app.modules.projects.service import get_settings_row
 from app.modules.users.models import User
 
 logger = logging.getLogger(__name__)
+
+
+def json_safe(value: Any) -> Any:
+    """Evidence as plain JSON, so it can be stored. Tool results can hold datetimes (for
+    example the crawl comparison), which the database's JSON column cannot encode."""
+    return json.loads(json.dumps(value, default=str))
 
 
 def _fail(analysis: AIAnalysis, message: str) -> None:
@@ -86,7 +93,7 @@ async def _execute(session: AsyncSession, analysis: AIAnalysis) -> None:
         answer, evidence, report, attempts = await answer_question(
             provider, tools, system, str(analysis.params.get("question", ""))
         )
-        analysis.evidence, analysis.attempts = evidence, attempts
+        analysis.evidence, analysis.attempts = json_safe(evidence), attempts
         analysis.output = answer.model_dump(mode="json") if report.passed else None
         analysis.grounding = report.as_dict()
         if not report.passed:
@@ -107,7 +114,7 @@ async def _execute(session: AsyncSession, analysis: AIAnalysis) -> None:
         requester=requester,
     )
     plan = await plan_fn(env)
-    analysis.evidence = plan.evidence
+    analysis.evidence = json_safe(plan.evidence)
     analysis.crawl_job_id = plan.crawl_id or analysis.crawl_job_id
     known = issue_ids_in(plan.evidence)
     refs = IssueRefs()  # the model sees short issue references, mapped back below
