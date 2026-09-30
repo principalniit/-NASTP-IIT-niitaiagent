@@ -1,8 +1,11 @@
 """The AI layer through the API and the worker, with a local fake Ollama server."""
 
+import json
+import re
 import uuid
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import pytest
 from httpx import AsyncClient
@@ -429,3 +432,51 @@ async def test_worker_contains_crashes_and_recovers_stale_tasks(
         await client.get(f"/api/v1/ai-analyses/{stuck['id']}", headers=owner.headers)
     ).json()
     assert recovered["status"] == "failed" and "stopped unexpectedly" in recovered["error"]
+
+
+async def test_a_model_citing_references_in_prose_gets_titles_and_real_ids(
+    client: AsyncClient, site: FixtureSite, ollama: FakeOllama
+) -> None:
+    """How local models actually reply: short references in sentences and in issue_ids,
+    sometimes in capitals. The stored summary has real ids and readable titles."""
+
+    def reply(request: dict[str, Any]) -> dict[str, Any]:
+        refs = sorted(set(re.findall(r"issue-[a-z]+", request["messages"][1]["content"])))[:3]
+        return {
+            "headline": "The site has several metadata and heading gaps",
+            "overview": f"Most pages load, but {refs[0]} and {refs[1]} affect many pages.",
+            "key_findings": [
+                {"statement": f"{r} needs attention across the site.", "issue_ids": [r]}
+                for r in refs
+            ],
+            "priorities": [
+                {
+                    "action": f"Fix {refs[0]}",
+                    "reason": f"{refs[0]} has the highest priority.",
+                    "issue_ids": [refs[0].upper()],
+                }
+            ],
+            "data_limitations": ["Only one crawl has been analysed."],
+        }
+
+    owner, org, project = await analysed(client, site)
+    await enable_ai(client, owner, org["id"])
+    ollama.script(reply)
+    result = await run(client, owner, project["id"], kind="management_summary")
+    assert result["status"] == "completed", result["error"]
+    output = result["output"]
+    known = {
+        i["id"]
+        for i in (
+            await client.get(
+                f"/api/v1/projects/{project['id']}/issues",
+                params={"page_size": 100},
+                headers=owner.headers,
+            )
+        ).json()["items"]
+    }
+    cited = {i for f in output["key_findings"] for i in f["issue_ids"]}
+    cited |= set(output["priorities"][0]["issue_ids"])
+    assert cited and cited <= known  # real ids, including the one written in capitals
+    assert "issue-" not in json.dumps(output).lower()  # prose shows titles, not references
+    assert output["key_findings"][0]["statement"].startswith("“")
