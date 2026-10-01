@@ -662,6 +662,22 @@ Step 1 delivered:
 First run on the owner's laptop (NIIT website, qwen2.5:7b): 10 of 10 cases passed,
 all completed and grounded, median 1.7 s per case, average prompt 3,083 tokens.
 
+Reading the saved answers showed that score was wrong. All eight questions had received
+the same reply, "The project data does not contain an answer to this question". The
+model had chosen to answer but left the answer text empty, and the agent filled in that
+stock sentence. The checks were fooled twice:
+- the cited issues satisfied "cites the top issues";
+- the stock sentence satisfied "admits missing data".
+
+Fixed:
+- `answer` is required in the schema Ollama must follow.
+- An answer step without text fails validation, so it goes back to the model with the
+  error. A second empty reply fails the task honestly.
+- No stock answer is ever substituted.
+- The test set gained an `answers` check: questions the data always answers fail on a bare
+  "no answer" reply.
+- `PROMPT_VERSION` is now 2026-10.1.
+
 On the owner's laptop (RTX 4060, 8 GB), Ollama was also set up with flash attention, a
 q8_0 KV cache and a 30-minute keep-alive, and confirmed at 100% GPU.
 
@@ -671,7 +687,7 @@ check separately rejects any number that is not in the data.
 
 | Suite | Result |
 |-------|--------|
-| Backend (ruff, mypy, pytest with new provider, metrics, report and evaluation tests) | 367 passed |
+| Backend (ruff, mypy, pytest with new provider, metrics, report and evaluation tests) | 368 passed |
 | Frontend lint, types | Clean |
 | End-to-end (Playwright), now checking the run details line | 18 passed |
 

@@ -532,3 +532,28 @@ async def test_way_forward_questions_are_answered_from_top_issues(
     ).json()["items"][0]
     assert result["output"]["issue_ids"] == [top["id"]]  # the highest-priority issue
     assert result["output"]["answer"] == f"Start with “{top['title']}”."
+
+
+async def test_an_answer_without_text_is_asked_for_again_never_filled_in(
+    client: AsyncClient, site: FixtureSite, ollama: FakeOllama
+) -> None:
+    owner, org, project = await analysed(client, site)
+    await enable_ai(client, owner, org["id"])
+    # Small models sometimes end with "answer" and no text. That used to be replaced by
+    # "The project data does not contain an answer", which looked like a real reply.
+    ollama.script(
+        {"action": "answer", "issue_ids": []},
+        {"action": "answer", "answer": "Fix the missing titles first: they affect most pages."},
+    )
+    fixed = await run(client, owner, project["id"], kind="question", question="Where to start?")
+    assert fixed["status"] == "completed", fixed["error"]
+    assert fixed["output"]["answer"].startswith("Fix the missing titles")
+    assert fixed["attempts"] == 2
+    request = ollama.requests[-2]
+    assert "answer" in request["format"]["required"], "Ollama must always write the answer field"
+    assert "must contain the full answer text" in ollama.requests[-1]["messages"][-1]["content"]
+
+    ollama.script({"action": "answer"}, {"action": "answer", "answer": " "})
+    empty = await run(client, owner, project["id"], kind="question", question="Where to start?")
+    assert empty["status"] == "failed" and empty["output"] is None
+    assert "not valid after 2 attempts" in empty["error"]

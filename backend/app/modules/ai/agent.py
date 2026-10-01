@@ -67,8 +67,10 @@ async def answer_question(
                 f"TOOLS you may call, one at a time:\n{json.dumps(tool_catalogue())}\n\n"
                 f"EVIDENCE so far:\n{json.dumps(refs.shorten(evidence), default=str)}\n\n"
                 "Reply with JSON. To look something up, use action 'call_tool' with the tool name and "
-                "arguments. When the evidence is enough, use action 'answer'. Put the references of "
-                "issues you rely on (such as issue-a) in issue_ids.\n"
+                "arguments, and leave 'answer' empty. When the evidence is enough, use action "
+                "'answer' and write the complete answer for the person in 'answer', in full "
+                "sentences. Put the references of issues you rely on (such as issue-a) in "
+                "issue_ids.\n"
                 "For questions about priorities, next steps, where to start or the way forward, "
                 "answer from top_open_issues (already ordered by priority) and the scores: name the "
                 "most important issues by title, say briefly why each matters and what to do, and "
@@ -121,8 +123,9 @@ async def answer_question(
             continue
         answer = refs.expand(
             AgentAnswer(
-                answer=step.answer
-                or "The project data does not contain an answer to this question.",
+                # AgentStep guarantees text here: an empty answer is sent back to the model
+                # with the error instead of being replaced by a stock sentence.
+                answer=step.answer,
                 issue_ids=step.issue_ids,
                 tools_used=tools_used,
             )

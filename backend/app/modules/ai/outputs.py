@@ -2,7 +2,7 @@
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 Text = str
 
@@ -73,12 +73,31 @@ class ContentOutlineOutput(_Out):
     questions_for_editor: list[str] = Field(default_factory=list, max_length=6)
 
 
+def _answer_always_written(schema: dict[str, Any]) -> None:
+    # Listed as required so Ollama's constrained output always writes the field. Small
+    # models otherwise end with {"action": "answer"} and no text at all.
+    required = schema.setdefault("required", [])
+    if "answer" not in required:
+        required.append("answer")
+
+
 class AgentStep(_Out):
+    model_config = ConfigDict(json_schema_extra=_answer_always_written)
+
     action: Literal["call_tool", "answer"]
     tool: str | None = Field(default=None, max_length=50)
     arguments: dict[str, Any] = Field(default_factory=dict)
-    answer: str | None = Field(default=None, max_length=2000)
+    # Empty while calling a tool; the full answer when action is "answer".
+    answer: str = Field(default="", max_length=2000)
     issue_ids: list[str] = Field(default_factory=list, max_length=10)
+
+    @model_validator(mode="after")
+    def _answer_has_text(self) -> "AgentStep":
+        if self.action == "answer" and len(self.answer.strip()) < 3:
+            raise ValueError(
+                "an answer step must contain the full answer text in 'answer'; it was empty"
+            )
+        return self
 
 
 class AgentAnswer(_Out):

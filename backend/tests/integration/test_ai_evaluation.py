@@ -60,6 +60,15 @@ def test_bad_cases_are_refused(tmp_path: Path) -> None:
         EvalCase.model_validate(
             {"name": "x", "kind": "management_summary", "expect": {"made_up": True}}
         )
+    with pytest.raises(ValidationError, match="contradict"):
+        EvalCase.model_validate(
+            {
+                "name": "x",
+                "kind": "question",
+                "question": "Visitors?",
+                "expect": {"answers": True, "admits_missing_data": True},
+            }
+        )
     twice = tmp_path / "cases.json"
     twice.write_text(json.dumps([{"name": "a", "kind": "management_summary"}] * 2))
     with pytest.raises(ValueError, match="unique name"):
@@ -102,6 +111,26 @@ async def test_cases_are_scored_and_leave_nothing_behind(
     ollama.script({"action": "answer", "answer": "The platform does not have traffic data."})
     honest = await run_case(factory, pid, traffic)
     assert honest.passed, honest.problems
+
+    # A bare "no answer" fails where the project data does have one.
+    ollama.script(
+        {
+            "action": "answer",
+            "answer": "The project data does not contain an answer to this question.",
+        }
+    )
+    refusal = await run_case(
+        factory,
+        pid,
+        EvalCase(name="f", kind="question", question="What first?", expect={"answers": True}),
+    )
+    assert refusal.problems == ["Says the data has no answer, although the project data has one"]
+    real = await run_case(
+        factory,
+        pid,
+        EvalCase(name="f", kind="question", question="What first?", expect={"answers": True}),
+    )
+    assert real.passed, real.problems
 
     # A rule the site has no open issue for is skipped, not failed.
     rules = EvalCase(

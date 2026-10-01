@@ -49,6 +49,16 @@ _MISSING_DATA = re.compile(
     re.I,
 )
 
+# A reply that only says there is no answer. Checked on short answers only, so an answer
+# that mentions a gap in passing still counts as an answer.
+_REFUSAL = re.compile(
+    r"(does not|doesn't) contain (an|any) answer|(has|have|is) no answer|"
+    r"not available in the (project )?data|information is not available|"
+    r"cannot (answer|tell)|no (relevant )?data (is )?available",
+    re.I,
+)
+REFUSAL_MAX_CHARS = 200
+
 
 # ---------------------------------------------------------------------------------------
 # Report on past tasks
@@ -156,6 +166,15 @@ class Expect(BaseModel):
     cites_rules: list[str] = Field(default_factory=list, max_length=20)
     # Says the platform has no data for this, instead of answering with invented figures.
     admits_missing_data: bool = False
+    # Gives a real answer, not only "the data has no answer". For questions the project
+    # data always answers, such as priorities.
+    answers: bool = False
+
+    @model_validator(mode="after")
+    def _not_both(self) -> "Expect":
+        if self.answers and self.admits_missing_data:
+            raise ValueError("'answers' and 'admits_missing_data' contradict each other")
+        return self
 
 
 class EvalCase(BaseModel):
@@ -284,6 +303,11 @@ def _score(
             skipped.append("cites_rules: the project has no open issue for these rules")
         elif not cited & rule_ids:
             problems.append("Cites no issue for the rules " + ", ".join(case.expect.cites_rules))
+    if case.expect.answers:
+        texts = _texts(analysis.output)
+        main = texts[0].strip() if texts else ""
+        if len(main) <= REFUSAL_MAX_CHARS and (not main or _REFUSAL.search(main)):
+            problems.append("Says the data has no answer, although the project data has one")
     if case.expect.admits_missing_data and not any(
         _MISSING_DATA.search(t) for t in _texts(analysis.output)
     ):

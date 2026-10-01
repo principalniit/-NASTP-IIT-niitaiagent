@@ -7,7 +7,7 @@ from pydantic import BaseModel
 
 from app.modules.organisations.schemas import OrganisationSettings
 
-PROMPT_VERSION = "2026-09.2"
+PROMPT_VERSION = "2026-10.1"
 
 RULES = """Rules you must follow:
 1. Use only facts contained in EVIDENCE. If the answer is not in the evidence, say that the
