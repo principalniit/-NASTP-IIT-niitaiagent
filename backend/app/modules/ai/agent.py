@@ -140,11 +140,7 @@ async def answer_question(
         messages.append(
             {
                 "role": "user",
-                "content": (
-                    "Your answer was not grounded in the evidence: "
-                    + "; ".join(report.violations)
-                    + ". Answer again using only facts and numbers present in the evidence."
-                ),
+                "content": report.retry_instruction() + " Answer the question again.",
             }
         )
     raise ToolError("The assistant did not reach an answer within the allowed number of steps.")

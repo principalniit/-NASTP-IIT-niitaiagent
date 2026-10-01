@@ -154,6 +154,7 @@ async def test_cases_are_scored_and_leave_nothing_behind(
         model="other-model",
     )
     assert not invented.passed and not invented.grounded
+    assert "Uses numbers that are not in the project data: 51234" in invented.problems
     assert ollama.requests[-1]["model"] == "other-model"
 
     assert await _count(AIAnalysis) == 0, "an evaluation must not store tasks"

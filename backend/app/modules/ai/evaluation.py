@@ -292,7 +292,9 @@ def _score(
 ) -> tuple[list[str], list[str]]:
     """(problems, skipped checks) for a finished task."""
     if analysis.status != AIStatus.COMPLETED:
-        return [analysis.error or "The task did not complete"], []
+        # The grounding check's own findings say what to fix; the error alone does not.
+        violations = (analysis.grounding or {}).get("violations") or []
+        return [analysis.error or "The task did not complete", *violations], []
     problems: list[str] = []
     skipped: list[str] = []
     cited = _cited(analysis.output)

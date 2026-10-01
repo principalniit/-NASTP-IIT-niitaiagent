@@ -10,9 +10,17 @@ references never add numbers that the grounding check would treat as facts.
 import re
 from typing import Any
 
+from annotated_types import MaxLen
 from pydantic import BaseModel, ValidationError
 
 _REF = re.compile(r"\bissue-([a-z]{1,3})\b", re.I)
+# A bracket holding only references, such as "(issue-a, issue-b and issue-c)". The issues
+# are cited in issue_ids instead; spelling each out in the sentence repeats titles.
+_REF_GROUP = re.compile(
+    r"\s*[(\[]\s*(?:(?:and|or|see|&)\s+)?issue-[a-z]{1,3}"
+    r"(?:\s*(?:,|;|and|or|&)\s*(?:and\s+)?issue-[a-z]{1,3})*\s*[)\]]",
+    re.I,
+)
 
 
 def _letters(index: int) -> str:
@@ -22,6 +30,16 @@ def _letters(index: int) -> str:
         index, rest = divmod(index - 1, 26)
         text = chr(97 + rest) + text
     return text
+
+
+def _max_items(model: type[BaseModel], name: str) -> int | None:
+    field = model.model_fields.get(name)
+    if field is None:
+        return None
+    for rule in field.metadata:
+        if isinstance(rule, MaxLen):
+            return int(rule.max_length)
+    return None
 
 
 class IssueRefs:
@@ -66,12 +84,39 @@ class IssueRefs:
             name = self._title_of.get(match.group(0).lower())
             return f"“{name}”" if name else match.group(0)
 
-        return _REF.sub(title, text)
+        return _REF.sub(title, _REF_GROUP.sub("", text))
 
     @staticmethod
     def _same_length(text: str) -> str:
         """References in prose as "issue A": readable, and never longer than the original."""
-        return _REF.sub(lambda m: f"issue {m.group(1).upper()}", text)
+        return _REF.sub(lambda m: f"issue {m.group(1).upper()}", _REF_GROUP.sub("", text))
+
+    def _mentioned(self, value: Any, key: str | None = None) -> list[str]:
+        """Real ids of known issues the model referred to in its text, in order."""
+        if isinstance(value, dict):
+            return [i for k, v in value.items() for i in self._mentioned(v, k)]
+        if isinstance(value, list):
+            return [] if key == "issue_ids" else [i for v in value for i in self._mentioned(v)]
+        if isinstance(value, str):
+            return [
+                self._id_of[m.group(0).lower()]
+                for m in _REF.finditer(value)
+                if m.group(0).lower() in self._id_of
+            ]
+        return []
+
+    @staticmethod
+    def _cite(data: dict[str, Any], ids: list[str], limit: int | None) -> None:
+        """Add issues named in the text to the top-level citations, which small models
+        often leave out even when the text relies on them."""
+        cited = data.get("issue_ids")
+        if not isinstance(cited, list):
+            return
+        for issue_id in ids:
+            if limit is not None and len(cited) >= limit:
+                break
+            if issue_id not in cited:
+                cited.append(issue_id)
 
     def _expand(self, value: Any, key: str | None = None) -> Any:
         """Real ids in issue_ids fields; prose references in the short "issue A" form."""
@@ -111,6 +156,7 @@ class IssueRefs:
         """
         original = output.model_dump(mode="json")
         data = self._expand(original)
+        self._cite(data, self._mentioned(original), _max_items(type(output), "issue_ids"))
         result = type(output).model_validate(data)
         for path in self._prose_slots(original):
             holder, source = data, original

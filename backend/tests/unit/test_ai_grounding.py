@@ -2,6 +2,7 @@
 
 from app.modules.ai.grounding import check_output, numbers_in, terminology_warnings
 from app.modules.ai.outputs import (
+    AgentAnswer,
     ContentOutlineOutput,
     IssueExplanationOutput,
     ManagementSummaryOutput,
@@ -123,3 +124,24 @@ def test_outline_marks_facts_to_verify() -> None:
     assert "- [verify: application deadline]" in text
     assert "- [verify: required documents]" in text
     assert text.endswith("- Who approves the deadline?")
+
+
+def test_list_numbering_is_not_a_fact() -> None:
+    evidence = {"pages": 110}
+    numbered = AgentAnswer(answer="Next steps:\n1. Add titles.\n2. Fix canonicals.\n3) Recrawl.")
+    assert check_output(numbered, evidence, set()).passed
+    counted = AgentAnswer(answer="Fix the 7 pages without titles.")
+    report = check_output(counted, evidence, set())
+    assert not report.passed and report.numbers == ["7"]
+
+
+def test_retry_instruction_names_what_to_change() -> None:
+    report = check_output(
+        AgentAnswer(answer="You will rank #1 with 12 changes.", issue_ids=["issue-q"]),
+        {"pages": 110},
+        set(),
+    )
+    instruction = report.retry_instruction()
+    assert "12" in instruction and "Do not count" in instruction
+    assert "issue-q" in instruction
+    assert "states a ranking position" in instruction

@@ -159,12 +159,7 @@ async def _run_task(
             {"role": "assistant", "content": raw[:6000]},
             {
                 "role": "user",
-                "content": (
-                    "Your reply is not grounded in the evidence: "
-                    + "; ".join(report.violations)
-                    + ". Reply again using only facts, numbers and issue references (such as "
-                    "issue-a) that appear in the evidence."
-                ),
+                "content": report.retry_instruction() + " Reply again with the corrected JSON.",
             },
         ]
         output, more, raw = await provider.chat_structured(messages, plan.schema)

@@ -67,3 +67,34 @@ def test_titles_never_push_text_past_its_limit() -> None:
     assert "issue A" in expanded.key_findings[0].statement
     # Short text still gets the readable title.
     assert expanded.priorities[0].action == f"Fix “{long_title}”"
+
+
+def test_issues_named_in_the_text_are_cited() -> None:
+    refs = IssueRefs()
+    refs.shorten(
+        [
+            {"id": A, "rule_id": "title_missing", "title": "Page has no title"},
+            {"id": B, "rule_id": "canonical", "title": "Canonical points elsewhere"},
+        ]
+    )
+    # The model named issues only in its text, inside a bracket of references.
+    answer = refs.expand(
+        AgentAnswer(
+            answer="Start with the pages without titles (issue-a, issue-b and issue-a), "
+            "then fix issue-b.",
+            issue_ids=[],
+        )
+    )
+    assert answer.issue_ids == [A, B]
+    assert answer.answer == (
+        "Start with the pages without titles, then fix “Canonical points elsewhere”."
+    )
+
+
+def test_citations_from_the_text_respect_the_limit() -> None:
+    refs = IssueRefs()
+    issues = [{"id": f"00000000-0000-0000-0000-{n:012d}", "rule_id": "r"} for n in range(12)]
+    shown = refs.shorten(issues)
+    text = " ".join(i["id"] for i in shown)
+    answer = refs.expand(AgentAnswer(answer=text, issue_ids=[]))
+    assert len(answer.issue_ids) == 10  # AgentAnswer allows at most 10

@@ -678,6 +678,22 @@ Fixed:
   "no answer" reply.
 - `PROMPT_VERSION` is now 2026-10.1.
 
+After that fix, the real baseline was 5 of 10, at a median of 9.6 s per case:
+- "What to fix first" gave a good answer, but named the issues only in its text.
+- Four answers were rejected by the grounding check, and the evaluation did not show
+  which violations.
+
+Changes:
+- Issues the model names in its text are added to the cited issues (up to each output's
+  limit).
+- Brackets that only list references are dropped from the text, which removes repeated
+  titles.
+- List numbering ("1.", "2)") is no longer treated as a number to check.
+- Retries tell the model exactly what to change: the unsupported numbers ("do not count
+  or calculate"), unknown references, or the claim to remove.
+- The evaluation lists the grounding violations for every rejected case.
+- `PROMPT_VERSION` is now 2026-10.2.
+
 On the owner's laptop (RTX 4060, 8 GB), Ollama was also set up with flash attention, a
 q8_0 KV cache and a 30-minute keep-alive, and confirmed at 100% GPU.
 
@@ -687,7 +703,7 @@ check separately rejects any number that is not in the data.
 
 | Suite | Result |
 |-------|--------|
-| Backend (ruff, mypy, pytest with new provider, metrics, report and evaluation tests) | 368 passed |
+| Backend (ruff, mypy, pytest with new provider, metrics, report and evaluation tests) | 372 passed |
 | Frontend lint, types | Clean |
 | End-to-end (Playwright), now checking the run details line | 18 passed |
 
