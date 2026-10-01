@@ -361,6 +361,8 @@ async def ai_eval(
             print(f"      - {problem}")
         for skipped in result.skipped_checks:
             print(f"      ~ skipped {skipped}")
+        if result.preview:
+            print(f"      > {result.preview}")
     totals = summary(results)
     print(
         f"\nPassed {totals['passed']} of {totals['cases']}; completed {totals['completed']}, "
@@ -376,7 +378,7 @@ async def ai_eval(
             "run_at": datetime.now(UTC).isoformat(),
         }
         await asyncio.to_thread(Path(out).write_text, as_json(results, meta), encoding="utf-8")
-        print(f"Results saved to {out}")
+        print(f"Results, including every answer in full, saved to {out}")
 
 
 def main() -> None:

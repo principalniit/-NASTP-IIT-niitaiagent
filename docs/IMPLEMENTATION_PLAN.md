@@ -655,7 +655,12 @@ Step 1 delivered:
 - **`ai-eval`.** Runs a starter test set of 10 cases (management summary, top issue
   explanation, eight questions including two the platform has no data for) like real
   tasks, without saving anything, and scores each one. `--model` compares models and
-  `--out` saves the results to compare runs.
+  `--out` saves the results, including every answer in full and the titles of the issues
+  it cites, so people can judge quality and compare runs. Each case also prints a short
+  preview of its answer.
+
+First run on the owner's laptop (NIIT website, qwen2.5:7b): 10 of 10 cases passed,
+all completed and grounded, median 1.7 s per case, average prompt 3,083 tokens.
 
 On the owner's laptop (RTX 4060, 8 GB), Ollama was also set up with flash attention, a
 q8_0 KV cache and a 30-minute keep-alive, and confirmed at 100% GPU.
@@ -675,5 +680,6 @@ Known limitations:
 | Limitation | Plan |
 |------------|------|
 | The starter cases are generic; project-specific expectations need a custom cases file | Add NIIT cases once the baseline is known |
+| Automatic checks cover structure (completed, grounded, right issues cited, missing data admitted), not how useful the wording is | People read the saved answers; feedback buttons come in step 3 |
 | Evaluation runs one case at a time on one model | Enough for a single GPU |
 | Run details are not yet shown as a dashboard chart | `ai-report` covers it for now |

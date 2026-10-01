@@ -82,6 +82,9 @@ async def test_cases_are_scored_and_leave_nothing_behind(
     )
     assert summary.passed and summary.completed and summary.grounded, summary.problems
     assert summary.attempts == 1 and summary.prompt_tokens and not summary.cold_start
+    # The answer is kept for people to read, with cited issues by title.
+    assert summary.output and summary.output["headline"] and summary.preview
+    assert summary.cited_issues and all("(" in t for t in summary.cited_issues)
 
     explained = await run_case(factory, pid, EvalCase(name="e", kind="issue_explanation"))
     assert explained.passed, explained.problems
@@ -146,6 +149,8 @@ async def test_eval_command_prints_and_saves_results(
     assert saved["project"] == project["name"] and saved["prompt_version"]
     assert saved["summary"]["cases"] == len(load_cases())
     assert saved["summary"]["completed"] == saved["summary"]["cases"]
+    assert all(r["output"] for r in saved["results"])
+    assert "      > " in printed  # an answer preview per case
     assert await _count(AIAnalysis) == 0
 
     with pytest.raises(SystemExit, match="No single project"):

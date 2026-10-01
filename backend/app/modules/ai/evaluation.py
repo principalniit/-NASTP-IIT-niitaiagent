@@ -196,6 +196,16 @@ class CaseResult:
     cold_start: bool
     problems: list[str] = field(default_factory=list)
     skipped_checks: list[str] = field(default_factory=list)
+    # The answer itself, so people can judge its quality, and the titles of the issues it
+    # cites in place of their ids.
+    output: dict[str, Any] | None = None
+    cited_issues: list[str] = field(default_factory=list)
+
+    @property
+    def preview(self) -> str:
+        texts = _texts(self.output)
+        text = " ".join(texts[0].split()) if texts else ""
+        return text if len(text) <= 200 else text[:197] + "..."
 
 
 def _cited(output: Any) -> set[str]:
@@ -219,6 +229,27 @@ def _texts(output: Any) -> list[str]:
     if isinstance(output, list):
         return [t for v in output for t in _texts(v)]
     return [output] if isinstance(output, str) else []
+
+
+async def _titles(session: AsyncSession, project: Project, ids: set[str]) -> list[str]:
+    valid = []
+    for value in ids:
+        try:
+            valid.append(uuid.UUID(value))
+        except ValueError:
+            continue
+    if not valid:
+        return []
+    rows = await session.execute(
+        select(SeoIssue.title, SeoIssue.rule_id)
+        .where(
+            SeoIssue.id.in_(valid),
+            SeoIssue.project_id == project.id,
+            SeoIssue.organisation_id == project.organisation_id,
+        )
+        .order_by(SeoIssue.priority_score.desc())
+    )
+    return [f"{title} ({rule})" for title, rule in rows.all()]
 
 
 async def _issues_matching(
@@ -321,6 +352,8 @@ async def run_case(
             cold_start=metrics.get("load_ms", 0) > LOAD_THRESHOLD_MS,
             problems=problems,
             skipped_checks=skipped,
+            output=analysis.output,
+            cited_issues=await _titles(session, project, _cited(analysis.output)),
         )
         # Nothing the evaluation did is kept.
         await session.rollback()
