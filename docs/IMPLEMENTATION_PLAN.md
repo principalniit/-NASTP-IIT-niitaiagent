@@ -694,6 +694,15 @@ Changes:
 - The evaluation lists the grounding violations for every rejected case.
 - `PROMPT_VERSION` is now 2026-10.2.
 
+With those changes: 9 of 10 passed, all 10 completed and grounded, median 9.8 s per
+case. The remaining failure was the checker's fault. The honest reply "The data does not
+provide information on which competitors rank above…" was not recognised as admitting
+missing data, so the check now accepts more phrasings.
+
+A quality note no check catches yet: "Are there any broken links?" was answered with the
+top issues (canonical problems), not with broken-link findings. Topic questions should
+get the matching issues fetched before the model answers (step 3).
+
 On the owner's laptop (RTX 4060, 8 GB), Ollama was also set up with flash attention, a
 q8_0 KV cache and a 30-minute keep-alive, and confirmed at 100% GPU.
 

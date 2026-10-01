@@ -43,9 +43,10 @@ TOP_ISSUES = 5
 # check only confirms the answer admits the gap instead of inventing figures, and the
 # grounding check separately rejects numbers that are not in the data.
 _MISSING_DATA = re.compile(
-    r"\b(not available|unavailable|no data|does not (have|include|contain)|"
-    r"do(es)? not track|doesn't (have|include|contain)|not (tracked|measured|collected)|"
-    r"no information|cannot (tell|answer|say|determine)|not part of)\b",
+    r"\b(not available|unavailable|no data|"
+    r"(does not|doesn't|do not|don't) (have|include|contain|provide|cover|hold|record)|"
+    r"do(es)? not track|not (tracked|measured|collected|provided|included|recorded)|"
+    r"no information|isn't available|cannot (tell|answer|say|determine)|not part of)\b",
     re.I,
 )
 

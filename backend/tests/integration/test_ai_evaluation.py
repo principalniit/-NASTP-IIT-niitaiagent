@@ -227,3 +227,17 @@ async def test_report_counts_tasks_and_groups_failure_reasons(
     await ai_report(org["slug"], 1)
     with pytest.raises(SystemExit, match="No organisation"):
         await ai_report("missing", 30)
+
+
+def test_honest_replies_about_missing_data_are_recognised() -> None:
+    from app.modules.ai.evaluation import _MISSING_DATA
+
+    for honest in (
+        "The data does not provide information on which competitors rank above us.",
+        "Visitor numbers are not available in the project data.",
+        "This platform doesn't record traffic.",
+        "Rankings are not tracked by this platform.",
+        "There is no information about competitors.",
+    ):
+        assert _MISSING_DATA.search(honest), honest
+    assert not _MISSING_DATA.search("Fix the missing titles on the faculty pages first.")
