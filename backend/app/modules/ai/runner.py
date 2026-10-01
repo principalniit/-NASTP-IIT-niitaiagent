@@ -24,6 +24,7 @@ from app.modules.organisations.schemas import OrganisationSettings
 from app.modules.projects.models import Project
 from app.modules.projects.schemas import ProjectSettingsData
 from app.modules.projects.service import get_settings_row
+from app.modules.seo.service import latest_analysed_crawl
 from app.modules.users.models import User
 from app.providers.interfaces import AIProvider
 
@@ -116,6 +117,8 @@ async def _run_task(
     )
 
     if analysis.kind == AIKind.QUESTION:
+        if await latest_analysed_crawl(session, project.id, project.organisation_id) is None:
+            raise AIError("Crawl and analyse this project before asking questions about it.")
         answer, evidence, report, attempts = await answer_question(
             provider, tools, system, str(analysis.params.get("question", ""))
         )

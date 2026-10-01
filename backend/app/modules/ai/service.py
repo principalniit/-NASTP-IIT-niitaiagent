@@ -82,7 +82,9 @@ async def request_analysis(
     subject_type, subject_id = "project", None
     params: dict[str, str] = {}
     crawl = await latest_analysed_crawl(session, project.id, org.id)
-    if body.kind != AIKind.QUESTION and crawl is None:
+    # Questions too: without an analysed crawl the model sees no issues and reports a
+    # healthy site, when in fact nothing has been checked yet.
+    if crawl is None:
         raise ConflictError(
             "Crawl and analyse this project before using the AI assistant", code="not_analysed"
         )

@@ -348,6 +348,16 @@ async def ai_eval(
         names = ", ".join(sorted(p.name for p in projects))
         sys.exit(f"No single project called '{project_ref}' in {org.name}. Projects: {names}")
     project = matches[0]
+    from app.modules.seo.service import latest_analysed_crawl
+
+    async with factory() as session:
+        crawl = await latest_analysed_crawl(session, project.id, org.id)
+    if crawl is None:
+        sys.exit(
+            f"{project.name} has not been crawled and analysed yet, so there is nothing to "
+            "test the AI on. Start a crawl from the dashboard, wait for the analysis to "
+            "finish, then run ai-eval again."
+        )
     print(f"Evaluating {len(cases)} cases on {project.name} ({project.domain})")
     print("Each case runs like a real AI task; nothing is saved.\n")
     results = []

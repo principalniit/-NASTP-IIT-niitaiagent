@@ -703,6 +703,14 @@ A quality note no check catches yet: "Are there any broken links?" was answered 
 top issues (canonical problems), not with broken-link findings. Topic questions should
 get the matching issues fetched before the model answers (step 3).
 
+The Admissions portal, which had never been crawled, exposed a platform gap. Questions
+were allowed without an analysed crawl, so the model saw no issues and answered "the site
+is in a healthy state" and "there are no broken links", when nothing had been checked.
+Questions now need an analysed crawl like every other AI task: the API returns 409
+`not_analysed`, and the runner refuses queued questions too. `ai-eval` stops with a clear
+message on a project that was never analysed. The `ai-report` failures at the time were
+from before the run-details and date fixes (internal errors, no metrics).
+
 On the owner's laptop (RTX 4060, 8 GB), Ollama was also set up with flash attention, a
 q8_0 KV cache and a 30-minute keep-alive, and confirmed at 100% GPU.
 
@@ -712,7 +720,7 @@ check separately rejects any number that is not in the data.
 
 | Suite | Result |
 |-------|--------|
-| Backend (ruff, mypy, pytest with new provider, metrics, report and evaluation tests) | 372 passed |
+| Backend (ruff, mypy, pytest with new provider, metrics, report and evaluation tests) | 374 passed |
 | Frontend lint, types | Clean |
 | End-to-end (Playwright), now checking the run details line | 18 passed |
 

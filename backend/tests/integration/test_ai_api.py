@@ -305,12 +305,13 @@ async def test_ai_needs_an_analysed_crawl(
 ) -> None:
     owner, org, project = await setup(client, site)
     await enable_ai(client, owner, org["id"])
-    response = await client.post(
-        f"/api/v1/projects/{project['id']}/ai/analyses",
-        json={"kind": "management_summary"},
-        headers=owner.headers,
-    )
-    assert response.status_code == 409 and response.json()["error"]["code"] == "not_analysed"
+    for body in ({"kind": "management_summary"}, {"kind": "question", "question": "Healthy?"}):
+        response = await client.post(
+            f"/api/v1/projects/{project['id']}/ai/analyses", json=body, headers=owner.headers
+        )
+        # A question too: with nothing analysed, "no open issues" would read as healthy.
+        assert response.status_code == 409, body
+        assert response.json()["error"]["code"] == "not_analysed"
 
 
 async def test_compare_crawls(client: AsyncClient, site: FixtureSite) -> None:

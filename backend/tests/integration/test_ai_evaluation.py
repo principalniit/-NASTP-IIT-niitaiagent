@@ -187,6 +187,27 @@ async def test_eval_command_prints_and_saves_results(
         await ai_eval(org["slug"], "nowhere", None, None, None)
 
 
+async def test_eval_refuses_a_project_that_was_never_analysed(
+    client: AsyncClient, site: FixtureSite, ollama: FakeOllama
+) -> None:
+    from tests.integration.test_ai_api import setup
+
+    owner, org, project = await setup(client, site)
+    await enable_ai(client, owner, org["id"])
+    with pytest.raises(SystemExit, match="has not been crawled and analysed yet"):
+        await ai_eval(org["slug"], project["name"], None, None, None)
+    # And a question that bypasses the queue's check still does not reach the model.
+    import uuid
+
+    result = await run_case(
+        get_session_factory(),
+        uuid.UUID(project["id"]),
+        EvalCase(name="h", kind="question", question="Is the site healthy?"),
+    )
+    assert not result.completed and "Crawl and analyse" in result.problems[0]
+    assert ollama.requests == []
+
+
 async def test_report_counts_tasks_and_groups_failure_reasons(
     client: AsyncClient,
     site: FixtureSite,
