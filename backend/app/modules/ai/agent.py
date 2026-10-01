@@ -18,6 +18,7 @@ from app.modules.ai.tools import (
     get_seo_issues,
     run_tool,
 )
+from app.modules.ai.topics import evidence_for, focus_issue_ids
 from app.providers.interfaces import AIProvider
 
 MAX_TOOL_CALLS = 4
@@ -36,6 +37,7 @@ def _grounding_facts(evidence: dict[str, Any]) -> dict[str, Any]:
     return {
         "project_summary": evidence["project_summary"],
         "top_open_issues": evidence.get("top_open_issues"),
+        "for_this_question": evidence.get("for_this_question"),
         "tool_results": [
             {"tool": call["tool"], "result": call["result"]}
             for call in evidence["tool_results"]
@@ -57,6 +59,12 @@ async def answer_question(
         evidence["top_open_issues"] = await get_seo_issues(tools, IssuesArgs(limit=10))
     except ToolError:
         evidence["top_open_issues"] = None
+    # The issues and page the question is about, so the model answers from them instead
+    # of from the generic priorities.
+    found = await evidence_for(tools, question)
+    if found:
+        evidence["for_this_question"] = found
+    focus = focus_issue_ids(found, evidence["top_open_issues"])
     refs = IssueRefs()  # the model sees short issue references; evidence keeps real ids
     messages: list[Message] = [
         {"role": "system", "content": system},
@@ -71,6 +79,10 @@ async def answer_question(
                 "'answer' and write the complete answer for the person in 'answer', in full "
                 "sentences. Put the references of issues you rely on (such as issue-a) in "
                 "issue_ids.\n"
+                "When the evidence has for_this_question, answer from it first: it holds the open "
+                "issues (with their total) and the page the question is about. Cite those "
+                "issues. When a topic there has open_issues_total 0, say that the latest crawl "
+                "found no open issues of that kind.\n"
                 "For questions about priorities, next steps, where to start or the way forward, "
                 "answer from top_open_issues (already ordered by priority) and the scores: name the "
                 "most important issues by title, say briefly why each matters and what to do, and "
@@ -82,7 +94,10 @@ async def answer_question(
     attempts = 0
     tools_used: list[str] = []
     retried_grounding = False
-    for _ in range(MAX_TOOL_CALLS + 3):
+    # A grounded answer that cites nothing: kept while the model is asked to cite, so the
+    # follow-up can only improve the result.
+    uncited: tuple[AgentAnswer, GroundingReport] | None = None
+    for _ in range(MAX_TOOL_CALLS + 4):
         step, used, raw = await provider.chat_structured(messages, AgentStep)
         attempts += used
         messages.append({"role": "assistant", "content": raw[:6000]})
@@ -134,7 +149,26 @@ async def answer_question(
         report = check_output(
             answer.model_copy(update={"tools_used": []}), facts, issue_ids_in(facts)
         )
-        if report.passed or retried_grounding:
+        if report.passed and focus and not answer.issue_ids and uncited is None:
+            uncited = (answer, report)
+            candidates = ", ".join(sorted(r for r in map(refs.reference, focus) if r))
+            messages.append(
+                {
+                    "role": "user",
+                    "content": (
+                        "Your answer cites no issues, but it relies on the issues in the "
+                        "evidence. Reply again with action 'answer', the same answer text, and "
+                        "the references of the issues it relies on in issue_ids, chosen from: "
+                        f"{candidates}."
+                    ),
+                }
+            )
+            continue
+        if report.passed:
+            return answer, evidence, report, attempts
+        if uncited is not None:
+            return uncited[0], evidence, uncited[1], attempts
+        if retried_grounding:
             return answer, evidence, report, attempts
         retried_grounding = True
         messages.append(

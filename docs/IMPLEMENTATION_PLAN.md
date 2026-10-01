@@ -720,7 +720,7 @@ check separately rejects any number that is not in the data.
 
 | Suite | Result |
 |-------|--------|
-| Backend (ruff, mypy, pytest with new provider, metrics, report and evaluation tests) | 374 passed |
+| Backend (ruff, mypy, pytest with new provider, metrics, report and evaluation tests) | 379 passed |
 | Frontend lint, types | Clean |
 | End-to-end (Playwright), now checking the run details line | 18 passed |
 
@@ -732,3 +732,36 @@ Known limitations:
 | Automatic checks cover structure (completed, grounded, right issues cited, missing data admitted), not how useful the wording is | People read the saved answers; feedback buttons come in step 3 |
 | Evaluation runs one case at a time on one model | Enough for a single GPU |
 | Run details are not yet shown as a dashboard chart | `ai-report` covers it for now |
+
+### 16.3 Relevant data first (AI step 3)
+
+The Admissions portal scored 8 of 10 once it was analysed. Both failures, and one pass
+that should not have counted, had one cause: the model answers from the generic top
+issues and rarely looks anything up.
+- "Titles and descriptions" said the evidence did not mention them, but the site has open
+  title and description issues. They were outside the top 10.
+- "What to fix first" named the right pages but cited no issues.
+- "Broken links" was answered with H1 and structured-data issues.
+
+Delivered (`ai/topics.py`, `ai/agent.py`):
+- **Topic detection in code.** Keyword matching maps a question to rule families:
+  broken pages, titles, meta descriptions, headings, images, redirects, canonicals,
+  indexing, speed, structured data, internal links, content, language and URL structure.
+  Detection only chooses which facts the model sees; it never decides the answer.
+- **Matching data first.** Up to three topics, each with up to 8 open issues and the real
+  total, go into the evidence as `for_this_question`. A topic with nothing open carries
+  the note "The latest analysed crawl found no open issues about …", so "none found" is a
+  grounded fact. A page address in the question loads that page with its open issues.
+  Priority questions are pointed at the top issues.
+- **Citation follow-up.** A grounded answer that relies on these issues but cites none is
+  sent back once, with the references to choose from. The first answer is kept if the
+  follow-up fails grounding, so the follow-up can only improve the result.
+- **Harder test set (14 cases).** Questions on headings, image alt text, structured data
+  and page speed were added, and broken pages must cite broken-page issues. When a site
+  has none of the issues asked about, the answer must say that none were found; this
+  replaces the earlier "skipped".
+- `PROMPT_VERSION` is now 2026-10.3.
+
+Assumption A24: keyword detection in English is enough for the questions people ask in
+the dashboard. A question in another language falls back to the general evidence and
+the model's own tool calls, as before.

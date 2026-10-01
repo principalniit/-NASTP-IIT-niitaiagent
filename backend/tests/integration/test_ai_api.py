@@ -546,7 +546,7 @@ async def test_an_answer_without_text_is_asked_for_again_never_filled_in(
         {"action": "answer", "issue_ids": []},
         {"action": "answer", "answer": "Fix the missing titles first: they affect most pages."},
     )
-    fixed = await run(client, owner, project["id"], kind="question", question="Where to start?")
+    fixed = await run(client, owner, project["id"], kind="question", question="Tell me more.")
     assert fixed["status"] == "completed", fixed["error"]
     assert fixed["output"]["answer"].startswith("Fix the missing titles")
     assert fixed["attempts"] == 2
@@ -555,6 +555,72 @@ async def test_an_answer_without_text_is_asked_for_again_never_filled_in(
     assert "must contain the full answer text" in ollama.requests[-1]["messages"][-1]["content"]
 
     ollama.script({"action": "answer"}, {"action": "answer", "answer": " "})
-    empty = await run(client, owner, project["id"], kind="question", question="Where to start?")
+    empty = await run(client, owner, project["id"], kind="question", question="Tell me more.")
     assert empty["status"] == "failed" and empty["output"] is None
     assert "not valid after 2 attempts" in empty["error"]
+
+
+async def test_questions_get_the_matching_data_first(
+    client: AsyncClient, site: FixtureSite, ollama: FakeOllama
+) -> None:
+    owner, org, project = await analysed(client, site)
+    await enable_ai(client, owner, org["id"])
+    result = await run(
+        client, owner, project["id"], kind="question", question="Are there any broken links?"
+    )
+    assert result["status"] == "completed", result["error"]
+    [topic] = result["evidence"]["for_this_question"]["topics"]
+    assert topic["topic"] == "broken links and error pages" and topic["open_issues_total"] >= 1
+    assert {i["rule_id"] for i in topic["issues"]} <= {
+        "tech.broken_internal_links",
+        "tech.http_client_error",
+        "tech.http_server_error",
+        "tech.fetch_failed",
+    }
+    prompt = ollama.requests[0]["messages"][1]["content"]
+    assert "for_this_question" in prompt and topic["issues"][0]["id"] not in prompt
+
+    # A topic with nothing open says so, so "none found" is a fact the model may state.
+    # The local fixture site answers instantly, so nothing is slow.
+    result = await run(client, owner, project["id"], kind="question", question="Is the site slow?")
+    [speed] = result["evidence"]["for_this_question"]["topics"]
+    assert speed["open_issues_total"] == 0 and speed["issues"] == []
+    assert speed["note"] == "The latest analysed crawl found no open issues about page speed."
+
+    # A page named in the question is looked up.
+    result = await run(
+        client, owner, project["id"], kind="question", question="What is wrong with /about?"
+    )
+    page = result["evidence"]["for_this_question"]["page"]
+    assert page["url"].endswith("/about") and "open_issues" in page
+
+
+def _cite_first_candidate(request: dict) -> dict:  # type: ignore[type-arg]
+    last = request["messages"][-1]["content"]
+    first = last.split("chosen from: ")[1].split(",")[0].strip().rstrip(".")
+    return {"action": "answer", "answer": "Fix the broken links first.", "issue_ids": [first]}
+
+
+async def test_an_answer_that_cites_nothing_is_asked_to_cite(
+    client: AsyncClient, site: FixtureSite, ollama: FakeOllama
+) -> None:
+    owner, org, project = await analysed(client, site)
+    await enable_ai(client, owner, org["id"])
+    question = "Are there any broken links?"
+    ollama.script(
+        {"action": "answer", "answer": "Fix the broken links first."}, _cite_first_candidate
+    )
+    cited = await run(client, owner, project["id"], kind="question", question=question)
+    assert cited["status"] == "completed" and cited["attempts"] == 2
+    assert "cites no issues" in ollama.requests[-1]["messages"][-1]["content"]
+    focus = {i["id"] for i in cited["evidence"]["for_this_question"]["topics"][0]["issues"]}
+    assert cited["output"]["issue_ids"] and set(cited["output"]["issue_ids"]) <= focus
+
+    # If the cited reply then invents something, the first grounded answer is kept.
+    ollama.script(
+        {"action": "answer", "answer": "Fix the broken links first."},
+        {"action": "answer", "answer": "You have 98765 broken links.", "issue_ids": []},
+    )
+    kept = await run(client, owner, project["id"], kind="question", question=question)
+    assert kept["status"] == "completed"
+    assert kept["output"]["answer"] == "Fix the broken links first."

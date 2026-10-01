@@ -53,6 +53,57 @@
     "kind": "question",
     "question": "Are there any broken links or pages that return errors?",
     "expect": {
+      "answers": true,
+      "cites_rules": [
+        "tech.broken_internal_links",
+        "tech.http_client_error",
+        "tech.http_server_error",
+        "tech.fetch_failed"
+      ]
+    }
+  },
+  {
+    "name": "missing-headings",
+    "kind": "question",
+    "question": "Which pages are missing an H1 heading?",
+    "expect": {
+      "cites_rules": [
+        "onpage.h1",
+        "onpage.heading_hierarchy"
+      ],
+      "answers": true
+    }
+  },
+  {
+    "name": "image-alt-text",
+    "kind": "question",
+    "question": "Do any images lack alt text?",
+    "expect": {
+      "cites_rules": [
+        "onpage.image_alt"
+      ],
+      "answers": true
+    }
+  },
+  {
+    "name": "structured-data",
+    "kind": "question",
+    "question": "Are there problems with our structured data?",
+    "expect": {
+      "cites_rules": [
+        "schema."
+      ],
+      "answers": true
+    }
+  },
+  {
+    "name": "page-speed",
+    "kind": "question",
+    "question": "Are any pages slow to respond?",
+    "expect": {
+      "cites_rules": [
+        "tech.slow_response"
+      ],
       "answers": true
     }
   },

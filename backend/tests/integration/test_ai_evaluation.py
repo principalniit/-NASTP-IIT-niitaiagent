@@ -122,25 +122,29 @@ async def test_cases_are_scored_and_leave_nothing_behind(
     refusal = await run_case(
         factory,
         pid,
-        EvalCase(name="f", kind="question", question="What first?", expect={"answers": True}),
+        EvalCase(name="f", kind="question", question="Tell me about it.", expect={"answers": True}),
     )
     assert refusal.problems == ["Says the data has no answer, although the project data has one"]
     real = await run_case(
         factory,
         pid,
-        EvalCase(name="f", kind="question", question="What first?", expect={"answers": True}),
+        EvalCase(name="f", kind="question", question="Tell me about it.", expect={"answers": True}),
     )
     assert real.passed, real.problems
 
-    # A rule the site has no open issue for is skipped, not failed.
+    # When the site has none of the issues asked about, the answer must say so instead
+    # of answering with other issues.
     rules = EvalCase(
         name="r",
         kind="question",
         question="Any hreflang problems?",
         expect={"cites_rules": ["no.such_rule"]},
     )
-    skipped = await run_case(factory, pid, rules)
-    assert skipped.passed and skipped.skipped_checks
+    off_topic = await run_case(factory, pid, rules)
+    assert off_topic.problems == ["Does not say that the latest crawl found none of these issues"]
+    ollama.script({"action": "answer", "answer": "The latest crawl found no hreflang problems."})
+    none_found = await run_case(factory, pid, rules)
+    assert none_found.passed, none_found.problems
 
     # Grounding still applies, and a different model can be tested.
     ollama.script(

@@ -59,6 +59,14 @@ _REFUSAL = re.compile(
     re.I,
 )
 REFUSAL_MAX_CHARS = 200
+# Saying that the latest crawl found none of what was asked about.
+_NONE_FOUND = re.compile(
+    r"\b(no|not any|none of the) (open |current )?([\w-]+ ){0,3}"
+    r"(issues?|problems?|errors?|links?|pages?|images?|redirects?|headings?)\b|"
+    r"\bnone (were|was) found|\b(did not|didn't|does not|doesn't) (find|show|report|have) any\b|"
+    r"\bfound no\b",
+    re.I,
+)
 
 
 # ---------------------------------------------------------------------------------------
@@ -163,7 +171,8 @@ class Expect(BaseModel):
     # Cites at least one of the highest-priority open issues.
     cites_top_issues: bool = False
     # Cites at least one open issue whose rule id starts with one of these, for example
-    # "onpage.title". Skipped when the project has no such open issue.
+    # "onpage.title". When the project has no such open issue, the answer must say that
+    # none were found instead.
     cites_rules: list[str] = Field(default_factory=list, max_length=20)
     # Says the platform has no data for this, instead of answering with invented figures.
     admits_missing_data: bool = False
@@ -303,7 +312,8 @@ def _score(
         problems.append(f"Cites none of the {TOP_ISSUES} highest-priority open issues")
     if case.expect.cites_rules:
         if not rule_ids:
-            skipped.append("cites_rules: the project has no open issue for these rules")
+            if not any(_NONE_FOUND.search(t) for t in _texts(analysis.output)):
+                problems.append("Does not say that the latest crawl found none of these issues")
         elif not cited & rule_ids:
             problems.append("Cites no issue for the rules " + ", ".join(case.expect.cites_rules))
     if case.expect.answers:

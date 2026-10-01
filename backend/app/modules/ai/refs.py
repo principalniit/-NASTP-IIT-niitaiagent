@@ -70,6 +70,10 @@ class IssueRefs:
             return [self.shorten(v) for v in value]
         return value
 
+    def reference(self, issue_id: str) -> str | None:
+        """The short reference the model was shown for an issue, if it was shown one."""
+        return self._ref_of.get(issue_id)
+
     def resolve(self, value: str) -> str:
         """The real id for a reference; anything else is returned unchanged."""
         return self._id_of.get(value.strip().lower(), value)
