@@ -2,6 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ArrowRight, Eye, EyeOff, ListChecks, LockKeyhole, Mail, Radar, ShieldCheck } from "lucide-react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -133,7 +134,12 @@ export function LoginView() {
               ) : null}
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="password">Password</Label>
+              <div className="flex items-center justify-between gap-2">
+                <Label htmlFor="password">Password</Label>
+                <Link href="/forgot-password" className="text-xs text-primary underline-offset-4 hover:underline">
+                  Forgot password?
+                </Link>
+              </div>
               <div className="relative">
                 <LockKeyhole className="pointer-events-none absolute left-3 top-2.5 size-4 text-muted-foreground" aria-hidden />
                 <Input
@@ -171,8 +177,8 @@ export function LoginView() {
             </Button>
           </form>
           <p className="mt-8 text-xs text-muted-foreground">
-            Accounts are created by your organisation&apos;s administrators. Nothing on your website changes without a
-            person&apos;s approval.
+            Accounts are created by invitation from your organisation&apos;s administrators. Nothing on your website
+            changes without a person&apos;s approval.
           </p>
         </div>
       </section>

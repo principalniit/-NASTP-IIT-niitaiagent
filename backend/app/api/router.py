@@ -7,6 +7,7 @@ from app.modules.auth.router import router as auth_router
 from app.modules.crawler.router import router as crawler_router
 from app.modules.drafts.router import router as drafts_router
 from app.modules.integrations.router import router as integrations_router
+from app.modules.invitations.router import router as invitations_router
 from app.modules.monitoring.router import router as monitoring_router
 from app.modules.organisations.router import router as organisations_router
 from app.modules.plans.router import router as plans_router
@@ -18,6 +19,7 @@ api_router = APIRouter(prefix="/api/v1")
 api_router.include_router(health_router)
 api_router.include_router(auth_router)
 api_router.include_router(organisations_router)
+api_router.include_router(invitations_router)
 api_router.include_router(projects_router)
 api_router.include_router(crawler_router)
 api_router.include_router(seo_router)

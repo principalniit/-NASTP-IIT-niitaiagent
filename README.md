@@ -179,6 +179,10 @@ Backend variables live in `backend/.env` (template: `backend/.env.example`).
 | `AI_CONTEXT_TOKENS` | `8192` | Prompt window per request. Ollama may otherwise use a smaller default and cut off long prompts |
 | `AI_MAX_ACTIVE_JOBS_PER_ORG` | `3` | Queued or running AI tasks allowed per organisation |
 | `INTEGRATIONS_ENCRYPTION_KEYS` | empty | Comma-separated Fernet keys that encrypt integration credentials; the first encrypts. Empty means credentials cannot be stored. Back it up separately from the database |
+| `PUBLIC_BASE_URL` | `http://localhost:3000` | The dashboard's public address, used in invitation and reset links |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM`, `SMTP_STARTTLS` | empty, `587`, empty, empty, empty, `true` | Your organisation's own mail server. Empty `SMTP_HOST` turns email off: invitation links are then shared by hand and password resets go through an administrator |
+| `INVITATION_TTL_DAYS` | `7` | How long an invitation link works |
+| `PASSWORD_RESET_TTL_MINUTES` | `60` | How long a password reset link works |
 | `TEST_DATABASE_URL` | `…/niit_seo_test` | Used by the pytest suite only |
 
 Frontend variables:
@@ -268,6 +272,7 @@ and key rotation. The latest security review is
 |------|--------|
 | Authentication, sessions, rate limiting | Done |
 | Organisations, members, roles, audit log | Done |
+| Invitations (people choose their own password) and password reset by email | Done; email is optional and uses your own SMTP server |
 | Projects and project settings (including NIIT configuration) | Done |
 | Dashboard shell, overview, projects, settings, administration | Done |
 | Crawler, Crawl Explorer, Pages browser (Phase 2) | Done; JavaScript rendering deferred |

@@ -1,3 +1,4 @@
+import secrets
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -7,7 +8,8 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
-from app.core.errors import AppError, RateLimitedError, UnauthorizedError
+from app.core.errors import AppError, NotFoundError, RateLimitedError, UnauthorizedError
+from app.core.mailer import send_email
 from app.core.rate_limit import FailureLimiter
 from app.core.request_context import RequestMeta
 from app.core.security import (
@@ -19,7 +21,7 @@ from app.core.security import (
     verify_password,
 )
 from app.modules.audit_logs import service as audit
-from app.modules.auth.models import RefreshToken
+from app.modules.auth.models import PasswordResetToken, RefreshToken
 from app.modules.users.models import User
 from app.modules.users.service import get_by_email, normalise_email
 
@@ -30,11 +32,16 @@ email_limiter = FailureLimiter(
 ip_limiter = FailureLimiter(
     _settings.login_rate_limit_ip_attempts, _settings.login_rate_limit_window_seconds
 )
+# Reset emails per address and per client address, so the form cannot flood an inbox.
+reset_email_limiter = FailureLimiter(3, 900)
+reset_ip_limiter = FailureLimiter(20, 900)
 
 
 def reset_login_limits() -> None:
     email_limiter.clear()
     ip_limiter.clear()
+    reset_email_limiter.clear()
+    reset_ip_limiter.clear()
 
 
 def _address_keys(meta: RequestMeta) -> tuple[str, ...]:
@@ -182,10 +189,90 @@ async def change_password(
         raise AppError("New password must differ from the current one", code="password_unchanged")
     user.password_hash = hash_password(new)
     # Sign out every other session.
-    await session.execute(
-        update(RefreshToken)
-        .where(RefreshToken.user_id == user.id, RefreshToken.revoked_at.is_(None))
-        .values(revoked_at=_now())
-    )
+    await _revoke_sessions(session, user.id)
     audit.record(session, action="auth.password_changed", actor_id=user.id, meta=meta)
     await session.commit()
+
+
+_RESET_INVALID = "This reset link is not valid or has expired"
+
+
+async def _revoke_sessions(session: AsyncSession, user_id: uuid.UUID) -> None:
+    await session.execute(
+        update(RefreshToken)
+        .where(RefreshToken.user_id == user_id, RefreshToken.revoked_at.is_(None))
+        .values(revoked_at=_now())
+    )
+
+
+async def request_password_reset(
+    session: AsyncSession, email: str, meta: RequestMeta
+) -> tuple[str, str] | None:
+    """Create a reset link for an active account.
+
+    Returns the address and the message to send, or None. The caller sends it after the
+    response, and answers the same way whatever happens, so the form never reveals
+    whether an account exists.
+    """
+    settings = get_settings()
+    email = normalise_email(email)
+    ip_keys = _address_keys(meta)
+    if not settings.email_enabled:
+        return None
+    if reset_email_limiter.is_blocked(email) or reset_ip_limiter.is_blocked(*ip_keys):
+        return None
+    reset_email_limiter.record_failure(email)
+    reset_ip_limiter.record_failure(*ip_keys)
+    user = await get_by_email(session, email)
+    if user is None or not user.is_active:
+        return None
+    # Only the newest link works.
+    await session.execute(
+        update(PasswordResetToken)
+        .where(PasswordResetToken.user_id == user.id, PasswordResetToken.used_at.is_(None))
+        .values(used_at=_now())
+    )
+    token = secrets.token_urlsafe(32)
+    session.add(
+        PasswordResetToken(
+            user_id=user.id,
+            token_hash=hash_token(token),
+            expires_at=_now() + timedelta(minutes=settings.password_reset_ttl_minutes),
+        )
+    )
+    audit.record(session, action="auth.password_reset_requested", actor_id=user.id, meta=meta)
+    await session.commit()
+    link = f"{settings.public_base_url.rstrip('/')}/reset-password#token={token}"
+    body = (
+        f"Someone asked to reset the password for your {settings.app_name} account.\n\n"
+        f"Open this link to choose a new password:\n{link}\n\n"
+        f"The link works once and expires in {settings.password_reset_ttl_minutes} minutes. "
+        "If you did not ask for this, ignore this email; your password stays the same.\n"
+    )
+    return user.email, body
+
+
+async def send_reset_email(message: tuple[str, str] | None) -> None:
+    if message is not None:
+        await send_email(message[0], "Reset your password", message[1])
+
+
+async def confirm_password_reset(
+    session: AsyncSession, token: str, new_password: str, meta: RequestMeta
+) -> None:
+    row = await session.scalar(
+        select(PasswordResetToken)
+        .where(PasswordResetToken.token_hash == hash_token(token))
+        .with_for_update()
+    )
+    if row is None or row.used_at is not None or row.expires_at <= _now():
+        raise NotFoundError(_RESET_INVALID)
+    user = await session.get(User, row.user_id)
+    if user is None or not user.is_active:
+        raise NotFoundError(_RESET_INVALID)
+    row.used_at = _now()
+    user.password_hash = hash_password(new_password)
+    await _revoke_sessions(session, user.id)
+    audit.record(session, action="auth.password_reset", actor_id=user.id, meta=meta)
+    await session.commit()
+    email_limiter.reset(user.email)

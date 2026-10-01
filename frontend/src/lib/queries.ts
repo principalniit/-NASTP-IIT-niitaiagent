@@ -36,6 +36,7 @@ import {
 import type {
   AuditLogEntry,
   Health,
+  Invitation,
   Member,
   Organisation,
   Page,
@@ -48,6 +49,7 @@ export const keys = {
   organisations: ["organisations"] as const,
   organisation: (id: string) => ["organisations", id] as const,
   members: (orgId: string) => ["organisations", orgId, "members"] as const,
+  invitations: (orgId: string) => ["organisations", orgId, "invitations"] as const,
   audit: (orgId: string, page: number) => ["organisations", orgId, "audit", page] as const,
   projects: (orgId: string) => ["organisations", orgId, "projects"] as const,
   project: (id: string) => ["projects", id] as const,
@@ -83,6 +85,14 @@ export function useOrganisation(id: string | null) {
     queryKey: keys.organisation(id ?? ""),
     queryFn: () => api<Organisation>(`/organisations/${id}`),
     enabled: !!id,
+  });
+}
+
+export function useInvitations(orgId: string, enabled = true) {
+  return useQuery({
+    queryKey: keys.invitations(orgId),
+    queryFn: () => api<Invitation[]>(`/organisations/${orgId}/invitations`),
+    enabled,
   });
 }
 

@@ -50,6 +50,7 @@ backend/
       auth/          login, refresh, logout, token handling
       users/         user model and profile
       organisations/ organisations, members, roles, permissions
+      invitations/   invitations by email and their acceptance
       projects/      projects and project settings
       audit_logs/    append-only audit trail
       crawler/       fetcher, URL safety, robots, sitemaps, parser, engine
@@ -123,6 +124,15 @@ Recommendations, Reports.
 - Login is rate limited per email and, with a higher threshold, per client address.
   Phase 1 uses an in-process limiter; multi-instance deployments need a shared store.
   See `docs/SECURITY.md` for how client addresses are determined behind proxies.
+- Invitations (`modules/invitations/`): an owner or admin invites an email with a role.
+  A new person accepts by creating their own account and password; an existing account
+  accepts by signing in as itself. Tokens are random, stored as SHA-256 hashes, single
+  use, and travel in the link's fragment (`/invite#token=...`) and request bodies only.
+- Password reset (`auth/`, `password_reset_tokens`): single-use links that expire after
+  `PASSWORD_RESET_TTL_MINUTES`; confirming one ends every session of the account.
+- Email (`core/mailer.py`) goes through the operator's own SMTP server and is optional.
+  Without it, invitation links are shown to the administrator to share, and resets go
+  through `app.cli reset-password`.
 
 ## 6. Data model
 

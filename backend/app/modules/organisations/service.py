@@ -194,11 +194,12 @@ async def add_member(
     elif not access.user.is_platform_admin:
         # Emails are not verified, so an account may have been created, with a password
         # someone else knows, by another organisation's administrator. Attaching it here
-        # could hand this organisation's data to that person. A platform administrator
-        # decides, and can reset the account's password first.
+        # could hand this organisation's data to that person. Instead the account is
+        # invited and its owner accepts by signing in; a platform administrator can still
+        # attach it directly.
         raise ConflictError(
-            "This email already has an account. Ask a platform administrator to add it to "
-            "this organisation.",
+            "This email already has an account. Send an invitation instead; the person "
+            "accepts it by signing in.",
             code="account_exists",
         )
     member = OrganisationMember(organisation_id=org_id, user_id=user.id, role=data.role)

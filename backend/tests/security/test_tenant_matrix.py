@@ -20,6 +20,7 @@ from app.modules.ai.models import AIAnalysis, AIKind, AIStatus, SeoRecommendatio
 from app.modules.crawler.models import CrawlJob, CrawlPage
 from app.modules.drafts.models import ContentDraft
 from app.modules.integrations.models import Integration
+from app.modules.invitations.models import Invitation
 from app.modules.organisations.models import OrganisationMember
 from app.modules.projects.models import Project
 from app.modules.reports.models import Report
@@ -30,7 +31,14 @@ from tests.fixtures.site import FixtureSite, build_standard_site
 from tests.integration.test_ai_api import analysed
 
 # Tables that are not owned by one organisation.
-GLOBAL_TABLES = {"users", "refresh_tokens", "organisations", "audit_logs", "plans"}
+GLOBAL_TABLES = {
+    "users",
+    "refresh_tokens",
+    "password_reset_tokens",
+    "organisations",
+    "audit_logs",
+    "plans",
+}
 PARAM = re.compile(r"{(\w+)}")
 # Platform-wide administration routes: not owned by any organisation, so a non-admin
 # gets 403 rather than 404. test_global_routes_need_a_platform_admin covers them.
@@ -73,6 +81,12 @@ async def _victim(client: AsyncClient, site: FixtureSite) -> dict[str, str]:
     assert draft.status_code == 201, draft.text
     report = await client.post(f"/api/v1/projects/{pid}/reports", json={}, headers=owner_b.headers)
     assert report.status_code == 202 and await process_next_report()
+    invitation = await client.post(
+        f"/api/v1/organisations/{org_b['id']}/invitations",
+        json={"email": "invitee-b@example.org", "role": "viewer"},
+        headers=owner_b.headers,
+    )
+    assert invitation.status_code == 201, invitation.text
 
     async with get_session_factory()() as session:
         project = uuid.UUID(pid)
@@ -123,6 +137,7 @@ async def _victim(client: AsyncClient, site: FixtureSite) -> dict[str, str]:
             "report_id": report.json()["id"],
             "member_id": str(membership.id),
             "integration_id": str(integration.id),
+            "invitation_id": invitation.json()["invitation"]["id"],
         }
 
 
@@ -130,7 +145,15 @@ async def _counts() -> dict[str, int]:
     async with get_session_factory()() as session:
         return {
             model.__name__: await session.scalar(select(func.count()).select_from(model)) or 0
-            for model in (Project, CrawlJob, SeoIssue, ContentDraft, Report, OrganisationMember)
+            for model in (
+                Project,
+                CrawlJob,
+                SeoIssue,
+                ContentDraft,
+                Report,
+                OrganisationMember,
+                Invitation,
+            )
         }
 
 

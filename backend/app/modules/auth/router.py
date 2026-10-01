@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Cookie, Depends, Header, Request, Response, status
+from fastapi import APIRouter, BackgroundTasks, Cookie, Depends, Header, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,6 +15,9 @@ from app.modules.auth.schemas import (
     LoginRequest,
     MembershipOut,
     MeResponse,
+    PasswordResetAvailability,
+    PasswordResetConfirm,
+    PasswordResetRequest,
     TokenResponse,
 )
 from app.modules.organisations.models import Organisation, OrganisationMember
@@ -111,6 +114,33 @@ async def change_password(
 ) -> Response:
     await service.change_password(
         session, user, body.current_password, body.new_password, get_request_meta(request)
+    )
+    response = Response(status_code=status.HTTP_204_NO_CONTENT)
+    response.delete_cookie(REFRESH_COOKIE, path=COOKIE_PATH)
+    return response
+
+
+@router.get("/password-reset/available", response_model=PasswordResetAvailability)
+async def password_reset_available() -> PasswordResetAvailability:
+    return PasswordResetAvailability(email_enabled=get_settings().email_enabled)
+
+
+@router.post("/password-reset/request", status_code=status.HTTP_202_ACCEPTED)
+async def request_password_reset(
+    body: PasswordResetRequest, request: Request, session: Session, tasks: BackgroundTasks
+) -> dict[str, str]:
+    # The email is sent after the response, so its timing says nothing about the account.
+    message = await service.request_password_reset(session, body.email, get_request_meta(request))
+    tasks.add_task(service.send_reset_email, message)
+    return {"detail": "If an account exists for this email, a reset link is on its way."}
+
+
+@router.post("/password-reset/confirm", status_code=status.HTTP_204_NO_CONTENT)
+async def confirm_password_reset(
+    body: PasswordResetConfirm, request: Request, session: Session
+) -> Response:
+    await service.confirm_password_reset(
+        session, body.token, body.new_password, get_request_meta(request)
     )
     response = Response(status_code=status.HTTP_204_NO_CONTENT)
     response.delete_cookie(REFRESH_COOKIE, path=COOKIE_PATH)

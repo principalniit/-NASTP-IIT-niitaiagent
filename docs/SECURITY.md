@@ -39,6 +39,28 @@ the project owner (principal@niit.edu.pk). Do not open public issues for them.
   secret for the life of the process, so no published value ever signs tokens.
 - Deactivated users cannot log in or refresh.
 
+### Invitations and password resets
+
+- Invitation and reset tokens are 256-bit random values. Only their SHA-256 hash is
+  stored; each works once and expires (7 days and 60 minutes by default).
+- Links carry the token in the URL fragment (`#token=`), which browsers never send to a
+  server or in a `Referer` header. The dashboard sends it only in request bodies, so it
+  stays out of access logs.
+- Accepting with a new account is refused when the address already has one; the owner
+  of that account must sign in as it to accept. Nobody can attach or take over an
+  account they do not control. A signed-in account can accept only an invitation for
+  its own address.
+- Inviting follows the member rules: `members:manage` is needed, only owners can invite
+  owners, and the plan's member limit is checked when the invitation is created and
+  again when it is accepted. A new invitation for the same address replaces the old one.
+- The reset request always answers 202 with the same message, and the email is sent
+  after the response, so neither content nor timing reveals whether an account exists.
+  Requests are limited to 3 per address and 20 per client address in 15 minutes. Only
+  the newest link works. Confirming a reset ends every session of the account.
+- Email uses the operator's own SMTP server with TLS. Credentials stay in the
+  environment and are never logged; a mail failure is logged by type only and never
+  breaks the request.
+
 ## 3. Authorisation
 
 - Roles: platform administrator (user flag), and per organisation: owner, admin,
@@ -235,10 +257,12 @@ here too.
 
 - Login rate limiting is in-process. Run a single API process, or replace it with a
   shared store before horizontal scaling.
-- Organisation administrators can learn that an email already has an account (they
-  cannot see whose). Invitations with acceptance need an approved email provider.
-- Organisation administrators set new members' initial passwords. Forced password change
-  on first sign-in comes with invitations.
+- Organisation administrators can still learn that an email already has an account
+  through the direct "add a member" form (they cannot see whose). Invitations avoid this
+  and let people choose their own passwords; the direct form remains for sites without
+  email.
+- When email is off, an invitation link shown to the administrator proves only that the
+  invitee received it from them, not that they control the address.
 - Access tokens stay valid for up to 15 minutes after a password reset.
 - The dashboard's policy allows inline scripts (Next.js needs them without nonces).
 - Row-level security in PostgreSQL is not enabled. Isolation is enforced in the

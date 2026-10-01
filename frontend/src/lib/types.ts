@@ -77,6 +77,29 @@ export interface Member {
   created_at: string;
 }
 
+export interface Invitation {
+  id: string;
+  email: string;
+  role: OrgRole;
+  expires_at: string;
+  created_at: string;
+}
+
+export interface InvitationCreated {
+  invitation: Invitation;
+  /** Shown once: the token is not stored in readable form. */
+  invite_url: string;
+  email_sent: boolean;
+}
+
+export interface InvitationPreview {
+  organisation_name: string;
+  email: string;
+  role: OrgRole;
+  expires_at: string;
+  account_exists: boolean;
+}
+
 export interface Project {
   id: string;
   organisation_id: string;

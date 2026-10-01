@@ -81,6 +81,24 @@ class Settings(BaseSettings):
     integrations_encryption_keys: SecretStr = SecretStr("")
     ai_max_active_jobs_per_org: int = 3
 
+    # The dashboard's public address, used in links sent by email (invitations, resets).
+    public_base_url: str = "http://localhost:3000"
+    # Outgoing email through the organisation's own mail server. Empty host = email off:
+    # invitations then give the administrator a link to share, and password resets go
+    # through an administrator.
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: SecretStr = SecretStr("")
+    smtp_from: str = ""
+    smtp_starttls: bool = True
+    invitation_ttl_days: int = 7
+    password_reset_ttl_minutes: int = 60
+
+    @property
+    def email_enabled(self) -> bool:
+        return bool(self.smtp_host and self.smtp_from)
+
     @property
     def crawler_private_networks(self) -> list[IPv4Network | IPv6Network]:
         return [

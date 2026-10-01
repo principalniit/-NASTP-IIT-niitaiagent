@@ -37,7 +37,7 @@ Documented per rule 12 of the brief. Each can be changed without redesign.
 | A16 | Monthly and daily usage limits use UTC calendar periods. |
 | A17 | Integrations are records only until the owner authorises a connection. Credentials can be stored only when the operator sets an encryption key outside the database. |
 | A18 | Data retention is off by default and only owners can turn it on. The minimums are 2 kept crawls and 30 days for reports. It runs hourly in the worker. |
-| A19 | Emails are not verified (no email provider is approved), so only platform administrators can add an account that already exists to an organisation. |
+| A19 | Emails are not verified (no email provider is approved), so only platform administrators can add an account that already exists to an organisation. Since October 2026, organisation administrators invite such accounts instead, and the account's owner accepts by signing in. |
 | A20 | White-label reports replace the organisation's name with a display name and add a cover note; colour, footer and logo come from Phase 5 branding. |
 
 ## 3. Prerequisites for local development
@@ -176,6 +176,7 @@ tenancy and security before any crawl data exists.
 | AI agent: provider, tools, grounded tasks, recommendations, drafts and approvals | Done (not yet validated against a live Ollama model; see section 12) |
 | Reports and monitoring: 13-section reports, PDF export, score history, crawl comparison, schedule foundation | Done |
 | Interface uplift: animated sign-in, grouped navigation, interactive tiles and tabs, data-drawn page thumbnails, search-result previews | Done |
+| Invitations and password reset by email (own SMTP server, optional) | Done |
 | Commercial readiness: tenant verification suite, plans and usage limits, integration records with encrypted credentials, white-label reports, retention, platform audit, deployment guide, security review | Done |
 
 ## 8. Known limitations after Phase 1
@@ -582,3 +583,51 @@ misstate the product or the institute.
 | Thumbnails are schematic, not screenshots | Real screenshots need browser rendering behind the SSRF guard (deferred) |
 | No manual light/dark switch; the theme follows the system setting | Add a toggle if people ask for it |
 | No profile page yet | Next interface step |
+
+## 16. Closing the technical gaps (after Phase 6)
+
+The owner asked to close four gaps, all with free and self-hosted means only:
+
+| Gap | Status |
+|-----|--------|
+| Invitations and password reset by email | Done (16.1) |
+| Google Search Console data, using the customer's own free Google client | Pending |
+| JavaScript site rendering behind the SSRF guard | Pending |
+| Configurable product name and a one-command installer | Pending |
+
+### 16.1 Invitations and password reset
+
+Delivered:
+- **Invitations** (`modules/invitations/`, migration 0009). Owners and admins invite an
+  email address with a role from Administration. The pending list shows each invitation
+  with its expiry and a cancel action. A new invitation for the same address replaces the
+  old one.
+- **Accepting** on the public `/invite` page:
+  - a new person creates their account and chooses their own password;
+  - someone who already has an account signs in as that account and joins;
+  - a different signed-in account is told to sign out.
+- **Password reset** from "Forgot password?" on the sign-in page: `/forgot-password`
+  sends a link, and `/reset-password` sets the new password and ends every session.
+- **Email** (`core/mailer.py`) goes through the operator's own SMTP server. It is
+  optional. Without it, the invitation link is shown once to the administrator to share,
+  and the forgot-password page says to ask an administrator.
+- The direct "add a member" form stays for sites without email. Its account-exists
+  message now points to invitations.
+
+Assumption A22: the operator's existing organisational mail server is not a paid
+third-party service, so using it needs no further approval. No email provider is
+bundled.
+
+| Suite | Result |
+|-------|--------|
+| Backend (ruff, mypy, pytest, including 10 new invitation and reset tests and invitations in the tenant matrix) | 360 passed |
+| Frontend lint, types | Clean |
+| End-to-end (Playwright), now covering invite and accept, and reset pages without email | 18 passed |
+
+Known limitations:
+
+| Limitation | Plan |
+|------------|------|
+| Reset request limits are in-process, like login limits | A shared store before running more than one API process |
+| Access tokens stay valid for up to 15 minutes after a reset | Per-user token version (security review recommendation 4) |
+| Emails are plain text and English only | HTML templates and languages when needed |

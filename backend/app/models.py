@@ -2,10 +2,11 @@
 
 from app.modules.ai.models import AIAnalysis, SeoRecommendation
 from app.modules.audit_logs.models import AuditLog
-from app.modules.auth.models import RefreshToken
+from app.modules.auth.models import PasswordResetToken, RefreshToken
 from app.modules.crawler.models import CrawlJob, CrawlLink, CrawlPage
 from app.modules.drafts.models import Approval, ContentDraft, ContentDraftVersion
 from app.modules.integrations.models import Integration
+from app.modules.invitations.models import Invitation
 from app.modules.monitoring.models import CrawlSchedule
 from app.modules.organisations.models import Organisation, OrganisationMember, OrgRole
 from app.modules.plans.models import Plan
@@ -26,9 +27,11 @@ __all__ = [
     "CrawlSchedule",
     "Integration",
     "InternalLinkRecommendation",
+    "Invitation",
     "OrgRole",
     "Organisation",
     "OrganisationMember",
+    "PasswordResetToken",
     "Plan",
     "Project",
     "ProjectSettings",

@@ -34,3 +34,17 @@ class MembershipOut(BaseModel):
 class MeResponse(BaseModel):
     user: UserOut
     memberships: list[MembershipOut]
+
+
+class PasswordResetRequest(BaseModel):
+    # Plain string, not EmailStr, for the same reason as LoginRequest.
+    email: str = Field(min_length=1, max_length=320)
+
+
+class PasswordResetConfirm(BaseModel):
+    token: str = Field(min_length=20, max_length=200)
+    new_password: str = PasswordField
+
+
+class PasswordResetAvailability(BaseModel):
+    email_enabled: bool

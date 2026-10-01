@@ -156,6 +156,9 @@ AI, plan and end-to-end suites.
 - Accepted residual: an organisation administrator can still learn that an email has an
   account. Hiding that too needs invitation emails, and email delivery is not connected.
   Invitations are planned (see `docs/IMPLEMENTATION_PLAN.md`).
+- Update (October 2026): invitations are now in place (`modules/invitations/`). Existing
+  accounts join by signing in and accepting, and new people choose their own password.
+  The direct add form keeps the residual for sites without email.
 
 ### [Low] L1. The Q&A agent could ground answers on its own tool arguments
 - Location: `backend/app/modules/ai/agent.py`
@@ -321,9 +324,8 @@ AI, plan and end-to-end suites.
 
 Non-blocking, ordered by value.
 
-1. **Invitations with acceptance** (needs an approved email provider). This removes the
-   remaining account enumeration (M8), lets people choose their own passwords, and
-   lets organisation admins add existing accounts again.
+1. **Invitations with acceptance.** Done in October 2026, using the operator's own SMTP
+   server (see M8).
 2. **A nonce- or hash-based CSP** for the dashboard, removing `'unsafe-inline'` from
    `script-src`. The cost is that pages are rendered dynamically.
 3. **A shared rate-limit store** (PostgreSQL or Redis) before running more than one API

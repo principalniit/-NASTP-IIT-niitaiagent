@@ -13,6 +13,7 @@ import { PageHeader } from "@/components/app/page-header";
 import { EmptyState, ErrorState, LoadingState } from "@/components/app/states";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { InvitationsCard } from "@/components/admin/invitations-card";
 import { PlanCard } from "@/components/admin/plan-card";
 import { PlatformAuditCard } from "@/components/admin/platform-audit-card";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -34,11 +35,13 @@ export function AdministrationView() {
   const { me } = useSession();
   if (isLoading) return <LoadingState />;
   if (!current) return <NoOrganisation />;
+  const ownerLevel = current.my_role === "owner" || (current.my_role === null && !!me?.user.is_platform_admin);
   return (
     <>
       <PageHeader title="Administration" description={`Members and audit trail for ${current.name}.`} />
       <div className="space-y-6">
         <MembersCard org={current} canManage={can("members:manage")} />
+        {can("members:manage") ? <InvitationsCard org={current} ownerLevel={ownerLevel} /> : null}
         <PlanCard org={current} />
         {can("audit:read") ? <AuditCard org={current} /> : null}
         {me?.user.is_platform_admin ? <PlatformAuditCard /> : null}
@@ -210,8 +213,12 @@ function AddMemberForm({ org, ownerLevel }: { org: Organisation; ownerLevel: boo
       })}
     >
       <h3 className="flex items-center gap-2 text-sm font-semibold">
-        <UserPlus className="size-4" aria-hidden /> Add a member
+        <UserPlus className="size-4" aria-hidden /> Add a member directly
       </h3>
+      <p className="text-xs text-muted-foreground">
+        Creates the account with a password you set. To let people choose their own password, send an invitation
+        instead.
+      </p>
       {formError ? (
         <Alert variant={needsAccount ? "default" : "destructive"}>
           <AlertDescription>{formError}</AlertDescription>
