@@ -6,7 +6,7 @@ from functools import lru_cache
 from ipaddress import IPv4Network, IPv6Network, ip_network
 from typing import Literal
 
-from pydantic import SecretStr, model_validator
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _METADATA_NET = ip_network("169.254.0.0/16")
@@ -70,6 +70,10 @@ class Settings(BaseSettings):
     # Tokens the model reads per request. Set explicitly because some Ollama versions
     # default to a small window and silently cut off the end of long prompts.
     ai_context_tokens: int = 8192
+    # How long Ollama keeps the model loaded after a task, as a duration with a unit ("30m",
+    # "2h"; a negative value such as "-1m" keeps it until Ollama stops). Loading a model
+    # takes seconds to minutes, so a quiet period longer than this makes the next task wait.
+    ai_keep_alive: str = Field(default="30m", pattern=r"^-?\d{1,5}[smh]$")
     # Chromium executable for PDF reports. Empty uses Playwright's own installed browser.
     report_pdf_browser_path: str = ""
     # Scheduled crawls run only when this platform switch and the project's schedule are on.

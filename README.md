@@ -84,6 +84,8 @@ Other administrative commands:
 uv run python -m app.cli reset-password --email someone@niit.edu.pk   # also ends their sessions
 uv run python -m app.cli rotate-secrets   # after putting a new key first in INTEGRATIONS_ENCRYPTION_KEYS
 uv run python -m app.cli add-projects --org niit --owner-email you@niit.edu.pk --file sites.csv
+uv run python -m app.cli ai-report --org niit --days 30      # how AI tasks went and why they failed
+uv run python -m app.cli ai-eval --org niit --project "NIIT website" --out before.json   # score the AI
 ```
 
 `add-projects` creates one project per line of `Name, https://address` (lines starting
@@ -177,6 +179,7 @@ Backend variables live in `backend/.env` (template: `backend/.env.example`).
 | `REPORT_PDF_BROWSER_PATH` | empty | Chromium executable for PDF reports. Empty uses the browser installed by `uv run playwright install chromium` |
 | `SCHEDULER_ENABLED` | `false` | Allows scheduled crawls. Each project's schedule must also be turned on |
 | `AI_CONTEXT_TOKENS` | `8192` | Prompt window per request. Ollama may otherwise use a smaller default and cut off long prompts |
+| `AI_KEEP_ALIVE` | `30m` | How long Ollama keeps the model loaded after a task, so the next one does not wait for it to load. A duration with a unit; `-1m` keeps it until Ollama stops |
 | `AI_MAX_ACTIVE_JOBS_PER_ORG` | `3` | Queued or running AI tasks allowed per organisation |
 | `INTEGRATIONS_ENCRYPTION_KEYS` | empty | Comma-separated Fernet keys that encrypt integration credentials; the first encrypts. Empty means credentials cannot be stored. Back it up separately from the database |
 | `PUBLIC_BASE_URL` | `http://localhost:3000` | The dashboard's public address, used in invitation and reset links |
@@ -248,6 +251,8 @@ and crawl schedules. Tests never contact live NIIT infrastructure or a real AI m
 | Crawl pages show "Blocked destination" | The host resolves to a private address. Use `CRAWLER_ALLOWED_PRIVATE_NETWORKS` only for servers you own. |
 | AI assistant shows "Unavailable" | Ollama is not reachable at `OLLAMA_BASE_URL`, or the model is not pulled (`ollama list`). The platform keeps working. |
 | AI assistant shows "off" | Set `AI_PROVIDER=ollama` on the server and turn AI on in organisation settings |
+| AI answers are slow, or the first one after a break is much slower | Run `ollama ps` while a task runs: PROCESSOR must say `100% GPU`. Keep the model loaded with `AI_KEEP_ALIVE` (default 30 minutes). `ai-report` shows how many tasks waited for the model to load ("Cold") |
+| You want to know whether a change made the AI better | Run `ai-eval` before and after with `--out`, and compare the pass counts and times. It runs a fixed test set like real tasks and saves nothing to the database |
 | AI task failed: "The AI model did not respond in time" | Normal on a PC without a GPU. Set `AI_TIMEOUT_SECONDS=600` in `backend/.env` and restart the API and worker, or use a smaller model such as `llama3.2:3b`, or a PC with an NVIDIA GPU |
 | Report PDF shows "not installed" | Run `uv run playwright install chromium` in `backend`, then restart the worker. The HTML report works meanwhile and can be printed to PDF from the browser |
 | A report stays "Queued" | The worker is not running; reports are generated there |

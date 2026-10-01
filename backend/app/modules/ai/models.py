@@ -75,6 +75,9 @@ class AIAnalysis(UUIDPrimaryKey, Base):
     error: Mapped[str | None] = mapped_column(Text)
     attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     duration_ms: Mapped[int | None] = mapped_column(Integer)
+    # Model time and token counts as reported by the provider (AIUsage); None before
+    # the model was called.
+    metrics: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     requested_by_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL")
     )

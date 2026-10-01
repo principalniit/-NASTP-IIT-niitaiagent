@@ -11,7 +11,7 @@ from pydantic import BaseModel, ValidationError
 
 from app.core.config import get_settings
 from app.modules.organisations.schemas import OrganisationSettings
-from app.providers.interfaces import AIHealth, AIProvider
+from app.providers.interfaces import AIHealth, AIProvider, AIUsage
 
 logger = logging.getLogger(__name__)
 T = TypeVar("T", bound=BaseModel)
@@ -68,7 +68,29 @@ class OllamaProvider:
         self.base_url = (base_url or settings.ollama_base_url).rstrip("/")
         self.timeout = timeout or settings.ai_timeout_seconds
         self.context_tokens = settings.ai_context_tokens
+        self.keep_alive = settings.ai_keep_alive
+        self.usage = AIUsage()
         self._transport = transport
+
+    def _record(self, reply: dict[str, Any]) -> None:
+        """Add Ollama's own counters (nanoseconds and token counts) to the task's usage."""
+
+        def ms(key: str) -> int:
+            value = reply.get(key)
+            return int(value) // 1_000_000 if isinstance(value, int | float) else 0
+
+        def count(key: str) -> int:
+            value = reply.get(key)
+            return int(value) if isinstance(value, int | float) else 0
+
+        u = self.usage
+        u.calls += 1
+        u.load_ms += ms("load_duration")
+        u.prompt_tokens += count("prompt_eval_count")
+        u.prompt_ms += ms("prompt_eval_duration")
+        u.output_tokens += count("eval_count")
+        u.output_ms += ms("eval_duration")
+        u.total_ms += ms("total_duration")
 
     def _client(self, timeout: float) -> httpx.AsyncClient:
         return httpx.AsyncClient(timeout=timeout, trust_env=False, transport=self._transport)
@@ -107,6 +129,9 @@ class OllamaProvider:
                 "stream": False,
                 "format": schema.model_json_schema(),
                 "options": {"temperature": 0, "num_ctx": self.context_tokens},
+                # Keeps the model in GPU memory between tasks, so only the first task after
+                # a quiet period waits for it to load.
+                "keep_alive": self.keep_alive,
             }
             try:
                 async with self._client(self.timeout) as client:
@@ -120,9 +145,11 @@ class OllamaProvider:
             if response.status_code != 200:
                 raise AIUnavailableError(f"The AI service returned HTTP {response.status_code}.")
             try:
-                content = response.json()["message"]["content"]
+                reply = response.json()
+                content = reply["message"]["content"]
             except (ValueError, KeyError, TypeError) as exc:
                 raise AIUnavailableError("The AI service returned an unexpected response.") from exc
+            self._record(reply)
             try:
                 return schema.model_validate_json(content), attempt, content
             except ValidationError as exc:

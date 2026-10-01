@@ -484,7 +484,19 @@ export interface AIAnalysis extends AIAnalysisSummary {
   grounding: Grounding;
   attempts: number;
   duration_ms: number | null;
+  /** What the model did, as Ollama reported it; null when the model was never called. */
+  metrics: AIUsage | null;
   draft_ids: string[];
+}
+
+export interface AIUsage {
+  calls: number;
+  load_ms: number;
+  prompt_tokens: number;
+  prompt_ms: number;
+  output_tokens: number;
+  output_ms: number;
+  total_ms: number;
 }
 
 export type RecommendationStatus = "open" | "accepted" | "dismissed";

@@ -111,6 +111,9 @@ async def test_ai_tasks_produce_grounded_results_and_drafts(
     assert summary["status"] == "completed", summary["error"]
     assert summary["grounding"]["passed"] and summary["attempts"] == 1
     assert summary["prompt_version"] and summary["model"] == "llama3.1"
+    # What the model did, as Ollama reported it.
+    metrics = summary["metrics"]
+    assert metrics["calls"] == 1 and metrics["total_ms"] == 120 and metrics["prompt_tokens"] > 0
     assert summary["evidence"]["project_summary"]["latest_analysed_crawl"]
     known = {i["id"] for i in summary["evidence"]["top_open_issues"]["issues"]}
     assert {i for f in summary["output"]["key_findings"] for i in f["issue_ids"]} <= known
@@ -226,12 +229,15 @@ async def test_ai_failures_are_reported_not_raised(
     ollama.script("not json", "still not json")
     invalid = await run(client, owner, project["id"], kind="management_summary")
     assert invalid["status"] == "failed" and "not valid after 2 attempts" in invalid["error"]
+    assert invalid["metrics"]["calls"] == 2  # failed tasks keep their numbers too
+    assert invalid["attempts"] == 2
 
     monkeypatch.setattr(get_settings(), "ollama_base_url", "http://127.0.0.1:9")
     down = await run(client, owner, project["id"], kind="management_summary")
     assert (
         down["status"] == "failed" and down["error"] == "The AI service (Ollama) is not reachable."
     )
+    assert down["metrics"] is None  # the model was never reached
     status = (
         await client.get(f"/api/v1/organisations/{org['id']}/ai/status", headers=owner.headers)
     ).json()

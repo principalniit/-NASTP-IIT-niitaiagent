@@ -4,6 +4,7 @@ import json
 import logging
 import time
 import uuid
+from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Any
 
@@ -24,6 +25,7 @@ from app.modules.projects.models import Project
 from app.modules.projects.schemas import ProjectSettingsData
 from app.modules.projects.service import get_settings_row
 from app.modules.users.models import User
+from app.providers.interfaces import AIProvider
 
 logger = logging.getLogger(__name__)
 
@@ -68,13 +70,19 @@ async def run_analysis(
         return analysis.status
 
 
-async def _execute(session: AsyncSession, analysis: AIAnalysis) -> None:
+async def _execute(
+    session: AsyncSession, analysis: AIAnalysis, *, model: str | None = None
+) -> None:
+    """Run the task. `model` replaces the configured model; the evaluation command uses it
+    to compare models on the same tasks."""
     project = await session.get(Project, analysis.project_id)
     org = await session.get(Organisation, analysis.organisation_id)
     if project is None or org is None or project.deleted_at is not None:
         raise AIError("The project no longer exists.")
     org_settings = OrganisationSettings.model_validate(org.settings)
     choice = choose_provider(org_settings)
+    if model and choice.enabled:
+        choice = replace(choice, model=model)
     analysis.provider, analysis.model, analysis.prompt_version = (
         choice.provider,
         choice.model,
@@ -83,6 +91,24 @@ async def _execute(session: AsyncSession, analysis: AIAnalysis) -> None:
     if not choice.enabled or choice.model is None:
         raise AIError(choice.reason or "AI is not available.")
     provider = build_provider(choice)
+    try:
+        await _run_task(session, analysis, provider, org, org_settings, project)
+    finally:
+        # Kept for failed tasks too: slow or retried calls are what the numbers explain.
+        if provider.usage.calls:
+            analysis.metrics = provider.usage.model_dump()
+            # A task that failed on invalid replies never recorded its attempts.
+            analysis.attempts = max(analysis.attempts, provider.usage.calls)
+
+
+async def _run_task(
+    session: AsyncSession,
+    analysis: AIAnalysis,
+    provider: AIProvider,
+    org: Organisation,
+    org_settings: OrganisationSettings,
+    project: Project,
+) -> None:
     tools = ToolContext(session, project)
     system = system_prompt(org.name, org_settings, org.language)
     requester = (

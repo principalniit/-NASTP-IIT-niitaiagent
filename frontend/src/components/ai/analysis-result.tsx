@@ -233,6 +233,7 @@ export function AnalysisBody({ analysis }: { analysis: AIAnalysis }) {
               {analysis.grounding.violations.map((v) => <li key={v}>{v}</li>)}
             </ul>
           ) : null}
+          <RunFacts analysis={analysis} />
         </AlertDescription>
       </Alert>
     );
@@ -253,8 +254,26 @@ export function AnalysisBody({ analysis }: { analysis: AIAnalysis }) {
         from this project&apos;s crawl data only, and checked for unsupported numbers and claims. AI output can still be
         wrong: verify before acting.
       </p>
+      <RunFacts analysis={analysis} />
     </div>
   );
+}
+
+const seconds = (ms: number) => `${(ms / 1000).toFixed(1)} s`;
+const count = (n: number) => n.toLocaleString("en");
+
+/** How the task ran, from the provider's own counters. Nothing is shown when it reported none. */
+function RunFacts({ analysis }: { analysis: AIAnalysis }) {
+  const m = analysis.metrics;
+  if (!m?.calls) return null;
+  const facts = [
+    analysis.duration_ms !== null ? `took ${seconds(analysis.duration_ms)}` : null,
+    `${m.calls} model ${m.calls === 1 ? "call" : "calls"}`,
+    m.prompt_tokens ? `${count(m.prompt_tokens)} prompt tokens` : null,
+    m.output_tokens ? `${count(m.output_tokens)} output tokens` : null,
+    m.load_ms > 1000 ? `${seconds(m.load_ms)} loading the model` : null,
+  ].filter(Boolean);
+  return <p className="mt-2 text-xs text-muted-foreground">Run details: {facts.join(" · ")}.</p>;
 }
 
 /** Loads one analysis by id and renders it in a card, polling until it finishes. */

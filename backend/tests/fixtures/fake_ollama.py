@@ -214,10 +214,18 @@ class FakeOllama:
                     self._send(reply.status, reply.body)
                     return
                 content = reply if isinstance(reply, str) else json.dumps(reply)
+                prompt = sum(len(str(m.get("content", ""))) for m in request.get("messages", []))
                 body = {
                     "model": request.get("model"),
                     "message": {"role": "assistant", "content": content},
                     "done": True,
+                    # Ollama's counters, in nanoseconds; fixed so tests can check them.
+                    "total_duration": 120_000_000,
+                    "load_duration": 10_000_000,
+                    "prompt_eval_count": prompt // 4,
+                    "prompt_eval_duration": 60_000_000,
+                    "eval_count": len(content) // 4,
+                    "eval_duration": 50_000_000,
                 }
                 self._send(200, json.dumps(body).encode())
 

@@ -5,6 +5,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.modules.ai.models import AIKind, AIStatus, RecommendationStatus
+from app.providers.interfaces import AIUsage
 
 
 class AIStatusOut(BaseModel):
@@ -64,6 +65,7 @@ class AIAnalysisOut(AIAnalysisSummary):
     grounding: dict[str, Any]
     attempts: int
     duration_ms: int | None
+    metrics: AIUsage | None = None
     draft_ids: list[uuid.UUID] = Field(default_factory=list)
 
 

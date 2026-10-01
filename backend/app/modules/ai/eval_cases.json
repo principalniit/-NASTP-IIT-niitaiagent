@@ -1,0 +1,56 @@
+[
+  {
+    "name": "management-summary",
+    "kind": "management_summary",
+    "expect": {"cites_top_issues": true}
+  },
+  {
+    "name": "explain-top-issue",
+    "kind": "issue_explanation"
+  },
+  {
+    "name": "what-to-fix-first",
+    "kind": "question",
+    "question": "What should we fix first?",
+    "expect": {"cites_top_issues": true}
+  },
+  {
+    "name": "way-forward",
+    "kind": "question",
+    "question": "So what should be the way forward now?",
+    "expect": {"cites_top_issues": true}
+  },
+  {
+    "name": "overall-health",
+    "kind": "question",
+    "question": "How healthy is this website overall?"
+  },
+  {
+    "name": "titles-and-descriptions",
+    "kind": "question",
+    "question": "Which pages have problems with their titles or meta descriptions?",
+    "expect": {"cites_rules": ["onpage.title", "onpage.meta_description"]}
+  },
+  {
+    "name": "broken-pages",
+    "kind": "question",
+    "question": "Are there any broken links or pages that return errors?"
+  },
+  {
+    "name": "changes-since-last-crawl",
+    "kind": "question",
+    "question": "What changed since the previous crawl?"
+  },
+  {
+    "name": "traffic-not-available",
+    "kind": "question",
+    "question": "How many visitors did the website get last month?",
+    "expect": {"admits_missing_data": true}
+  },
+  {
+    "name": "competitors-not-available",
+    "kind": "question",
+    "question": "Which competitors rank above us on Google?",
+    "expect": {"admits_missing_data": true}
+  }
+]

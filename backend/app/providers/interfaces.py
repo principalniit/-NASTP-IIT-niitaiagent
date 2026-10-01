@@ -7,6 +7,22 @@ from typing import Any, Literal, Protocol, runtime_checkable
 from pydantic import BaseModel
 
 
+class AIUsage(BaseModel):
+    """What the model actually did across one task's calls, as the provider reported it.
+
+    Times are milliseconds. A provider that reports nothing leaves zeros, which callers show
+    as "not reported" rather than as measurements.
+    """
+
+    calls: int = 0
+    load_ms: int = 0
+    prompt_tokens: int = 0
+    prompt_ms: int = 0
+    output_tokens: int = 0
+    output_ms: int = 0
+    total_ms: int = 0
+
+
 class AIHealth(BaseModel):
     provider: str
     status: Literal["disabled", "available", "unavailable"]
@@ -18,11 +34,13 @@ class AIProvider(Protocol):
     """Returns JSON validated against a schema (Phase 4: Ollama).
 
     `chat_structured` returns (validated output, attempts used, raw text of the final
-    reply). It raises app.modules.ai.provider.AIError subclasses with safe messages.
+    reply), and adds what each call cost to `usage`. It raises
+    app.modules.ai.provider.AIError subclasses with safe messages.
     Grounding checks are the caller's job, so every provider gets them.
     """
 
     name: str
+    usage: AIUsage
 
     async def health(self) -> AIHealth: ...
 

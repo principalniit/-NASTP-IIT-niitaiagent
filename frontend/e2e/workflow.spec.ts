@@ -43,6 +43,7 @@ test("AI drafts go through review by a second person and are never published aut
   const summary = page.getByTestId("ai-result").first();
   await expect(summary.getByRole("heading", { name: "Key findings" })).toBeVisible({ timeout: 60_000 });
   await expect(summary.getByText("AI-generated")).toBeVisible();
+  await expect(summary.getByText(/Run details: took .* 1 model call/)).toBeVisible();
   await expect(summary.getByText("checked for unsupported numbers and claims")).toBeVisible();
 
   await page.getByPlaceholder("Which pages should we fix first?").fill("What should we fix first?");

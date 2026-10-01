@@ -43,6 +43,29 @@ async def test_structured_output_is_requested_and_validated(ollama: FakeOllama) 
     assert request["format"]["title"] == "MetadataDraftOutput"
     assert request["options"]["temperature"] == 0
     assert request["options"]["num_ctx"] == get_settings().ai_context_tokens
+    assert request["keep_alive"] == get_settings().ai_keep_alive
+
+
+async def test_usage_adds_up_what_ollama_reports_for_every_call(ollama: FakeOllama) -> None:
+    ollama.script("not json at all", VALID)
+    ai = provider(ollama)
+    await ai.chat_structured(MESSAGES, MetadataDraftOutput)
+    usage = ai.usage
+    assert usage.calls == 2  # the retry counts too
+    assert (usage.total_ms, usage.load_ms, usage.prompt_ms, usage.output_ms) == (240, 20, 120, 100)
+    assert usage.prompt_tokens > 0 and usage.output_tokens > 0
+
+
+def test_keep_alive_needs_an_ollama_duration() -> None:
+    from pydantic import ValidationError
+
+    from app.core.config import Settings
+
+    for good in ("30m", "2h", "90s", "-1m"):
+        assert Settings(ai_keep_alive=good).ai_keep_alive == good
+    for bad in ("30", "-1", "forever", "1d"):
+        with pytest.raises(ValidationError):
+            Settings(ai_keep_alive=bad)
 
 
 async def test_invalid_output_is_retried_with_the_errors(ollama: FakeOllama) -> None:

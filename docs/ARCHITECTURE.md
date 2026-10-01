@@ -254,7 +254,19 @@ tracking calls it.
 | Comparison | `seo/compare.py` | Deterministic crawl-to-crawl comparison (score change, new, resolved and recurring issues, page changes), used by the `compare_crawls` tool and `GET /projects/{id}/compare`. |
 
 Every `ai_analyses` row keeps the evidence, output, grounding report, provider, model,
-prompt version, attempts and duration, so any AI text can be traced to its inputs.
+prompt version, attempts and duration, so any AI text can be traced to its inputs. It
+also keeps `metrics`: the model calls, load time, prompt and output tokens and model
+time as Ollama reported them (`AIUsage`), for failed tasks too. Requests send
+`keep_alive` (`AI_KEEP_ALIVE`) so the model stays loaded between tasks.
+
+**Measuring the AI** (`evaluation.py`, CLI `ai-report` and `ai-eval`). `ai-report`
+summarises an organisation's finished tasks per kind: success, model calls, median time,
+prompt size, cold starts and grouped failure reasons. `ai-eval` runs a JSON test set
+(`eval_cases.json` by default: summaries, issue explanations and questions, including
+questions the platform has no data for) through the same `_execute` path as real tasks,
+inside a transaction that is rolled back, and scores each case: completed, grounded,
+cites the highest-priority issues or issues of named rules, and admits missing data.
+`--model` compares models on the same cases; `--out` saves results as JSON.
 
 **Drafts and approvals.** A draft stores the page, the field (title, meta description,
 H1, content outline or section), the original content, the proposed content, the

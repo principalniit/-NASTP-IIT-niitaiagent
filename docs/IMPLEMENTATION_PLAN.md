@@ -595,6 +595,9 @@ The owner asked to close four gaps, all with free and self-hosted means only:
 | JavaScript site rendering behind the SSRF guard | Pending |
 | Configurable product name and a one-command installer | Pending |
 
+Added by the owner: improve the AI assistant's accuracy and speed with free, local
+means. Step 1 (measure) is done (16.2); steps 2 and 3 follow.
+
 ### 16.1 Invitations and password reset
 
 Delivered:
@@ -631,3 +634,46 @@ Known limitations:
 | Reset request limits are in-process, like login limits | A shared store before running more than one API process |
 | Access tokens stay valid for up to 15 minutes after a reset | Per-user token version (security review recommendation 4) |
 | Emails are plain text and English only | HTML templates and languages when needed |
+
+### 16.2 Measuring the AI assistant (AI step 1)
+
+The owner asked how to make the AI agent more accurate and faster. The plan, in order:
+1. measure;
+2. trim prompts and compute facts in code, add worked examples and more useful retries;
+3. fetch data before the model starts, use native tool calling, and add feedback buttons;
+4. later, lookup of approved content.
+
+Step 1 delivered:
+- **Model kept loaded.** Every request sends `keep_alive` (`AI_KEEP_ALIVE`, default 30
+  minutes), so only the first task after a quiet period waits for the model to load.
+- **Run metrics.** Each AI task stores what Ollama reported: model calls, load time,
+  prompt and output tokens, and model time (migration 0010). They are kept for failed
+  tasks too, and a task that failed on invalid replies now records its real number of
+  attempts. Results show a "Run details" line.
+- **`ai-report`.** Per task type: totals, success, model calls, median seconds,
+  average prompt size, cold starts, models used, and the most common failure reasons.
+- **`ai-eval`.** Runs a starter test set of 10 cases (management summary, top issue
+  explanation, eight questions including two the platform has no data for) like real
+  tasks, without saving anything, and scores each one. `--model` compares models and
+  `--out` saves the results to compare runs.
+
+On the owner's laptop (RTX 4060, 8 GB), Ollama was also set up with flash attention, a
+q8_0 KV cache and a 30-minute keep-alive, and confirmed at 100% GPU.
+
+Assumption A23: the "admits missing data" check matches common phrasings such as "not
+available" or "does not have". It confirms the answer admits the gap. The grounding
+check separately rejects any number that is not in the data.
+
+| Suite | Result |
+|-------|--------|
+| Backend (ruff, mypy, pytest with new provider, metrics, report and evaluation tests) | 367 passed |
+| Frontend lint, types | Clean |
+| End-to-end (Playwright), now checking the run details line | 18 passed |
+
+Known limitations:
+
+| Limitation | Plan |
+|------------|------|
+| The starter cases are generic; project-specific expectations need a custom cases file | Add NIIT cases once the baseline is known |
+| Evaluation runs one case at a time on one model | Enough for a single GPU |
+| Run details are not yet shown as a dashboard chart | `ai-report` covers it for now |
