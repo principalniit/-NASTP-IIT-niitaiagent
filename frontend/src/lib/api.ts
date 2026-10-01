@@ -47,6 +47,15 @@ async function toError(response: Response): Promise<ApiError> {
       body?.request_id ?? null,
     );
   } catch {
+    // The API always answers in JSON. A plain-text 5xx comes from the dashboard's proxy,
+    // which means the API server is not running or cannot be reached.
+    if (response.status >= 500) {
+      return new ApiError(
+        response.status,
+        "api_unreachable",
+        "The API server is not responding. Check that it is running (and that the database is upgraded), then try again.",
+      );
+    }
     return new ApiError(response.status, "http_error", response.statusText || "Request failed");
   }
 }

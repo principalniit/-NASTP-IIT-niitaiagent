@@ -239,7 +239,7 @@ and crawl schedules. Tests never contact live NIIT infrastructure or a real AI m
 |---------|-----|
 | `connection refused` on port 5432 | Start PostgreSQL: `docker compose up -d db` |
 | `password authentication failed for user "niit"` | Create the role as shown in step 2, or fix `DATABASE_URL` |
-| Dashboard shows "Could not load data" | Check the API is running on port 8000 and `API_ORIGIN` matches; rebuild after changing it |
+| Dashboard shows "Could not load data" with "Internal Server Error" or "The API server is not responding" | The dashboard cannot reach the API. Look at the API window: if it stopped with "The database schema is out of date", run `uv run alembic upgrade head` in `backend` and start it again. Otherwise start it (`uv run uvicorn app.main:app --reload`) and check that `API_ORIGIN` matches; rebuild after changing it |
 | Signed out after every page reload | Access tokens live in memory by design; the refresh cookie restores the session. If it does not, check that you open the dashboard via `localhost:3000`, not the API port. |
 | `Too many failed login attempts` | Wait five minutes, or restart the API in development |
 | A crawl stays "Queued" | Start a worker: `uv run python -m app.worker` |
@@ -255,7 +255,7 @@ and crawl schedules. Tests never contact live NIIT infrastructure or a real AI m
 | AI tasks stay "Waiting for the worker" | Start `uv run python -m app.worker`; AI tasks run there, not in the API |
 | An AI task failed with "claims not supported by the project data" | The model added numbers or claims that are not in the crawl evidence, so the result was discarded. Try again, or use a larger model |
 | "People who wrote or submitted this draft cannot approve it" | Intended: a second person with an approving role, who did not work on the draft, must review |
-| "This email already has an account. Ask a platform administrator…" | Intended: only platform administrators can add an existing account to an organisation (see `docs/SECURITY.md`) |
+| "This email already has an account. Send an invitation instead…" | Intended: existing accounts join through an invitation they accept by signing in; platform administrators can still add them directly (see `docs/SECURITY.md`) |
 | Sign-in does not get past the sign-in page after updating, or the API or worker stops with "The database schema is out of date" | Run `uv run alembic upgrade head` in `backend`, then restart the API and the worker. Run it after every `git pull` |
 | Production start fails with a `JWT_SECRET` or `COOKIE_SECURE` error | Intended safety check; set a strong secret and serve over HTTPS |
 
