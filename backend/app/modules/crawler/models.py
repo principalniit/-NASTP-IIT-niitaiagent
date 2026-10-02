@@ -172,6 +172,8 @@ class CrawlPage(UUIDPrimaryKey, Base):
     images: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list, server_default="[]")
     image_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     images_missing_alt: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    # True when the page was analysed after running its scripts (project setting).
+    rendered_with_js: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     structured_data: Mapped[dict[str, Any]] = mapped_column(
         JSONB, default=dict, server_default="{}"
     )

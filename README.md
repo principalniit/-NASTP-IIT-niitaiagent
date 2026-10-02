@@ -184,6 +184,7 @@ Backend variables live in `backend/.env` (template: `backend/.env.example`).
 | `AI_KEEP_ALIVE` | `30m` | How long Ollama keeps the model loaded after a task, so the next one does not wait for it to load. A duration with a unit; `-1m` keeps it until Ollama stops |
 | `AI_MAX_ACTIVE_JOBS_PER_ORG` | `3` | Queued or running AI tasks allowed per organisation |
 | `INTEGRATIONS_ENCRYPTION_KEYS` | empty | Comma-separated Fernet keys that encrypt integration credentials; the first encrypts. Empty means credentials cannot be stored. Back it up separately from the database |
+| `CRAWLER_BROWSER_PATH` | empty | Chromium for projects that render JavaScript. Empty uses `REPORT_PDF_BROWSER_PATH`, then the browser installed by `uv run playwright install chromium` |
 | `SEARCH_CONSOLE_DAYS` | `90` | Days of Google Search Console data each import fetches. Connecting is done per organisation in the dashboard (`docs/SEARCH_CONSOLE.md`) |
 | `PUBLIC_BASE_URL` | `http://localhost:3000` | The dashboard's public address, used in invitation and reset links |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM`, `SMTP_STARTTLS` | empty, `587`, empty, empty, empty, `true` | Your organisation's own mail server. Empty `SMTP_HOST` turns email off: invitation links are then shared by hand and password resets go through an administrator |
@@ -285,7 +286,7 @@ and key rotation. The latest security review is
 | Google Search Console: clicks, impressions, CTR and position per project, page and query; used by the AI | Done; free, read-only, with your own service account (`docs/SEARCH_CONSOLE.md`) |
 | Projects and project settings (including NIIT configuration) | Done |
 | Dashboard shell, overview, projects, settings, administration | Done |
-| Crawler, Crawl Explorer, Pages browser (Phase 2) | Done; JavaScript rendering deferred |
+| Crawler, Crawl Explorer, Pages browser (Phase 2) | Done; optional JavaScript rendering per project, with every browser request fetched by the guarded crawler |
 | SEO engine: 50 rules, scoring, prioritisation, issue lifecycle, SEO dashboards (Phase 3) | Done |
 | AI assistant, recommendations, content drafts, approvals (Phase 4) | Done; not yet validated against a live Ollama model |
 | Reports (13 sections, HTML and PDF), monitoring, crawl comparison, schedule foundation (Phase 5) | Done |

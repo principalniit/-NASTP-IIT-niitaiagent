@@ -74,6 +74,9 @@ class Settings(BaseSettings):
     # "2h"; a negative value such as "-1m" keeps it until Ollama stops). Loading a model
     # takes seconds to minutes, so a quiet period longer than this makes the next task wait.
     ai_keep_alive: str = Field(default="30m", pattern=r"^-?\d{1,5}[smh]$")
+    # Chromium for crawls that render JavaScript. Empty uses REPORT_PDF_BROWSER_PATH, then
+    # Playwright's own installed browser.
+    crawler_browser_path: str = ""
     # Chromium executable for PDF reports. Empty uses Playwright's own installed browser.
     report_pdf_browser_path: str = ""
     # Scheduled crawls run only when this platform switch and the project's schedule are on.

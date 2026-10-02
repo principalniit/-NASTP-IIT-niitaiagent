@@ -592,7 +592,7 @@ The owner asked to close four gaps, all with free and self-hosted means only:
 |-----|--------|
 | Invitations and password reset by email | Done (16.1) |
 | Google Search Console data, using the customer's own free Google client | Done (16.5) |
-| JavaScript site rendering behind the SSRF guard | Pending |
+| JavaScript site rendering behind the SSRF guard | Done (16.6) |
 | Configurable product name and a one-command installer | Pending |
 
 Added by the owner: improve the AI assistant's accuracy and speed with free, local
@@ -844,3 +844,33 @@ Known limitations:
 | Not run against a live Google account in development; tests use a fake that checks the signed sign-in request | First live import on the owner's laptop |
 | Google Analytics (visitors) is still a record only | Same service-account pattern if the owner wants it |
 | No per-country or per-device breakdown yet | Add dimensions when needed |
+
+### 16.6 JavaScript rendering behind the SSRF guard
+
+Delivered (`crawler/renderer.py`, `CrawlEngine._sub_fetch`, migration 0013):
+- **Per-project setting** (Projects → crawl settings).
+  - The crawler fetches each page as before, then runs the page's scripts in headless
+    Chromium on that HTML and parses the rendered DOM.
+  - Script-written headings, text, links and structured data are analysed, and links
+    that only scripts create are followed.
+  - Pages show whether they were rendered.
+- **The browser has no network.**
+  - Every request is intercepted. Scripts and data requests are fetched by the
+    crawler's guarded client, with the SSRF check, crawl scope, exclusions, robots.txt,
+    politeness and a size cap. Everything else is refused: images, styles, fonts, media,
+    frames, other methods, other hosts.
+  - Chromium has no DNS and a refusing proxy, which stops even WebSockets.
+  - The security tests use a real Chromium. They prove that robots.txt-blocked scripts,
+    images, the cloud metadata address and another host are never contacted, and that
+    every request came from the crawler's client. The WebSocket test fails if the
+    browser flags are removed.
+- **Graceful without a browser.** The crawl continues unrendered and warns. Pages that
+  cannot render in 20 seconds are analysed as served and counted in the warnings.
+
+Known limitations:
+
+| Limitation | Plan |
+|------------|------|
+| Scripts on other hosts (CDNs) are not fetched, so pages that depend on them render partly | A per-project list of allowed script hosts, each under the same checks, if needed |
+| Rendering is slower: sub-requests follow the politeness delay | Scripts are cached per crawl; keep rendering off for sites that do not need it |
+| Page thumbnails are still drawn from crawl data, not screenshots | Screenshots could reuse the renderer later |

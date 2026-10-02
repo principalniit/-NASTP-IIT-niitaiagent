@@ -173,6 +173,9 @@ export function PageDetailView({ crawlId, pageId }: { crawlId: string; pageId: s
                 <Fact label="Size">{page.content_length !== null ? `${page.content_length.toLocaleString()} bytes` : <Missing text="Unknown" />}</Fact>
                 <Fact label="Depth">{page.depth ?? <Missing text="Found via sitemap only" />}</Fact>
                 <Fact label="Found via">{page.discovered_via}</Fact>
+                <Fact label="JavaScript">
+                  {page.rendered_with_js ? "Analysed after running the page's scripts" : "Analysed as served, without running scripts"}
+                </Fact>
                 <Fact label="In sitemap">{page.in_sitemap ? "Yes" : "No"}{page.is_orphan ? " · orphan (no internal links point here)" : ""}</Fact>
                 {page.redirect_chain.length ? (
                   <Fact label="Redirects">

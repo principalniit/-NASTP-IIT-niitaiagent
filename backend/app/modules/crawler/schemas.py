@@ -65,6 +65,7 @@ class CrawlPageRow(BaseModel):
     is_noindex: bool
     in_sitemap: bool
     is_orphan: bool
+    rendered_with_js: bool = False
 
 
 class LinkOut(BaseModel):

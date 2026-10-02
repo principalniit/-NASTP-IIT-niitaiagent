@@ -392,7 +392,9 @@ function SettingsForm({ project, settings, canEdit }: { project: Project; settin
             <div className="flex items-center gap-2 sm:col-span-2">
               <input id="render_javascript" type="checkbox" className="size-4 accent-[var(--primary)]" {...form.register("render_javascript")} />
               <label htmlFor="render_javascript" className="text-sm">
-                Render JavaScript with a headless browser (slower; only for sites that need it)
+                Run each page&apos;s JavaScript before analysing it (slower; only for sites that build pages with
+                scripts). Every request the scripts make is fetched by the crawler under the same safety and robots.txt
+                rules; nothing else is contacted.
               </label>
             </div>
           </CardContent>

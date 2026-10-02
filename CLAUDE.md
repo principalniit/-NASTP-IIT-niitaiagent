@@ -18,8 +18,9 @@ Read before non-trivial work: `docs/ARCHITECTURE.md`, `docs/IMPLEMENTATION_PLAN.
   JWT. Python 3.12, package manager `uv`.
 - **Database:** PostgreSQL.
 - **Crawler:** httpx behind the SSRF guard, selectolax for HTML, lxml for sitemaps.
-  Playwright rendering only when necessary; it is deferred until browser sub-requests
-  can be put behind the same SSRF guard (see `docs/SECURITY.md`).
+  Optional JavaScript rendering per project with Playwright, where the browser has no
+  network of its own: every sub-request is fetched by the guarded crawler client (see
+  `docs/SECURITY.md`).
 - **AI:** Ollama initially, behind the provider-independent interfaces in
   `backend/app/providers/`.
 - **Tests:** pytest (unit, integration, security), frontend lint and type checks, and

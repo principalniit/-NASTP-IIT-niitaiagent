@@ -195,11 +195,18 @@ Incremental recrawls send `If-None-Match` and `If-Modified-Since` from the previ
 completed crawl. On `304 Not Modified` the page's observations and outgoing links are
 copied forward, so discovery continues.
 
-Deferred: JavaScript rendering. A headless browser makes its own sub-requests that
-would bypass the connection-level SSRF guard, so it needs request interception and
-its own review before it is enabled. The project setting is kept; crawls that request
-it record a warning and analyse pages as served. External links are recorded but not
-fetched, so broken external links are not reported.
+JavaScript rendering (optional per project, `crawler/renderer.py`).
+- When a project turns it on, each HTML page is loaded into headless Chromium with the
+  HTML the crawler already fetched. The page's scripts run, and the rendered DOM is
+  parsed instead, so script-written headings, text and links count. Rendered pages are
+  marked `rendered_with_js`.
+- Every request the browser makes is intercepted and fetched through
+  `CrawlEngine._sub_fetch`, with the same guarded client, scope, robots.txt and
+  politeness as pages. Scripts are cached for the crawl.
+- The browser itself has no DNS and a refusing proxy (see `docs/SECURITY.md`).
+- Without Playwright or Chromium the crawl continues unrendered, with a warning.
+
+External links are recorded but not fetched, so broken external links are not reported.
 
 ## 8. SEO engine (Phase 3, implemented)
 

@@ -239,6 +239,8 @@ export interface CrawlPageRow {
   is_noindex: boolean;
   in_sitemap: boolean;
   is_orphan: boolean;
+  /** Analysed after running the page's scripts (project setting). */
+  rendered_with_js: boolean;
 }
 
 export interface CrawlLinkRef {

@@ -28,6 +28,11 @@ from app.modules.crawler.models import (
     FetchStatus,
 )
 from app.modules.crawler.parser import ParsedPage, parse_html, robots_directives
+from app.modules.crawler.renderer import (
+    Renderer,
+    RendererUnavailableError,
+    SubResponse,
+)
 from app.modules.crawler.robots import RobotsPolicy, RobotsTxt
 from app.modules.crawler.sitemaps import SitemapError, parse_sitemap
 from app.modules.crawler.url_safety import Resolver, SafetyPolicy, system_resolve
@@ -48,7 +53,12 @@ COPIED_FIELDS = (
     "h1_count", "word_count", "content_hash", "text_content", "images", "image_count",
     "images_missing_alt",
     "structured_data", "hreflang", "internal_links_count", "external_links_count",
+    "rendered_with_js",
 )  # fmt: skip
+# Sub-resources fetched for rendering: a smaller cap than pages, and scripts are cached
+# for the whole crawl so a shared bundle is fetched once.
+SUBRESOURCE_MAX_BYTES = 3_000_000
+SCRIPT_CACHE_MAX_BYTES = 30_000_000
 
 
 class HostThrottle:
@@ -104,6 +114,10 @@ class CrawlEngine:
         self.counts = {"crawled": 0, "failed": 0, "blocked": 0}
         self.stop_reason: str | None = None
         self.limit_reached = False
+        self.renderer: Renderer | None = None
+        self.render_failures = 0
+        self._script_cache: dict[str, SubResponse] = {}
+        self._script_cache_bytes = 0
 
     # ------------------------------------------------------------------ helpers
 
@@ -143,6 +157,51 @@ class CrawlEngine:
         return await self.fetcher.fetch(
             url, in_scope=self.in_scope, before_request=self._wait_turn, **kwargs
         )
+
+    async def _sub_fetch(self, url: str, resource_type: str) -> SubResponse | None:
+        """Fetch a resource a page's scripts asked for, under every crawl safeguard:
+        crawl scope, exclusions, robots.txt, politeness, the SSRF guard and a size cap."""
+        target = normalise_url(url)
+        if target is None or not self.in_scope(target):
+            return None
+        if is_excluded(target, self.config.excluded_paths):
+            return None
+        cached = self._script_cache.get(target)
+        if cached is not None:
+            return cached
+        robots = await self._robots_for(host_of(target))
+        if not robots.can_fetch(self.config.user_agent, path_with_query(target)):
+            return None
+        result = await self._fetch(
+            target, read_body=lambda _: True, max_bytes=SUBRESOURCE_MAX_BYTES
+        )
+        if result.outcome != "ok" or result.status_code is None:
+            return None
+        response = SubResponse(
+            result.status_code,
+            result.headers.get("content-type", "application/octet-stream"),
+            result.body or b"",
+        )
+        size = len(response.body)
+        if resource_type == "script" and self._script_cache_bytes + size <= SCRIPT_CACHE_MAX_BYTES:
+            self._script_cache[target] = response
+            self._script_cache_bytes += size
+        return response
+
+    async def _start_renderer(self) -> None:
+        renderer = Renderer(
+            self.settings.crawler_browser_path or self.settings.report_pdf_browser_path,
+            self.config.user_agent,
+        )
+        try:
+            await renderer.start()
+        except RendererUnavailableError as exc:
+            self.warnings.append(
+                f"JavaScript rendering was requested but is not available: {exc} Pages were "
+                "analysed as served, without running scripts."
+            )
+            return
+        self.renderer = renderer
 
     # ------------------------------------------------------------------ robots and sitemaps
 
@@ -293,7 +352,17 @@ class CrawlEngine:
                     links.append(self._link(page, old.target_url, old.anchor_text, old.nofollow))
                     extracted.append((old.target_url, old.nofollow))
         elif result.status_code and 200 <= result.status_code < 300 and result.is_html:
-            parsed = parse_html(result.body or b"", result.final_url or item.url)
+            body = result.body or b""
+            if self.renderer is not None:
+                rendered = await self.renderer.render(
+                    result.final_url or item.url, body, result.content_type, self._sub_fetch
+                )
+                if rendered.html is not None:
+                    body = rendered.html.encode()
+                    page.rendered_with_js = True
+                else:
+                    self.render_failures += 1
+            parsed = parse_html(body, result.final_url or item.url)
             self._apply_parsed(page, parsed, result)
             for link in parsed.links:
                 links.append(self._link(page, link.url, link.anchor_text, link.nofollow))
@@ -466,10 +535,7 @@ class CrawlEngine:
             max_connections=self.config.concurrency * 2,
         )
         if self.config.render_javascript:
-            self.warnings.append(
-                "JavaScript rendering was requested but is not available yet; pages were "
-                "analysed as served, without running scripts."
-            )
+            await self._start_renderer()
         monitor = asyncio.create_task(self._monitor())
         workers = [asyncio.create_task(self._worker()) for _ in range(self.config.concurrency)]
         try:
@@ -486,7 +552,14 @@ class CrawlEngine:
             for task in (*workers, monitor):
                 task.cancel()
             await asyncio.gather(*workers, monitor, return_exceptions=True)
+            if self.renderer is not None:
+                await self.renderer.close()
             await self.fetcher.aclose()
+        if self.render_failures:
+            self.warnings.append(
+                f"{self.render_failures} page(s) could not be rendered with JavaScript in time "
+                "and were analysed as served."
+            )
         if self.stop_reason == "internal_error":
             raise RuntimeError("Crawl results could not be stored")
         return await self._finalise()

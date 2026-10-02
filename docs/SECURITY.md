@@ -112,6 +112,20 @@ never reach the platform's own network. Controls, all covered by
 - **Politeness.** robots.txt is always respected, an unreachable robots.txt blocks the
   host, and requests to one host are spaced by the larger of the project delay and the
   site's `Crawl-delay`.
+- **JavaScript rendering** (optional per project, `crawler/renderer.py`).
+  - The browser never uses the network itself. Every request it makes is intercepted.
+    Only GET requests for scripts and data (fetch and XMLHttpRequest) are considered.
+    They are fetched by the crawler's guarded client under the SSRF check, crawl scope,
+    exclusions, robots.txt, the politeness delay and a 3 MB cap, and everything else is
+    refused. The page itself is the response the crawler already fetched.
+  - Defence in depth: Chromium starts with every hostname mapped to "not found" and a
+    proxy that refuses connections. A request interception cannot see, such as a
+    WebSocket, reaches nothing.
+  - A security test shows the WebSocket reaching an outside server without these flags
+    and not with them.
+  - Service workers are blocked. Each page gets a fresh context with no cookies.
+  - At most 40 sub-requests and 20 seconds per page are allowed. Pages that fail are
+    analysed as served, and the crawl says how many.
 
 ## 5. Client addresses behind proxies
 
@@ -287,8 +301,8 @@ here too.
 - The dashboard's policy allows inline scripts (Next.js needs them without nonces).
 - Row-level security in PostgreSQL is not enabled. Isolation is enforced in the
   application layer and covered by tests, including a suite that walks every route.
-- JavaScript rendering is not enabled because browser sub-requests would bypass the
-  connection-level SSRF guard. It needs request interception and a dedicated review.
+- JavaScript rendering is limited to the crawl scope: scripts on CDNs or other hosts are
+  not fetched, so pages that need them render without them.
 - Grounding checks are pattern-based. They catch invented numbers, unknown issue ids and
   the listed claim types, but cannot prove that every sentence is true. That is why AI
   output is labelled, drafts need human approval, and protected facts need a source.
