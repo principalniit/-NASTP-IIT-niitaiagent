@@ -1,6 +1,7 @@
 """Google Search Console: key handling, connection test, sync, project figures and the AI."""
 
 import json
+import uuid
 from collections.abc import Iterator
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
@@ -351,3 +352,32 @@ async def test_no_data_without_search_console(client: AsyncClient) -> None:
         ).json()
         assert state["state"] == "not_connected" and state["top_pages"] == []
     assert date.today()  # figures never default to anything
+
+
+async def test_records_from_before_the_connection_do_not_count_as_connected(
+    client: AsyncClient, fake_google: FakeGoogle
+) -> None:
+    """A record saved when integrations were records only: an email typed as the property
+    and a password as the credential. It must not be reported as a connection."""
+    from app.core import crypto
+    from app.modules.integrations.models import Integration
+
+    owner, org, project = await _org(client)
+    async with get_session_factory()() as session:
+        session.add(
+            Integration(
+                organisation_id=uuid.UUID(org["id"]),
+                provider="google_search_console",
+                name="Old record",
+                config={"property_url": "dirit@niit.edu.pk"},
+                secret=crypto.encrypt("not-a-key"),
+                secret_hint="set",
+            )
+        )
+        await session.commit()
+    state = (
+        await client.get(
+            f"/api/v1/projects/{project['id']}/search-performance", headers=owner.headers
+        )
+    ).json()
+    assert state["state"] == "not_connected" and state["properties"] == []

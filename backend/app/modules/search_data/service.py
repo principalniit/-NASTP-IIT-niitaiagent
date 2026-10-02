@@ -268,14 +268,19 @@ def _ctr(clicks: int, impressions: int) -> float | None:
 
 
 async def connection_state(session: AsyncSession, project: Project) -> dict[str, Any]:
-    integrations = list(
-        await session.scalars(
+    # Only records with a validated service account key count. Records made before the
+    # connection existed hold whatever was typed then (for example an email as the
+    # property, or a password), and cannot reach Google.
+    integrations = [
+        i
+        for i in await session.scalars(
             select(Integration).where(
                 Integration.organisation_id == project.organisation_id,
                 Integration.provider == PROVIDER,
             )
         )
-    )
+        if i.secret_hint and i.config.get("service_account_email")
+    ]
     last = None
     if integrations:
         last = await session.scalar(
@@ -285,7 +290,7 @@ async def connection_state(session: AsyncSession, project: Project) -> dict[str,
             )
         )
     return {
-        "connected": any(i.secret_hint for i in integrations),
+        "connected": bool(integrations),
         "properties": [_property(i) for i in integrations],
         "last_synced_at": last,
     }
