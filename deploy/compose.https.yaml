@@ -1,0 +1,7 @@
+# HTTPS for a public domain name: ports 80 and 443 must be reachable from the internet
+# and the name must point at this server, so a free certificate can be issued.
+services:
+  proxy:
+    ports:
+      - "80:80"
+      - "443:443"

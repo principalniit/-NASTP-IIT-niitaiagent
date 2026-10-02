@@ -1,0 +1,5 @@
+# Plain HTTP on one port, for a single machine or a trusted local network.
+services:
+  proxy:
+    ports:
+      - "${WEB_BIND:-127.0.0.1}:${WEB_PORT:-3000}:${WEB_PORT:-3000}"

@@ -247,6 +247,25 @@ the platform acts on.
 - The AI may state traffic or position figures only when Search Console data is in its
   evidence, every number comes from it, and the sentence reports rather than predicts.
 
+## 5e. Container installation (`deploy/`)
+
+- Only the front proxy (Caddy) is published. The dashboard, API, database and Ollama are
+  reachable only inside the Docker network.
+- **Client addresses.** The installation test found that the dashboard (Next.js) passes
+  a client's `X-Forwarded-For` to the API unchanged. With `TRUST_PROXY_HEADERS=true`,
+  a client could then choose its own address, slipping past per-address sign-in limits
+  and forging audit entries.
+  - The front proxy overwrites the header with the real address, and the API trusts it
+    only in this stack. The fix was verified: a forged header was ignored.
+  - The documented nginx setup already overwrites the header, so it is not affected.
+- Secrets are generated on the machine and stored in `deploy/.env` with owner-only
+  permissions. Re-running the installer keeps them.
+- Containers run as non-root users. A build-time CA certificate, for networks that
+  inspect TLS, is passed as a build secret and not kept in the images.
+- For an `https://` address the proxy obtains certificates automatically and the API
+  runs with production checks (`COOKIE_SECURE`). Plain-HTTP installs are meant for one
+  machine or a trusted network.
+
 ## 6. Input, output and errors
 
 - Pydantic validates every request body, query parameter and configuration blob.

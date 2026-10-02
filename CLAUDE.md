@@ -36,6 +36,7 @@ backend/tests/           unit, integration, security tests and fixtures
 frontend/src/            Next.js app, components, lib
 frontend/e2e/            Playwright tests
 docs/                    architecture, plan, security, NIIT configuration
+deploy/                  container stack and one-command installers
 ```
 
 Next.js 16 has breaking changes from older versions. Before changing framework-level

@@ -1,0 +1,114 @@
+# The whole platform in containers: database, API, worker, dashboard, a front proxy and
+# (optionally) Ollama. Created and started by install.sh / install.ps1, which write .env
+# next to this file and choose compose.http.yaml or compose.https.yaml for the published
+# ports. Only the front proxy is published; the dashboard, API and database stay on the
+# internal network.
+name: ai-seo
+
+x-backend: &backend
+  build:
+    context: ../backend
+    args:
+      WITH_CHROMIUM: ${WITH_CHROMIUM:-1}
+    secrets: [ca]
+  image: ai-seo-backend:latest
+  restart: unless-stopped
+  env_file: .env
+  environment:
+    DATABASE_URL: postgresql+asyncpg://seo:${DB_PASSWORD:?run the installer first}@db:5432/seo
+    # Requests reach the API only through the front proxy, which replaces any
+    # X-Forwarded-For a client sends with the real address, and the dashboard, which
+    # passes it on. So the header can be trusted here, and only here.
+    TRUST_PROXY_HEADERS: "true"
+    OLLAMA_BASE_URL: http://ollama:11434
+
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: seo
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?run the installer first}
+      POSTGRES_DB: seo
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U seo -d seo"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    <<: *backend
+    command: ["api"]
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=3)"
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  worker:
+    <<: *backend
+    command: ["worker"]
+    depends_on:
+      api:
+        condition: service_healthy
+    # Chromium (PDF reports, JavaScript rendering) needs more shared memory than the default.
+    shm_size: 512mb
+
+  web:
+    build:
+      context: ../frontend
+      args:
+        API_ORIGIN: http://api:8000
+        NEXT_PUBLIC_PRODUCT_NAME: ${PRODUCT_NAME:-AI SEO Agent}
+      secrets: [ca]
+    image: ai-seo-web:latest
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+
+  proxy:
+    # The only published service. It sets X-Forwarded-For to the real client address
+    # (the dashboard would pass a forged one on unchanged), and for an https:// address
+    # obtains and renews a free certificate automatically.
+    image: caddy:2.10
+    restart: unless-stopped
+    command: ["caddy", "reverse-proxy", "--from", "${SITE_ADDRESS:-http://:3000}", "--to", "web:3000"]
+    depends_on:
+      - web
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+
+  ollama:
+    image: ollama/ollama:0.12.3
+    profiles: ["ai"]
+    restart: unless-stopped
+    environment:
+      OLLAMA_KEEP_ALIVE: 30m
+      OLLAMA_FLASH_ATTENTION: "1"
+      OLLAMA_KV_CACHE_TYPE: q8_0
+    volumes:
+      - ollama:/root/.ollama
+
+secrets:
+  # An optional CA certificate for networks with a TLS-inspecting proxy (CA_CERT_FILE in
+  # .env). The installer points it at an empty file when there is none.
+  ca:
+    file: ${CA_CERT_FILE:-./no-extra-ca.crt}
+
+volumes:
+  pgdata:
+  ollama:
+  caddy_data:
+  caddy_config:

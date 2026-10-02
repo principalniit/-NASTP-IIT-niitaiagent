@@ -7,8 +7,21 @@ issues, and uses a local AI model only as an optional helper for explanations an
 drafts. Nothing is ever published to a live website automatically.
 
 **Status:** Phases 1 to 6 are complete: foundation, crawler, SEO engine, AI assistant
-with drafts and approvals, reports and monitoring, and commercial readiness. See
-[Feature status](#feature-status) and [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md).
+with drafts and approvals, reports and monitoring, and commercial readiness. Since then
+the platform has gained:
+- invitations;
+- Google Search Console;
+- JavaScript rendering;
+- AI measurement;
+- a configurable product name;
+- a one-command installer.
+
+See [Feature status](#feature-status) and
+[`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md).
+
+**Quickest install:** with Docker, run `./deploy/install.sh` (Windows:
+`deploy\install.ps1`). See [`deploy/README.md`](deploy/README.md). The steps below set up
+a development machine instead.
 
 ## Contents
 
@@ -185,6 +198,7 @@ Backend variables live in `backend/.env` (template: `backend/.env.example`).
 | `AI_MAX_ACTIVE_JOBS_PER_ORG` | `3` | Queued or running AI tasks allowed per organisation |
 | `INTEGRATIONS_ENCRYPTION_KEYS` | empty | Comma-separated Fernet keys that encrypt integration credentials; the first encrypts. Empty means credentials cannot be stored. Back it up separately from the database |
 | `CRAWLER_BROWSER_PATH` | empty | Chromium for projects that render JavaScript. Empty uses `REPORT_PDF_BROWSER_PATH`, then the browser installed by `uv run playwright install chromium` |
+| `PRODUCT_NAME` | `AI SEO Agent` | Name in emails and the API documentation (`APP_NAME` is still read). The dashboard's own `NEXT_PUBLIC_PRODUCT_NAME` (in `frontend/.env.local`, see `frontend/.env.example`) sets it on screen |
 | `SEARCH_CONSOLE_DAYS` | `90` | Days of Google Search Console data each import fetches. Connecting is done per organisation in the dashboard (`docs/SEARCH_CONSOLE.md`) |
 | `PUBLIC_BASE_URL` | `http://localhost:3000` | The dashboard's public address, used in invitation and reset links |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM`, `SMTP_STARTTLS` | empty, `587`, empty, empty, empty, `true` | Your organisation's own mail server. Empty `SMTP_HOST` turns email off: invitation links are then shared by hand and password resets go through an administrator |
@@ -270,9 +284,10 @@ and crawl schedules. Tests never contact live NIIT infrastructure or a real AI m
 
 ## Deployment
 
-See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for a single Windows machine and for a
-Linux server behind nginx with HTTPS and systemd, including secrets, backups, upgrades
-and key rotation. The latest security review is
+The simplest way is the one-command container install: [`deploy/README.md`](deploy/README.md).
+For running without containers, see [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md): a single
+Windows machine, or a Linux server behind nginx with HTTPS and systemd, including
+secrets, backups, upgrades and key rotation. The latest security review is
 [`docs/SECURITY_REVIEW.md`](docs/SECURITY_REVIEW.md).
 
 ## Feature status
@@ -284,6 +299,8 @@ and key rotation. The latest security review is
 | Invitations (people choose their own password) and password reset by email | Done; email is optional and uses your own SMTP server |
 | AI measurement: run details, `ai-report`, `ai-eval` test sets, feedback on results | Done |
 | Google Search Console: clicks, impressions, CTR and position per project, page and query; used by the AI | Done; free, read-only, with your own service account (`docs/SEARCH_CONSOLE.md`) |
+| Configurable product name (`PRODUCT_NAME`, `NEXT_PUBLIC_PRODUCT_NAME`) | Done |
+| One-command install and upgrade with Docker (Linux, macOS, Windows), optional HTTPS and GPU | Done (`deploy/README.md`) |
 | Projects and project settings (including NIIT configuration) | Done |
 | Dashboard shell, overview, projects, settings, administration | Done |
 | Crawler, Crawl Explorer, Pages browser (Phase 2) | Done; optional JavaScript rendering per project, with every browser request fetched by the guarded crawler |

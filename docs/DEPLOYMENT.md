@@ -1,6 +1,14 @@
 # Deployment guide
 
-This guide covers two supported shapes:
+The simplest shape is the **one-command container install** in
+[`deploy/README.md`](../deploy/README.md). It runs everything in Docker on any Linux,
+macOS or Windows machine:
+- a front proxy that sets real client addresses and, for a domain name, obtains HTTPS
+  certificates;
+- secrets generated on the machine.
+
+Re-running the installer upgrades it. The rest of this guide covers running without
+containers, in two supported shapes:
 
 1. **Single Windows machine** (for example a laptop or desktop with an NVIDIA GPU) used by
    a small team on the institute network.

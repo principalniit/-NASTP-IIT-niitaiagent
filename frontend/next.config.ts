@@ -33,6 +33,8 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   // Lets end-to-end tests build into a separate folder without touching the dev build.
   distDir: process.env.NEXT_DIST_DIR ?? ".next",
+  // The container image (deploy/) runs the minimal standalone server.
+  output: process.env.NEXT_OUTPUT === "standalone" ? "standalone" : undefined,
   poweredByHeader: false,
   async rewrites() {
     return [{ source: "/api/v1/:path*", destination: `${apiOrigin}/api/v1/:path*` }];

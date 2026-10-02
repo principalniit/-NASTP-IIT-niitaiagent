@@ -1,0 +1,11 @@
+# Lets Ollama use an NVIDIA graphics card. Needs the NVIDIA driver and, on Linux, the
+# NVIDIA Container Toolkit; Docker Desktop on Windows supports it through WSL 2.
+services:
+  ollama:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

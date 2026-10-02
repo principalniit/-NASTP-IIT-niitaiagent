@@ -593,7 +593,7 @@ The owner asked to close four gaps, all with free and self-hosted means only:
 | Invitations and password reset by email | Done (16.1) |
 | Google Search Console data, using the customer's own free Google client | Done (16.5) |
 | JavaScript site rendering behind the SSRF guard | Done (16.6) |
-| Configurable product name and a one-command installer | Pending |
+| Configurable product name and a one-command installer | Done (16.7) |
 
 Added by the owner: improve the AI assistant's accuracy and speed with free, local
 means. Step 1 (measure) is done (16.2); steps 2 and 3 follow.
@@ -874,3 +874,47 @@ Known limitations:
 | Scripts on other hosts (CDNs) are not fetched, so pages that depend on them render partly | A per-project list of allowed script hosts, each under the same checks, if needed |
 | Rendering is slower: sub-requests follow the politeness delay | Scripts are cached per crawl; keep rendering off for sites that do not need it |
 | Page thumbnails are still drawn from crawl data, not screenshots | Screenshots could reuse the renderer later |
+
+### 16.7 Configurable product name and one-command installer
+
+Delivered:
+- **Product name.** `PRODUCT_NAME` in the backend is used for emails and the API
+  documentation; `APP_NAME` is still read. `NEXT_PUBLIC_PRODUCT_NAME` in the dashboard
+  sets it on the sign-in page, the sidebar and page titles. It defaults to
+  "AI SEO Agent", so no deployment carries another organisation's name.
+- **Container images.** `backend/Dockerfile` serves as the API, the worker and the CLI.
+  It runs as a non-root user, optionally includes Chromium for PDFs and rendering, and
+  uses HTTPS package sources. `frontend/Dockerfile` builds the Next.js standalone
+  server, also non-root.
+- **`deploy/compose.yaml`**: database, API (upgrades the schema on start), worker,
+  dashboard, a Caddy front proxy (the only published service), and Ollama with the
+  `ai` profile. Overlays cover plain HTTP on one port, HTTPS with automatic
+  certificates, and NVIDIA GPUs.
+- **`deploy/install.sh` and `deploy/install.ps1`**:
+  - ask a few questions, or take options for unattended installs;
+  - generate secrets and write `deploy/.env` (owner-only);
+  - build and start, waiting for health checks;
+  - download the AI model and create the administrator.
+  - Re-running upgrades and keeps the secrets.
+
+Verified in development with Docker:
+- The installer was run unattended. It built the images, started everything healthy,
+  and created the administrator. Sign-in through the published port worked, the page
+  title showed the configured name, and the API was not reachable from outside.
+- Re-running it upgraded the stack and kept the secrets; the same account still signed
+  in.
+- The HTTPS, GPU and AI variants of the stack definition validate.
+- Found and fixed during this test:
+  - the client-address forgery described in `docs/SECURITY.md` 5e;
+  - a SIGPIPE in secret generation;
+  - a build CA check that treated an empty file as a certificate.
+
+Not verified here:
+- The Chromium step, because the development network blocks Debian's package servers.
+  It is Playwright's standard install command.
+- The Windows installer, because no PowerShell was available.
+- Downloading an AI model inside the stack, because of its size.
+
+Assumption A26: plain-HTTP installs run in development mode (no secure cookies, API
+documentation on), because browsers refuse secure cookies over HTTP. HTTPS installs run
+in production mode.
