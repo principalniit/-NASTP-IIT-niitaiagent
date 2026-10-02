@@ -7,9 +7,9 @@ from app.core.config import get_settings
 from app.core.errors import ConflictError, ForbiddenError, NotFoundError, RateLimitedError
 from app.core.pagination import PageParams
 from app.core.request_context import RequestMeta
-from app.modules.ai.models import AIAnalysis, AIKind, AIStatus, SeoRecommendation
+from app.modules.ai.models import AIAnalysis, AIFeedback, AIKind, AIStatus, SeoRecommendation
 from app.modules.ai.provider import build_provider, choose_provider
-from app.modules.ai.schemas import AIRequest, AIStatusOut
+from app.modules.ai.schemas import AIRequest, AIStatusOut, FeedbackIn
 from app.modules.audit_logs import service as audit
 from app.modules.crawler.models import CrawlPage
 from app.modules.crawler.urls import normalise_url
@@ -21,6 +21,7 @@ from app.modules.organisations.schemas import OrganisationSettings
 from app.modules.plans.service import enforce
 from app.modules.seo.models import SeoIssue
 from app.modules.seo.service import latest_analysed_crawl
+from app.modules.users.models import User
 
 PERMISSION_FOR_KIND = {
     AIKind.MANAGEMENT_SUMMARY: Permission.REPORTS_GENERATE,
@@ -183,6 +184,38 @@ async def draft_ids(session: AsyncSession, analysis: AIAnalysis) -> list[uuid.UU
             )
         )
     )
+
+
+async def feedback_of(session: AsyncSession, analysis: AIAnalysis, user: User) -> AIFeedback | None:
+    feedback: AIFeedback | None = await session.scalar(
+        select(AIFeedback).where(
+            AIFeedback.ai_analysis_id == analysis.id,
+            AIFeedback.organisation_id == analysis.organisation_id,
+            AIFeedback.user_id == user.id,
+        )
+    )
+    return feedback
+
+
+async def save_feedback(
+    session: AsyncSession, analysis: AIAnalysis, user: User, body: FeedbackIn
+) -> AIFeedback:
+    """Record or replace one person's verdict on a finished result."""
+    if analysis.status not in (AIStatus.COMPLETED, AIStatus.FAILED):
+        raise ConflictError("Feedback can be given once the AI task has finished")
+    feedback = await feedback_of(session, analysis, user)
+    if feedback is None:
+        feedback = AIFeedback(
+            organisation_id=analysis.organisation_id,
+            ai_analysis_id=analysis.id,
+            user_id=user.id,
+            rating=body.rating,
+        )
+        session.add(feedback)
+    feedback.rating, feedback.reason, feedback.comment = body.rating, body.reason, body.comment
+    await session.commit()
+    await session.refresh(feedback)
+    return feedback
 
 
 async def list_recommendations(

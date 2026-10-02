@@ -44,6 +44,14 @@ test("AI drafts go through review by a second person and are never published aut
   await expect(summary.getByRole("heading", { name: "Key findings" })).toBeVisible({ timeout: 60_000 });
   await expect(summary.getByText("AI-generated")).toBeVisible();
   await expect(summary.getByText(/Run details: took .* 1 model call/)).toBeVisible();
+  // People can say whether the result helped; a "not helpful" asks why.
+  const feedback = summary.getByRole("group", { name: "Feedback on this result" });
+  await feedback.getByRole("button", { name: "Not helpful" }).click();
+  await feedback.getByLabel("What was wrong with it?").selectOption("vague");
+  await feedback.getByLabel("Details (optional)").fill("Needs page names");
+  await feedback.getByRole("button", { name: "Send feedback" }).click();
+  await expect(feedback.getByRole("status")).toContainText("too vague to act on");
+  await expect(feedback.getByRole("button", { name: "Not helpful" })).toHaveAttribute("aria-pressed", "true");
   await expect(summary.getByText("checked for unsupported numbers and claims")).toBeVisible();
 
   await page.getByPlaceholder("Which pages should we fix first?").fill("What should we fix first?");

@@ -7,6 +7,7 @@
     uv run python -m app.cli add-projects --org niit --owner-email you@example.org --file sites.csv
     uv run python -m app.cli ai-report --org niit --days 30
     uv run python -m app.cli ai-eval --org niit --project "NIIT website" [--model qwen2.5:7b]
+    uv run python -m app.cli ai-feedback-cases --org niit --out feedback-cases.json
 
 Passwords are read from the ADMIN_PASSWORD environment variable or prompted for; they are
 never accepted as command-line arguments, which would leak into shell history.
@@ -318,6 +319,16 @@ async def ai_report(org_slug: str, days: int) -> None:
         print("\nMost common failure reasons:")
         for reason, count in report.failure_reasons:
             print(f"  {count:>4}  {reason}")
+    fb = report.feedback
+    print(f"\nFeedback from people: {fb.helpful} helpful, {fb.not_helpful} not helpful")
+    for reason, count in fb.reasons:
+        print(f"  {count:>4}  {reason.replace('_', ' ')}")
+    if fb.recent_complaints:
+        print("\nRecent 'not helpful' results:")
+        for kind, subject, reason, comment in fb.recent_complaints:
+            detail = " - ".join(p for p in (reason.replace("_", " "), comment) if p)
+            print(f"  [{kind}] {subject}" + (f"  ({detail})" if detail else ""))
+        print("Turn them into test cases with: ai-feedback-cases --org <slug> --out cases.json")
 
 
 async def ai_eval(
@@ -391,6 +402,27 @@ async def ai_eval(
         print(f"Results, including every answer in full, saved to {out}")
 
 
+async def ai_feedback_cases(org_slug: str, days: int, out: str) -> None:
+    """Write questions people marked not helpful as an ai-eval cases file."""
+    from datetime import timedelta
+
+    from app.modules.ai.evaluation import feedback_cases
+
+    since = datetime.now(UTC) - timedelta(days=days)
+    async with get_session_factory()() as session:
+        org = await _org_by_slug(session, org_slug)
+        cases = await feedback_cases(session, org.id, since)
+    if not cases:
+        print(f"No questions in {org.name} were marked not helpful in the last {days} days.")
+        return
+    import json
+
+    text = json.dumps(cases, indent=2) + "\n"
+    await asyncio.to_thread(Path(out).write_text, text, encoding="utf-8")
+    print(f"Wrote {len(cases)} test cases to {out}. Run them with:")
+    print(f"  uv run python -m app.cli ai-eval --org {org_slug} --project <name> --cases {out}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="app.cli")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -415,6 +447,12 @@ def main() -> None:
     p_eval.add_argument("--cases", help="JSON file of test cases (default: the starter set)")
     p_eval.add_argument("--model", help="Ollama model to test instead of the configured one")
     p_eval.add_argument("--out", help="Also save the results as JSON, to compare runs")
+    p_fb = sub.add_parser(
+        "ai-feedback-cases", help="Turn questions marked not helpful into ai-eval test cases"
+    )
+    p_fb.add_argument("--org", required=True, help="Organisation slug, for example niit")
+    p_fb.add_argument("--days", type=int, default=90, choices=range(1, 366), metavar="1-365")
+    p_fb.add_argument("--out", required=True, help="JSON file to write")
     args = parser.parse_args()
 
     async def run() -> None:
@@ -431,6 +469,8 @@ def main() -> None:
                 await ai_report(args.org, args.days)
             elif args.command == "ai-eval":
                 await ai_eval(args.org, args.project, args.cases, args.model, args.out)
+            elif args.command == "ai-feedback-cases":
+                await ai_feedback_cases(args.org, args.days, args.out)
             else:
                 await seed_niit(args.owner_email)
         finally:

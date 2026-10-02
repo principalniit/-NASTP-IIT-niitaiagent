@@ -487,6 +487,18 @@ export interface AIAnalysis extends AIAnalysisSummary {
   /** What the model did, as Ollama reported it; null when the model was never called. */
   metrics: AIUsage | null;
   draft_ids: string[];
+  /** The signed-in person's own verdict on this result. */
+  my_feedback: AIFeedback | null;
+}
+
+export type FeedbackRating = "helpful" | "not_helpful";
+export type FeedbackReason = "wrong" | "off_topic" | "vague" | "missed_data" | "other";
+
+export interface AIFeedback {
+  rating: FeedbackRating;
+  reason: FeedbackReason | null;
+  comment: string | null;
+  updated_at: string;
 }
 
 export interface AIUsage {

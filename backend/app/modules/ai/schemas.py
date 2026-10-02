@@ -4,7 +4,13 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from app.modules.ai.models import AIKind, AIStatus, RecommendationStatus
+from app.modules.ai.models import (
+    AIKind,
+    AIStatus,
+    FeedbackRating,
+    FeedbackReason,
+    RecommendationStatus,
+)
 from app.providers.interfaces import AIUsage
 
 
@@ -66,6 +72,8 @@ class AIAnalysisOut(AIAnalysisSummary):
     attempts: int
     duration_ms: int | None
     metrics: AIUsage | None = None
+    # The signed-in person's own feedback on this result, if any.
+    my_feedback: "FeedbackOut | None" = None
     draft_ids: list[uuid.UUID] = Field(default_factory=list)
 
 
@@ -87,3 +95,31 @@ class RecommendationOut(BaseModel):
 class RecommendationUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     status: RecommendationStatus
+
+
+class FeedbackIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    rating: FeedbackRating
+    reason: FeedbackReason | None = None
+    comment: str | None = Field(default=None, max_length=500)
+
+    @model_validator(mode="after")
+    def _reason_only_when_not_helpful(self) -> "FeedbackIn":
+        if self.rating == FeedbackRating.HELPFUL:
+            self.reason = None
+        if self.comment is not None:
+            self.comment = self.comment.strip() or None
+        return self
+
+
+class FeedbackOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    rating: FeedbackRating
+    reason: FeedbackReason | None
+    comment: str | None
+    updated_at: datetime
+
+
+AIAnalysisOut.model_rebuild()

@@ -271,3 +271,108 @@ def test_honest_replies_about_missing_data_are_recognised() -> None:
     ):
         assert _MISSING_DATA.search(honest), honest
     assert not _MISSING_DATA.search("Fix the missing titles on the faculty pages first.")
+
+
+def test_organisation_test_sets_are_valid() -> None:
+    files = sorted((Path(__file__).parents[2] / "evals").glob("*.json"))
+    assert files, "the evals folder should hold organisation test sets"
+    for path in files:
+        assert load_cases(path), path
+
+
+async def test_feedback_is_given_reported_and_exported(
+    client: AsyncClient,
+    site: FixtureSite,
+    ollama: FakeOllama,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from app.cli import ai_feedback_cases
+    from tests.conftest import add_member, make_user
+
+    owner, org, project = await analysed(client, site)
+    await enable_ai(client, owner, org["id"])
+    viewer = await make_user(client, "viewer@example.org")
+    await add_member(client, owner, org["id"], viewer, "viewer")
+    pid = project["id"]
+
+    asked = await run(client, owner, pid, kind="question", question="Is the site slow?")
+    url = f"/api/v1/ai-analyses/{asked['id']}/feedback"
+    assert asked["my_feedback"] is None
+    bad = await client.put(
+        url,
+        json={"rating": "not_helpful", "reason": "off_topic", "comment": "Talked about titles"},
+        headers=owner.headers,
+    )
+    assert bad.status_code == 200 and bad.json()["reason"] == "off_topic"
+    # One verdict per person: giving it again replaces it, and a helpful one drops the reason.
+    changed = await client.put(
+        url, json={"rating": "helpful", "reason": "vague"}, headers=owner.headers
+    )
+    assert changed.json() == {**changed.json(), "rating": "helpful", "reason": None}
+    await client.put(
+        url,
+        json={"rating": "not_helpful", "reason": "off_topic", "comment": " Off topic "},
+        headers=owner.headers,
+    )
+    # Viewers may give feedback too, and each person sees their own.
+    seen = await client.put(url, json={"rating": "helpful"}, headers=viewer.headers)
+    assert seen.status_code == 200
+    mine = (await client.get(f"/api/v1/ai-analyses/{asked['id']}", headers=owner.headers)).json()
+    assert mine["my_feedback"]["rating"] == "not_helpful"
+    assert mine["my_feedback"]["comment"] == "Off topic"
+    theirs = (await client.get(f"/api/v1/ai-analyses/{asked['id']}", headers=viewer.headers)).json()
+    assert theirs["my_feedback"]["rating"] == "helpful"
+
+    invalid = await client.put(url, json={"rating": "meh"}, headers=owner.headers)
+    assert invalid.status_code == 422
+
+    page_q = await run(client, owner, pid, kind="question", question="What is wrong with /about?")
+    await client.put(
+        f"/api/v1/ai-analyses/{page_q['id']}/feedback",
+        json={"rating": "not_helpful", "reason": "wrong"},
+        headers=owner.headers,
+    )
+
+    import uuid
+
+    async with get_session_factory()() as session:
+        report = await usage_report(
+            session, uuid.UUID(org["id"]), datetime.now(UTC) - timedelta(days=1)
+        )
+    fb = report.feedback
+    assert (fb.helpful, fb.not_helpful) == (1, 2)
+    assert dict(fb.reasons) == {"off_topic": 1, "wrong": 1}
+    assert ("question", "Is the site slow?", "off_topic", "Off topic") in fb.recent_complaints
+
+    out = tmp_path / "feedback.json"
+    await ai_feedback_cases(org["slug"], 30, str(out))
+    cases = load_cases(out)
+    by_question = {c.question: c for c in cases}
+    assert by_question["Is the site slow?"].expect.cites_rules == ["tech.slow_response"]
+    assert by_question["What is wrong with /about?"].expect.cites_page_issues
+    assert "Wrote 2 test cases" in capsys.readouterr().out
+
+    # The exported cases run as they are.
+    result = await run_case(
+        get_session_factory(), uuid.UUID(pid), by_question["What is wrong with /about?"]
+    )
+    assert result.completed
+
+
+async def test_queued_tasks_take_no_feedback(
+    client: AsyncClient, site: FixtureSite, ollama: FakeOllama
+) -> None:
+    owner, org, project = await analysed(client, site)
+    await enable_ai(client, owner, org["id"])
+    queued = await client.post(
+        f"/api/v1/projects/{project['id']}/ai/analyses",
+        json={"kind": "management_summary"},
+        headers=owner.headers,
+    )
+    response = await client.put(
+        f"/api/v1/ai-analyses/{queued.json()['id']}/feedback",
+        json={"rating": "helpful"},
+        headers=owner.headers,
+    )
+    assert response.status_code == 409

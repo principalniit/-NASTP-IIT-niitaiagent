@@ -784,3 +784,25 @@ Two weaknesses remained, both fixed in the same step:
   admission within the opening of the answer.
 
 `PROMPT_VERSION` is now 2026-10.4.
+
+### 16.4 Feedback on AI results and organisation test sets
+
+Delivered:
+- **"Was this helpful?" under every finished AI result** (completed or failed).
+  - "Not helpful" asks why (wrong, off topic, too vague, missed data the platform has,
+    other), with an optional comment.
+  - Each person has one verdict per result and can change it. Viewers can give feedback.
+  - Stored in `ai_feedback` (migration 0011), scoped to the organisation.
+- **`ai-report` shows feedback**: helpful and not-helpful counts, reasons, and the latest
+  complaints.
+- **`ai-feedback-cases`** turns questions marked not helpful into an `ai-eval` cases
+  file. The expectations follow from each question's wording:
+  - missing-data questions must admit it;
+  - topic questions must cite matching issues;
+  - page questions must cite that page's issues;
+  - others must give a real answer.
+- **Organisation test sets in `backend/evals/`**, which are data, not code:
+  `niit-website.json` (8 cases) and `niit-admissions.json` (7 cases). They use pages and
+  findings from NIIT's own crawls.
+- A new `cites_page_issues` check: an answer about a named page must cite an open issue
+  on it, or say none were found.

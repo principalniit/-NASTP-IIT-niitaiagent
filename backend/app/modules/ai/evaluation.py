@@ -28,10 +28,12 @@ from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.modules.ai.models import AIAnalysis, AIKind, AIStatus
+from app.modules.ai.models import AIAnalysis, AIFeedback, AIKind, AIStatus, FeedbackRating
 from app.modules.ai.provider import AIError
 from app.modules.ai.runner import _execute, _fail
 from app.modules.ai.tools import IssuesArgs, ToolContext, ToolError, get_seo_issues
+from app.modules.ai.topics import page_in, topics_in, unavailable_in
+from app.modules.crawler.urls import normalise_url
 from app.modules.projects.models import Project
 from app.modules.seo.models import ResolutionStatus, SeoIssue
 
@@ -88,11 +90,21 @@ class KindStats:
 
 
 @dataclass
+class FeedbackSummary:
+    helpful: int
+    not_helpful: int
+    reasons: list[tuple[str, int]]
+    # (task kind, what was asked or produced, reason, comment), newest first.
+    recent_complaints: list[tuple[str, str, str, str]]
+
+
+@dataclass
 class UsageReport:
     since: datetime
     kinds: list[KindStats]
     failure_reasons: list[tuple[str, int]]
     models: list[tuple[str, int]]
+    feedback: FeedbackSummary
 
 
 def _tries(analysis: AIAnalysis) -> int:
@@ -160,7 +172,100 @@ async def usage_report(session: AsyncSession, org_id: uuid.UUID, since: datetime
         kinds=kinds,
         failure_reasons=reasons.most_common(10),
         models=models.most_common(),
+        feedback=await _feedback_summary(session, org_id, since),
     )
+
+
+def _subject(analysis: AIAnalysis) -> str:
+    if analysis.kind == AIKind.QUESTION:
+        return str(analysis.params.get("question", ""))[:200]
+    if analysis.kind in (AIKind.PAGE_PLAN, AIKind.METADATA_DRAFT, AIKind.CONTENT_OUTLINE):
+        return str(analysis.params.get("page_url", ""))[:200]
+    return analysis.kind.value.replace("_", " ")
+
+
+async def _feedback_summary(
+    session: AsyncSession, org_id: uuid.UUID, since: datetime
+) -> FeedbackSummary:
+    rows = (
+        await session.execute(
+            select(AIFeedback, AIAnalysis)
+            .join(AIAnalysis, AIAnalysis.id == AIFeedback.ai_analysis_id)
+            .where(
+                AIFeedback.organisation_id == org_id,
+                AIAnalysis.organisation_id == org_id,
+                AIFeedback.updated_at >= since,
+            )
+            .order_by(AIFeedback.updated_at.desc())
+            .limit(5000)
+        )
+    ).all()
+    complaints = [(f, a) for f, a in rows if f.rating == FeedbackRating.NOT_HELPFUL]
+    return FeedbackSummary(
+        helpful=len(rows) - len(complaints),
+        not_helpful=len(complaints),
+        reasons=Counter(
+            (f.reason.value if f.reason else "no reason given") for f, _ in complaints
+        ).most_common(),
+        recent_complaints=[
+            (
+                a.kind.value,
+                _subject(a),
+                f.reason.value if f.reason else "",
+                f.comment or "",
+            )
+            for f, a in complaints[:10]
+        ],
+    )
+
+
+async def feedback_cases(
+    session: AsyncSession, org_id: uuid.UUID, since: datetime
+) -> list[dict[str, Any]]:
+    """Test cases from questions people marked not helpful, so real complaints are
+    re-checked after every change. Expectations follow from the question's wording."""
+    rows = (
+        await session.execute(
+            select(AIAnalysis)
+            .join(AIFeedback, AIFeedback.ai_analysis_id == AIAnalysis.id)
+            .where(
+                AIFeedback.organisation_id == org_id,
+                AIAnalysis.organisation_id == org_id,
+                AIAnalysis.kind == AIKind.QUESTION,
+                AIFeedback.rating == FeedbackRating.NOT_HELPFUL,
+                AIFeedback.updated_at >= since,
+            )
+            .order_by(AIAnalysis.created_at.desc())
+        )
+    ).scalars()
+    cases: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for analysis in rows:
+        question = " ".join(str(analysis.params.get("question", "")).split())[:1000]
+        if len(question) < 3 or question.lower() in seen:
+            continue
+        seen.add(question.lower())
+        expect: dict[str, Any] = {}
+        if unavailable_in(question):
+            expect["admits_missing_data"] = True
+        else:
+            expect["answers"] = True
+            prefixes = [p for t in topics_in(question) for p in t.rule_prefixes]
+            if prefixes:
+                expect["cites_rules"] = prefixes[:20]
+            if page_in(question):
+                expect["cites_page_issues"] = True
+        cases.append(
+            {
+                "name": f"feedback-{analysis.created_at:%Y%m%d}-{str(analysis.id)[:8]}",
+                "kind": "question",
+                "question": question,
+                "expect": expect,
+            }
+        )
+    # Validated like any cases file, so the export can be run as it is.
+    TypeAdapter(list[EvalCase]).validate_python(cases)
+    return cases
 
 
 # ---------------------------------------------------------------------------------------
@@ -181,6 +286,9 @@ class Expect(BaseModel):
     # Gives a real answer, not only "the data has no answer". For questions the project
     # data always answers, such as priorities.
     answers: bool = False
+    # For a question that names a page: cites at least one open issue on that page, or
+    # says that none were found.
+    cites_page_issues: bool = False
 
     @model_validator(mode="after")
     def _not_both(self) -> "Expect":
@@ -202,6 +310,8 @@ class EvalCase(BaseModel):
     def _question_matches_kind(self) -> "EvalCase":
         if (self.kind == "question") != (self.question is not None):
             raise ValueError("'question' is required for questions and not allowed otherwise")
+        if self.expect.cites_page_issues and not (self.question and page_in(self.question)):
+            raise ValueError("'cites_page_issues' needs a question that names a page")
         return self
 
 
@@ -283,6 +393,22 @@ async def _titles(session: AsyncSession, project: Project, ids: set[str]) -> lis
     return [f"{title} ({rule})" for title, rule in rows.all()]
 
 
+async def _issues_on_page(session: AsyncSession, project: Project, question: str) -> set[str]:
+    url = page_in(question)
+    if url is None:
+        raise ValueError("cites_page_issues needs a question that names a page")
+    target = normalise_url(url, project.root_url)
+    rows = await session.scalars(
+        select(SeoIssue.id).where(
+            SeoIssue.project_id == project.id,
+            SeoIssue.organisation_id == project.organisation_id,
+            SeoIssue.resolution_status == ResolutionStatus.OPEN,
+            SeoIssue.affected_urls.contains([target]),
+        )
+    )
+    return {str(i) for i in rows}
+
+
 async def _issues_matching(
     session: AsyncSession, project: Project, prefixes: list[str]
 ) -> set[str]:
@@ -301,6 +427,7 @@ def _score(
     analysis: AIAnalysis,
     top_ids: set[str],
     rule_ids: set[str] | None,
+    page_ids: set[str] | None = None,
 ) -> tuple[list[str], list[str]]:
     """(problems, skipped checks) for a finished task."""
     if analysis.status != AIStatus.COMPLETED:
@@ -318,6 +445,12 @@ def _score(
                 problems.append("Does not say that the latest crawl found none of these issues")
         elif not cited & rule_ids:
             problems.append("Cites no issue for the rules " + ", ".join(case.expect.cites_rules))
+    if page_ids is not None:
+        if not page_ids:
+            if not any(_NONE_FOUND.search(t) for t in _texts(analysis.output)):
+                problems.append("Does not say that the latest crawl found no issues on the page")
+        elif not cited & page_ids:
+            problems.append("Cites no open issue of the page the question names")
     if case.expect.answers:
         texts = _texts(analysis.output)
         main = texts[0].strip() if texts else ""
@@ -354,6 +487,11 @@ async def run_case(
             if case.expect.cites_rules
             else None
         )
+        page_ids = (
+            await _issues_on_page(session, project, case.question or "")
+            if case.expect.cites_page_issues
+            else None
+        )
         subject_type, subject_id, params = "project", None, {}
         if case.kind == "question":
             subject_type, params = "question", {"question": case.question or ""}
@@ -379,7 +517,7 @@ async def run_case(
             except (AIError, ToolError) as exc:
                 _fail(analysis, str(exc))
         seconds = round(time.monotonic() - started, 1)
-        problems, skipped = _score(case, analysis, top_ids, rule_ids)
+        problems, skipped = _score(case, analysis, top_ids, rule_ids, page_ids)
         metrics = analysis.metrics or {}
         result = CaseResult(
             name=case.name,

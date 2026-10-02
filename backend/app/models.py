@@ -1,6 +1,6 @@
 """Import every model so SQLAlchemy metadata and Alembic see the full schema."""
 
-from app.modules.ai.models import AIAnalysis, SeoRecommendation
+from app.modules.ai.models import AIAnalysis, AIFeedback, SeoRecommendation
 from app.modules.audit_logs.models import AuditLog
 from app.modules.auth.models import PasswordResetToken, RefreshToken
 from app.modules.crawler.models import CrawlJob, CrawlLink, CrawlPage
@@ -17,6 +17,7 @@ from app.modules.users.models import User
 
 __all__ = [
     "AIAnalysis",
+    "AIFeedback",
     "Approval",
     "AuditLog",
     "ContentDraft",

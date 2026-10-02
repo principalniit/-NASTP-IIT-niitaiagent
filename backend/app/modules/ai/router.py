@@ -14,6 +14,8 @@ from app.modules.ai.schemas import (
     AIAnalysisSummary,
     AIRequest,
     AIStatusOut,
+    FeedbackIn,
+    FeedbackOut,
     RecommendationOut,
     RecommendationUpdate,
 )
@@ -89,7 +91,20 @@ async def get_analysis(
 ) -> AIAnalysisOut:
     out = AIAnalysisOut.model_validate(access.analysis)
     out.draft_ids = await service.draft_ids(session, access.analysis)
+    mine = await service.feedback_of(session, access.analysis, access.user)
+    out.my_feedback = FeedbackOut.model_validate(mine) if mine else None
     return out
+
+
+@router.put("/ai-analyses/{analysis_id}/feedback", response_model=FeedbackOut)
+async def give_feedback(
+    body: FeedbackIn,
+    session: Session,
+    access: Annotated[AnalysisAccess, Depends(require_ai_analysis(Permission.PROJECTS_READ))],
+) -> FeedbackOut:
+    """Anyone who can see a result may say whether it helped. One verdict per person."""
+    feedback = await service.save_feedback(session, access.analysis, access.user, body)
+    return FeedbackOut.model_validate(feedback)
 
 
 @router.get("/projects/{project_id}/recommendations", response_model=Page[RecommendationOut])

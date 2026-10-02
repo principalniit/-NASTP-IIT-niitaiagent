@@ -5,6 +5,7 @@ import { Bot, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect } from "react";
 
+import { AIFeedback } from "@/components/ai/ai-feedback";
 import { ErrorState } from "@/components/app/states";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -234,6 +235,7 @@ export function AnalysisBody({ analysis }: { analysis: AIAnalysis }) {
             </ul>
           ) : null}
           <RunFacts analysis={analysis} />
+          <AIFeedback analysis={analysis} />
         </AlertDescription>
       </Alert>
     );
@@ -255,6 +257,7 @@ export function AnalysisBody({ analysis }: { analysis: AIAnalysis }) {
         wrong: verify before acting.
       </p>
       <RunFacts analysis={analysis} />
+      <AIFeedback analysis={analysis} />
     </div>
   );
 }

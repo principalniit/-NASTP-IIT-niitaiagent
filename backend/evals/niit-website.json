@@ -1,0 +1,61 @@
+[
+  {
+    "name": "faculty-pages-without-title",
+    "kind": "question",
+    "question": "Which faculty pages have no title?",
+    "expect": {"cites_rules": ["onpage.title_missing"], "answers": true}
+  },
+  {
+    "name": "one-faculty-page",
+    "kind": "question",
+    "question": "What is wrong with https://niit.edu.pk/our-faculty/sibgha-munir/?",
+    "expect": {"cites_page_issues": true, "answers": true}
+  },
+  {
+    "name": "slow-pages",
+    "kind": "question",
+    "question": "Which pages are slow to respond?",
+    "expect": {"cites_rules": ["tech.slow_response"], "answers": true}
+  },
+  {
+    "name": "canonical-problems",
+    "kind": "question",
+    "question": "Are there canonical URL problems?",
+    "expect": {
+      "cites_rules": ["onpage.canonical", "tech.canonical", "tech.duplicate_url_variants"],
+      "answers": true
+    }
+  },
+  {
+    "name": "structured-data-count",
+    "kind": "question",
+    "question": "How many structured data issues are open?",
+    "expect": {"cites_rules": ["schema."], "answers": true}
+  },
+  {
+    "name": "errors-and-broken-links",
+    "kind": "question",
+    "question": "Which pages return errors or have broken links?",
+    "expect": {
+      "cites_rules": [
+        "tech.broken_internal_links",
+        "tech.http_client_error",
+        "tech.http_server_error",
+        "tech.fetch_failed"
+      ],
+      "answers": true
+    }
+  },
+  {
+    "name": "faculty-priorities",
+    "kind": "question",
+    "question": "What should we fix first on the faculty pages?",
+    "expect": {"cites_top_issues": true, "answers": true}
+  },
+  {
+    "name": "visitors-not-available",
+    "kind": "question",
+    "question": "How many people visited the admissions page last month?",
+    "expect": {"admits_missing_data": true}
+  }
+]

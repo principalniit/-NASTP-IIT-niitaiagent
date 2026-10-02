@@ -86,6 +86,8 @@ uv run python -m app.cli rotate-secrets   # after putting a new key first in INT
 uv run python -m app.cli add-projects --org niit --owner-email you@niit.edu.pk --file sites.csv
 uv run python -m app.cli ai-report --org niit --days 30      # how AI tasks went and why they failed
 uv run python -m app.cli ai-eval --org niit --project "NIIT website" --out before.json   # score the AI
+uv run python -m app.cli ai-eval --org niit --project "NIIT website" --cases evals/niit-website.json
+uv run python -m app.cli ai-feedback-cases --org niit --out feedback-cases.json   # complaints as tests
 ```
 
 `add-projects` creates one project per line of `Name, https://address` (lines starting
@@ -278,6 +280,7 @@ and key rotation. The latest security review is
 | Authentication, sessions, rate limiting | Done |
 | Organisations, members, roles, audit log | Done |
 | Invitations (people choose their own password) and password reset by email | Done; email is optional and uses your own SMTP server |
+| AI measurement: run details, `ai-report`, `ai-eval` test sets, feedback on results | Done |
 | Projects and project settings (including NIIT configuration) | Done |
 | Dashboard shell, overview, projects, settings, administration | Done |
 | Crawler, Crawl Explorer, Pages browser (Phase 2) | Done; JavaScript rendering deferred |

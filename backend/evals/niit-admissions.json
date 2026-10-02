@@ -1,0 +1,44 @@
+[
+  {
+    "name": "prospectus-page",
+    "kind": "question",
+    "question": "What is wrong with https://admissions.niit.edu.pk/prospectus?",
+    "expect": {"cites_page_issues": true, "answers": true}
+  },
+  {
+    "name": "test-syllabus-page",
+    "kind": "question",
+    "question": "What should we improve on https://admissions.niit.edu.pk/admission-test-syllabus?",
+    "expect": {"cites_page_issues": true, "answers": true}
+  },
+  {
+    "name": "pages-without-h1",
+    "kind": "question",
+    "question": "Which pages are missing an H1 heading?",
+    "expect": {"cites_rules": ["onpage.h1"], "answers": true}
+  },
+  {
+    "name": "long-titles",
+    "kind": "question",
+    "question": "Which page titles are too long?",
+    "expect": {"cites_rules": ["onpage.title_length"], "answers": true}
+  },
+  {
+    "name": "organisation-structured-data",
+    "kind": "question",
+    "question": "Does the home page have Organization structured data?",
+    "expect": {"cites_rules": ["schema.home_organisation_missing"], "answers": true}
+  },
+  {
+    "name": "admissions-priorities",
+    "kind": "question",
+    "question": "What should we fix first before the admissions campaign?",
+    "expect": {"cites_top_issues": true, "answers": true}
+  },
+  {
+    "name": "ranking-not-available",
+    "kind": "question",
+    "question": "How do we rank against other universities for BS Computer Science in Lahore?",
+    "expect": {"admits_missing_data": true}
+  }
+]
