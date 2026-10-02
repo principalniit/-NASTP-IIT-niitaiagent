@@ -585,7 +585,17 @@ async def test_questions_get_the_matching_data_first(
     result = await run(client, owner, project["id"], kind="question", question="Is the site slow?")
     [speed] = result["evidence"]["for_this_question"]["topics"]
     assert speed["open_issues_total"] == 0 and speed["issues"] == []
-    assert speed["note"] == "The latest analysed crawl found no open issues about page speed."
+    assert speed["note"].startswith(
+        "The latest analysed crawl found no open issues about page speed on the pages it crawled."
+    )
+
+    # Data the platform does not hold is named, so the answer can lead with that.
+    result = await run(
+        client, owner, project["id"], kind="question", question="How many visitors did we get?"
+    )
+    missing = result["evidence"]["for_this_question"]["not_available"]
+    assert missing["data"] == ["visitor numbers and traffic"]
+    assert "priorities" not in result["evidence"]["for_this_question"]
 
     # A page named in the question is looked up.
     result = await run(

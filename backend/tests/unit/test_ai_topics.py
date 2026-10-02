@@ -1,6 +1,6 @@
 """Working out what a question is about, so the matching data is fetched first."""
 
-from app.modules.ai.topics import is_priority_question, page_in, topics_in
+from app.modules.ai.topics import is_priority_question, page_in, topics_in, unavailable_in
 
 
 def labels(question: str) -> list[str]:
@@ -33,3 +33,14 @@ def test_pages_named_in_a_question() -> None:
     assert page_in("Check https://niit.edu.pk/about.") == "https://niit.edu.pk/about"
     assert page_in("What should we fix first?") is None
     assert page_in("Is the score 74.3/100 good?") is None
+
+
+def test_questions_about_data_the_platform_lacks() -> None:
+    assert unavailable_in("Which competitors rank above us on Google?") == [
+        "search rankings and positions",
+        "competitors",
+    ]
+    assert unavailable_in("How many visitors did the website get last month?") == [
+        "visitor numbers and traffic"
+    ]
+    assert unavailable_in("Which pages are missing an H1 heading?") == []

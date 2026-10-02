@@ -107,10 +107,15 @@ async def test_cases_are_scored_and_leave_nothing_behind(
     )
     failed = await run_case(factory, pid, traffic)
     assert not failed.passed and failed.completed
-    assert failed.problems == ["Does not say that the platform has no data for this"]
+    assert failed.problems == ["Does not start by saying that the platform has no data for this"]
     ollama.script({"action": "answer", "answer": "The platform does not have traffic data."})
     honest = await run_case(factory, pid, traffic)
     assert honest.passed, honest.problems
+    # An admission buried after other material does not count.
+    buried = "Fix the faculty page titles and the canonical tags first. " * 6
+    ollama.script({"action": "answer", "answer": buried + "Traffic data is not available."})
+    late = await run_case(factory, pid, traffic)
+    assert late.problems == ["Does not start by saying that the platform has no data for this"]
 
     # A bare "no answer" fails where the project data does have one.
     ollama.script(

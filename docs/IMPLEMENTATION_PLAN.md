@@ -765,3 +765,22 @@ Delivered (`ai/topics.py`, `ai/agent.py`):
 Assumption A24: keyword detection in English is enough for the questions people ask in
 the dashboard. A question in another language falls back to the general evidence and
 the model's own tool calls, as before.
+
+Results after step 3:
+- **Admissions:** 14 of 14, median 6.8 s per case. One case took 8.7 hours because the
+  laptop slept mid-run; set "sleep when plugged in" to Never on a machine that runs the
+  worker.
+- **NIIT website:** all 12 cases reported passed, with on-topic answers (broken pages,
+  H1 pages by address, 55 structured-data issues, the two slow pages).
+
+Two weaknesses remained, both fixed in the same step:
+- **Over-claiming from "none found".** "No open issues about images, therefore no image
+  lacks alt text" went further than the data. The note now says the result covers only
+  the crawled pages, and asks the model to say exactly that.
+- **Leading with unrelated issues** when asked about data the platform does not hold
+  (competitors). Questions about visitors, rankings, competitors, keywords, backlinks,
+  clicks or conversions are detected, and the evidence names the missing data and asks
+  for that to be said first. The test's `admits_missing_data` check now requires the
+  admission within the opening of the answer.
+
+`PROMPT_VERSION` is now 2026-10.4.

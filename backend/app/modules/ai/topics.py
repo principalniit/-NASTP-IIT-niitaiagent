@@ -105,6 +105,26 @@ TOPICS: tuple[Topic, ...] = (
     _topic("URL structure", r"url structure|\bslugs?\b|long urls?", "onpage.url_structure"),
 )
 
+# Data this platform does not hold. A question about it should say so first, instead of
+# filling the answer with unrelated issues.
+UNAVAILABLE: tuple[tuple[str, re.Pattern[str]], ...] = (
+    (
+        "visitor numbers and traffic",
+        re.compile(r"\bvisit(s|ors?)\b|\btraffic\b|\bsessions?\b|page ?views?|\baudience\b", re.I),
+    ),
+    (
+        "search rankings and positions",
+        re.compile(r"\brank(s|ed|ing|ings)?\b|position (on|in) (google|search)", re.I),
+    ),
+    ("competitors", re.compile(r"\bcompetitors?\b|\brivals?\b", re.I)),
+    ("keywords and search volumes", re.compile(r"\bkeywords?\b|search volumes?", re.I)),
+    ("backlinks", re.compile(r"\bbacklinks?\b|inbound links from other sites", re.I)),
+    (
+        "clicks, impressions and conversions",
+        re.compile(r"\bclicks?\b|\bimpressions?\b|\bconversions?\b|bounce rate|\bctr\b", re.I),
+    ),
+)
+
 # Questions about what to do next are answered from the overall priorities.
 PRIORITY = re.compile(
     r"\bfirst\b|priorit|most important|next steps?|way forward|where (to|should (we|i)) start|"
@@ -117,6 +137,10 @@ _URL = re.compile(r"https?://[^\s'\"<>()]+|(?<![\w.])/[\w\-./%]*[\w\-/%]")
 
 def topics_in(question: str) -> list[Topic]:
     return [t for t in TOPICS if t.pattern.search(question)][:MAX_TOPICS]
+
+
+def unavailable_in(question: str) -> list[str]:
+    return [label for label, pattern in UNAVAILABLE if pattern.search(question)]
 
 
 def is_priority_question(question: str) -> bool:
@@ -146,7 +170,12 @@ async def _issues_for(ctx: ToolContext, topic: Topic) -> dict[str, Any]:
         "issues": [issue_brief(i) for i in rows],
     }
     if total == 0:
-        found["note"] = f"The latest analysed crawl found no open issues about {topic.label}."
+        # Worded so the model does not stretch "none found on the crawled pages" into
+        # "none exist anywhere".
+        found["note"] = (
+            f"The latest analysed crawl found no open issues about {topic.label} on the "
+            "pages it crawled. Say exactly that; do not claim more."
+        )
     return found
 
 
@@ -162,7 +191,14 @@ async def evidence_for(ctx: ToolContext, question: str) -> dict[str, Any] | None
             found["page"] = await get_page_details(ctx, PageArgs(url=url))
         except ToolError as exc:
             found["page"] = {"requested": url, "note": str(exc)}
-    if is_priority_question(question) and not topics:
+    missing = unavailable_in(question)
+    if missing:
+        found["not_available"] = {
+            "data": missing,
+            "note": "This platform has no data on these. Start the answer by saying so in "
+            "one sentence. Mention site issues only if the question also asks about them.",
+        }
+    if is_priority_question(question) and not topics and not missing:
         found["priorities"] = "Answer from top_open_issues, which is ordered by priority."
     return found or None
 

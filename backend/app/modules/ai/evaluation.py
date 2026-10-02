@@ -59,6 +59,8 @@ _REFUSAL = re.compile(
     re.I,
 )
 REFUSAL_MAX_CHARS = 200
+# Where an answer about missing data must say so: its opening, about two sentences.
+ADMISSION_WITHIN_CHARS = 250
 # Saying that the latest crawl found none of what was asked about.
 _NONE_FOUND = re.compile(
     r"\b(no|not any|none of the) (open |current )?([\w-]+ ){0,3}"
@@ -321,10 +323,12 @@ def _score(
         main = texts[0].strip() if texts else ""
         if len(main) <= REFUSAL_MAX_CHARS and (not main or _REFUSAL.search(main)):
             problems.append("Says the data has no answer, although the project data has one")
-    if case.expect.admits_missing_data and not any(
-        _MISSING_DATA.search(t) for t in _texts(analysis.output)
-    ):
-        problems.append("Does not say that the platform has no data for this")
+    if case.expect.admits_missing_data:
+        # Said up front, not after a list of unrelated issues.
+        texts = _texts(analysis.output)
+        opening = texts[0][:ADMISSION_WITHIN_CHARS] if texts else ""
+        if not _MISSING_DATA.search(opening):
+            problems.append("Does not start by saying that the platform has no data for this")
     return problems, skipped
 
 
