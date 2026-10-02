@@ -244,7 +244,7 @@ async def request_password_reset(
     await session.commit()
     link = f"{settings.public_base_url.rstrip('/')}/reset-password#token={token}"
     body = (
-        f"Someone asked to reset the password for your {settings.app_name} account.\n\n"
+        f"Someone asked to reset the password for your {settings.product_name} account.\n\n"
         f"Open this link to choose a new password:\n{link}\n\n"
         f"The link works once and expires in {settings.password_reset_ttl_minutes} minutes. "
         "If you did not ask for this, ignore this email; your password stays the same.\n"

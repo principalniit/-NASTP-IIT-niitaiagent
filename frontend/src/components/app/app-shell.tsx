@@ -10,6 +10,7 @@ import { LoadingState } from "@/components/app/states";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { NativeSelect } from "@/components/ui/native-select";
+import { PRODUCT_NAME } from "@/lib/brand";
 import { CurrentOrgProvider, useCurrentOrg } from "@/lib/current-org";
 import { NAV_GROUPS, NAV_ITEMS } from "@/lib/navigation";
 import { useSession } from "@/lib/session";
@@ -66,7 +67,7 @@ function Shell({ children }: { children: React.ReactNode }) {
         <div className="flex h-14 shrink-0 items-center justify-between border-b border-white/10 px-4">
           <Link href="/overview" className="flex items-center gap-2.5 font-semibold tracking-tight">
             <BrandMark className="size-7" />
-            <span>NIIT AI SEO Agent</span>
+            <span>{PRODUCT_NAME}</span>
           </Link>
           <Button
             variant="ghost"

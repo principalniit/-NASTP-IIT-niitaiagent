@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ApiError } from "@/lib/api";
+import { PRODUCT_NAME } from "@/lib/brand";
 import { useSession } from "@/lib/session";
 
 const schema = z.object({
@@ -72,7 +73,7 @@ export function LoginView() {
       >
         <div className="relative z-10 flex items-center gap-3">
           <BrandMark className="size-9" />
-          <span className="text-sm font-semibold tracking-wide text-white/90">AI SEO Agent</span>
+          <span className="text-sm font-semibold tracking-wide text-white/90">{PRODUCT_NAME}</span>
         </div>
         <div className="pointer-events-none absolute inset-0 -z-0 flex items-center justify-center opacity-25 lg:static lg:my-4 lg:flex-1 lg:opacity-100">
           <SeoHeroScene className="max-h-[36rem] max-w-[36rem]" />
@@ -104,7 +105,7 @@ export function LoginView() {
         <div className="w-full max-w-sm animate-fade-up" style={{ animationDelay: "0.1s" }}>
           <div className="mb-8 space-y-2">
             <BrandMark className="size-11" />
-            <h1 className="pt-2 text-2xl font-semibold tracking-tight">NIIT AI SEO Agent</h1>
+            <h1 className="pt-2 text-2xl font-semibold tracking-tight">{PRODUCT_NAME}</h1>
             <p className="text-sm text-muted-foreground">Sign in to manage search visibility for your organisation.</p>
           </div>
           <form onSubmit={onSubmit} noValidate className="space-y-4">

@@ -29,7 +29,8 @@ export default defineConfig({
     {
       command: `pnpm exec next build && pnpm exec next start -p ${WEB_PORT}`,
       url: `http://127.0.0.1:${WEB_PORT}/login`,
-      env: { API_ORIGIN: `http://127.0.0.1:${API_PORT}`, NEXT_DIST_DIR: ".next-e2e" },
+      // The product name is configurable; the tests use NIIT's, as its deployment does.
+      env: { API_ORIGIN: `http://127.0.0.1:${API_PORT}`, NEXT_DIST_DIR: ".next-e2e", NEXT_PUBLIC_PRODUCT_NAME: "NIIT AI SEO Agent" },
       reuseExistingServer: false,
       timeout: 240_000,
     },

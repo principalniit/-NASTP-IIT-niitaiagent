@@ -6,7 +6,7 @@ from functools import lru_cache
 from ipaddress import IPv4Network, IPv6Network, ip_network
 from typing import Literal
 
-from pydantic import Field, SecretStr, model_validator
+from pydantic import AliasChoices, Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _METADATA_NET = ip_network("169.254.0.0/16")
@@ -21,7 +21,14 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     environment: Literal["development", "test", "production"] = "development"
-    app_name: str = "NIIT AI SEO Agent"
+    # The name shown in emails, the API documentation and (through the dashboard's own
+    # NEXT_PUBLIC_PRODUCT_NAME) every screen. APP_NAME is still read for older setups.
+    product_name: str = Field(
+        default="AI SEO Agent",
+        min_length=1,
+        max_length=60,
+        validation_alias=AliasChoices("PRODUCT_NAME", "APP_NAME", "product_name"),
+    )
     log_level: str = "INFO"
 
     database_url: str = "postgresql+asyncpg://niit:niit@localhost:5432/niit_seo"

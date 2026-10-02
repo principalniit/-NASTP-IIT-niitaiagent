@@ -37,7 +37,7 @@ def create_app() -> FastAPI:
     # The interactive API docs are for development; production does not publish them.
     public_docs = settings.environment != "production"
     app = FastAPI(
-        title=settings.app_name,
+        title=settings.product_name,
         version="0.1.0",
         openapi_url="/api/v1/openapi.json" if public_docs else None,
         docs_url="/api/v1/docs" if public_docs else None,

@@ -107,7 +107,7 @@ async def create(
         email,
         f"You are invited to {org.name}",
         f"{access.user.full_name} invited you to join {org.name} as {role.value.replace('_', ' ')}"
-        f" on {get_settings().app_name}.\n\nOpen this link to accept:\n{link}\n\n"
+        f" on {get_settings().product_name}.\n\nOpen this link to accept:\n{link}\n\n"
         f"The link expires in {get_settings().invitation_ttl_days} days. If you did not expect "
         "this invitation, you can ignore this email.\n",
     )
