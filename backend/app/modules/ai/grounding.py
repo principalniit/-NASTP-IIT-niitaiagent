@@ -17,7 +17,7 @@ _NUMBER = re.compile(r"(?<![\w.])\d+(?:[.,]\d+)*(?![\w])")
 _LIST_MARKER = re.compile(r"(?m)^\s*\d{1,2}[.)]\s+")
 _CLAIMS = [
     (r"\bguarantee", "promises a guaranteed outcome"),
-    (r"\b(?:rank|ranking|position)\s*(?:#|no\.?|number)?\s*\d", "states a ranking position"),
+    (r"\b(?:rank|ranking|position)\s*(?:#|no\.?|number)?\s*\d[\d.,]*", "states a ranking position"),
     (
         r"\b(?:first|top)\s+(?:page|result|spot|position)s?\s+(?:of|on|in)\s+"
         r"(?:google|bing|search)",
@@ -32,6 +32,41 @@ _CLAIMS = [
     (r"\btraffic\s+(?:will|would|should)\s+(?:increase|grow|double|rise)", "predicts traffic"),
 ]
 FORBIDDEN_CLAIMS = [(re.compile(pattern, re.I), description) for pattern, description in _CLAIMS]
+# Claims that may report imported Search Console figures, for example "80 clicks" or
+# "average position 3.5": allowed only when the evidence holds search data, every number
+# in the claim comes from it, and the sentence reports rather than predicts.
+_GROUNDED_NUMBERS_OK = frozenset(
+    {"states a ranking position", "states traffic or backlink figures"}
+)
+_PREDICTIVE = re.compile(
+    r"\b(will|would|could|can|might|expect\w*|reach\w*|gain\w*|more|increase\w*|boost\w*|"
+    r"grow\w*|achiev\w*|improv\w*|get you)\b",
+    re.I,
+)
+
+
+def _has_key(value: Any, key: str) -> bool:
+    if isinstance(value, dict):
+        return key in value or any(_has_key(v, key) for v in value.values())
+    if isinstance(value, list):
+        return any(_has_key(v, key) for v in value)
+    return False
+
+
+def _sentence(text: str, start: int, end: int) -> str:
+    begin = max(text.rfind(". ", 0, start), text.rfind("\n", 0, start)) + 1
+    stop = min(
+        (i for i in (text.find(". ", end), text.find("\n", end)) if i != -1), default=len(text)
+    )
+    return text[begin:stop]
+
+
+def _reports_search_data(match: re.Match[str], text: str, allowed: set[str], evidence: Any) -> bool:
+    return (
+        _has_key(evidence, "search_performance")
+        and numbers_in(match.group(0)) <= allowed
+        and not _PREDICTIVE.search(_sentence(text, match.start(), match.end()))
+    )
 
 
 @dataclass
@@ -145,7 +180,14 @@ def check_output(
         )
     for text in texts:
         for pattern, description in FORBIDDEN_CLAIMS:
-            if pattern.search(text) and description not in report.claims:
+            match = pattern.search(text)
+            if (
+                match
+                and description in _GROUNDED_NUMBERS_OK
+                and _reports_search_data(match, text, allowed, evidence)
+            ):
+                continue
+            if match and description not in report.claims:
                 report.claims.append(description)
                 report.violations.append(f"Makes an unsupported claim: {description}")
     return report

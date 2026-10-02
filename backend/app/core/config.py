@@ -99,6 +99,13 @@ class Settings(BaseSettings):
     invitation_ttl_days: int = 7
     password_reset_ttl_minutes: int = 60
 
+    # Google endpoints for Search Console. Fixed by the operator, never by organisations;
+    # changed only to point tests at a local fake.
+    google_token_url: str = "https://oauth2.googleapis.com/token"  # noqa: S105 - an address
+    google_search_console_url: str = "https://searchconsole.googleapis.com/webmasters/v3"
+    # Days of Search Console data each sync imports (Google keeps 16 months).
+    search_console_days: int = Field(default=90, ge=7, le=480)
+
     @property
     def email_enabled(self) -> bool:
         return bool(self.smtp_host and self.smtp_from)

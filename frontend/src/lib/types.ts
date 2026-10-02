@@ -741,7 +741,7 @@ export interface IntegrationProvider {
   name: string;
   category: "search_data" | "analytics" | "cms" | "notifications";
   description: string;
-  config_schema: { properties: Record<string, { title?: string; type?: string; description?: string; default?: unknown }>; required?: string[] };
+  config_schema: { properties: Record<string, { title?: string; type?: string; description?: string; default?: unknown; readOnly?: boolean }>; required?: string[] };
   secret_label: string;
 }
 
@@ -756,4 +756,54 @@ export interface Integration {
   connected: boolean;
   created_at: string;
   updated_at: string;
+}
+
+// ---------------------------------------------------------------- search console
+
+export interface SearchTotals {
+  clicks: number;
+  impressions: number;
+  ctr: number | null;
+  /** Average position weighted by impressions; 1 is the top of Google's results. */
+  position: number | null;
+}
+
+export interface SearchRow {
+  clicks: number;
+  impressions: number;
+  ctr: number | null;
+  position: number | null;
+}
+
+export interface SearchPerformance {
+  state: "not_connected" | "no_data" | "ready";
+  connected: boolean;
+  properties: string[];
+  last_synced_at: string | null;
+  start: string | null;
+  end: string | null;
+  totals: SearchTotals | null;
+  daily: { day: string; clicks: number; impressions: number }[];
+  top_pages: (SearchRow & { page: string })[];
+  top_queries: (SearchRow & { query: string })[];
+}
+
+export interface PageSearchPerformance {
+  state: "no_data" | "ready";
+  start: string | null;
+  end: string | null;
+  totals: SearchTotals | null;
+  top_queries: (SearchRow & { query: string })[];
+}
+
+export interface SearchSync {
+  id: string;
+  status: "queued" | "running" | "succeeded" | "failed";
+  start_date: string | null;
+  end_date: string | null;
+  page_day_rows: number;
+  query_rows: number;
+  error: string | null;
+  created_at: string;
+  finished_at: string | null;
 }

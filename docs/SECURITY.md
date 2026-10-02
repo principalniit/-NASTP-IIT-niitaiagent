@@ -213,6 +213,26 @@ the platform acts on.
 - **Platform audit log.** Platform administrators can read every audit entry, including
   sign-ins, which belong to no organisation.
 
+## 5d. Google Search Console
+
+- The only outbound connections are to two fixed Google addresses held in server settings
+  (`GOOGLE_TOKEN_URL`, `GOOGLE_SEARCH_CONSOLE_URL`). The `token_uri` inside a key file is
+  ignored, so a tampered key cannot direct the server elsewhere. Redirects are not
+  followed and proxy settings from the environment are not used.
+- The scope is `webmasters.readonly`. The platform cannot change anything in Search
+  Console.
+- The JSON key is validated when saved, stored encrypted like other credentials, and never
+  returned. Only the service account's email, which is not secret, is shown so that it can
+  be added to the property.
+- Only owners and administrators can test, import or change the connection. Any member can
+  read the imported figures of their organisation's projects.
+- Google's error bodies are neither shown nor logged; people see a fixed explanation per
+  status, and logs record the status code only.
+- Imported figures are scoped by `organisation_id` and matched to projects by host. The
+  tenant suite covers the new routes.
+- The AI may state traffic or position figures only when Search Console data is in its
+  evidence, every number comes from it, and the sentence reports rather than predicts.
+
 ## 6. Input, output and errors
 
 - Pydantic validates every request body, query parameter and configuration blob.

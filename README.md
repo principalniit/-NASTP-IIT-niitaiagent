@@ -184,6 +184,7 @@ Backend variables live in `backend/.env` (template: `backend/.env.example`).
 | `AI_KEEP_ALIVE` | `30m` | How long Ollama keeps the model loaded after a task, so the next one does not wait for it to load. A duration with a unit; `-1m` keeps it until Ollama stops |
 | `AI_MAX_ACTIVE_JOBS_PER_ORG` | `3` | Queued or running AI tasks allowed per organisation |
 | `INTEGRATIONS_ENCRYPTION_KEYS` | empty | Comma-separated Fernet keys that encrypt integration credentials; the first encrypts. Empty means credentials cannot be stored. Back it up separately from the database |
+| `SEARCH_CONSOLE_DAYS` | `90` | Days of Google Search Console data each import fetches. Connecting is done per organisation in the dashboard (`docs/SEARCH_CONSOLE.md`) |
 | `PUBLIC_BASE_URL` | `http://localhost:3000` | The dashboard's public address, used in invitation and reset links |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM`, `SMTP_STARTTLS` | empty, `587`, empty, empty, empty, `true` | Your organisation's own mail server. Empty `SMTP_HOST` turns email off: invitation links are then shared by hand and password resets go through an administrator |
 | `INVITATION_TTL_DAYS` | `7` | How long an invitation link works |
@@ -281,6 +282,7 @@ and key rotation. The latest security review is
 | Organisations, members, roles, audit log | Done |
 | Invitations (people choose their own password) and password reset by email | Done; email is optional and uses your own SMTP server |
 | AI measurement: run details, `ai-report`, `ai-eval` test sets, feedback on results | Done |
+| Google Search Console: clicks, impressions, CTR and position per project, page and query; used by the AI | Done; free, read-only, with your own service account (`docs/SEARCH_CONSOLE.md`) |
 | Projects and project settings (including NIIT configuration) | Done |
 | Dashboard shell, overview, projects, settings, administration | Done |
 | Crawler, Crawl Explorer, Pages browser (Phase 2) | Done; JavaScript rendering deferred |

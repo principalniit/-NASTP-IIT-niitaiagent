@@ -65,6 +65,18 @@ def _hint(secret: str) -> str:
 
 
 def _set_secret(integration: Integration, secret: str) -> None:
+    if integration.provider == "google_search_console":
+        # Checked before storing, so a wrong file is reported now and not at the first sync.
+        from app.modules.search_data.google import SearchConsoleError, parse_key
+
+        try:
+            key = parse_key(secret)
+        except SearchConsoleError as exc:
+            raise AppError(str(exc), code="invalid_credential") from exc
+        integration.config = {**integration.config, "service_account_email": key.client_email}
+        integration.secret = crypto.encrypt(secret)
+        integration.secret_hint = "set"  # noqa: S105 - a marker, not the secret
+        return
     integration.secret = crypto.encrypt(secret)
     integration.secret_hint = _hint(secret)
 
@@ -128,13 +140,20 @@ async def update(
         integration.name = body.name
         changed["name"] = body.name
     if body.config is not None:
+        # The service account address comes from the saved key, not from the form.
+        email = integration.config.get("service_account_email")
         integration.config = _config(integration.provider, body.config)
+        if email and integration.secret_hint is not None:
+            integration.config = {**integration.config, "service_account_email": email}
         changed["config"] = "updated"
     if body.secret:
         _set_secret(integration, body.secret)
         changed["credential"] = "replaced"
     elif body.clear_secret:
         integration.secret, integration.secret_hint = None, None
+        integration.config = {
+            k: v for k, v in integration.config.items() if k != "service_account_email"
+        }
         changed["credential"] = "cleared"
     if body.enabled is not None:
         integration.enabled = body.enabled

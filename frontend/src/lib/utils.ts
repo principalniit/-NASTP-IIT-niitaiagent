@@ -30,3 +30,8 @@ export function pathOf(url: string): string {
     return url;
   }
 }
+
+/** Search Console click-through rate (0 to 1) as a percentage. */
+export const ctrText = (ctr: number | null) => (ctr === null ? "—" : `${(ctr * 100).toFixed(1)}%`);
+/** Search Console average position; 1 is the top of Google's results. */
+export const positionText = (position: number | null) => (position === null ? "—" : position.toFixed(1));

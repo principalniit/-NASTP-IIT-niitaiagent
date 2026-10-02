@@ -35,6 +35,9 @@ import {
 } from "@/lib/types";
 import type {
   AuditLogEntry,
+  PageSearchPerformance,
+  SearchPerformance,
+  SearchSync,
   Health,
   Invitation,
   Member,
@@ -61,6 +64,9 @@ export const keys = {
   aiStatus: (orgId: string) => ["organisations", orgId, "ai-status"] as const,
   analyses: (projectId: string) => ["projects", projectId, "ai-analyses"] as const,
   analysis: (id: string) => ["ai-analyses", id] as const,
+  searchPerformance: (projectId: string, days: number) => ["projects", projectId, "search", days] as const,
+  pageSearch: (projectId: string, url: string) => ["projects", projectId, "search", "page", url] as const,
+  searchSyncs: (integrationId: string) => ["integrations", integrationId, "search-syncs"] as const,
   recommendations: (projectId: string) => ["projects", projectId, "recommendations"] as const,
   drafts: (projectId: string) => ["projects", projectId, "drafts"] as const,
   draft: (id: string) => ["drafts", id] as const,
@@ -447,5 +453,32 @@ export function usePlatformAudit(page: number, platformOnly: boolean, enabled: b
         query: { page, page_size: 20, platform_only: platformOnly ? "true" : undefined },
       }),
     enabled,
+  });
+}
+
+/** Google Search Console figures for a project; never estimated. */
+export function useSearchPerformance(projectId: string | null, days = 28) {
+  return useQuery({
+    queryKey: keys.searchPerformance(projectId ?? "", days),
+    queryFn: () => api<SearchPerformance>(`/projects/${projectId}/search-performance`, { query: { days } }),
+    enabled: !!projectId,
+  });
+}
+
+export function usePageSearchPerformance(projectId: string | null, url: string | null) {
+  return useQuery({
+    queryKey: keys.pageSearch(projectId ?? "", url ?? ""),
+    queryFn: () => api<PageSearchPerformance>(`/projects/${projectId}/search-performance/page`, { query: { url: url ?? "" } }),
+    enabled: !!projectId && !!url,
+  });
+}
+
+export function useSearchSyncs(integrationId: string, enabled = true) {
+  return useQuery({
+    queryKey: keys.searchSyncs(integrationId),
+    queryFn: () => api<SearchSync[]>(`/integrations/${integrationId}/search-console/syncs`),
+    enabled,
+    refetchInterval: (query) =>
+      query.state.data?.some((s) => s.status === "queued" || s.status === "running") ? 3000 : false,
   });
 }

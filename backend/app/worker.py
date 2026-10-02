@@ -33,6 +33,8 @@ from app.modules.monitoring.retention import apply_retention
 from app.modules.monitoring.service import process_due_schedules
 from app.modules.reports.models import PdfStatus, Report, ReportStatus
 from app.modules.reports.service import run_report
+from app.modules.search_data.models import SearchSync, SyncStatus
+from app.modules.search_data.service import queue_due_syncs, run_sync
 from app.modules.seo.analysis import AnalysisError, analyse_crawl
 
 logger = logging.getLogger("app.worker")
@@ -89,6 +91,16 @@ CLAIM_REPORT_SQL = text(
     RETURNING id
     """
 )
+CLAIM_SEARCH_SYNC_SQL = text(
+    """
+    UPDATE search_syncs SET status = 'running', started_at = now()
+    WHERE id = (
+        SELECT id FROM search_syncs WHERE status = 'queued'
+        ORDER BY created_at LIMIT 1 FOR UPDATE SKIP LOCKED
+    )
+    RETURNING id
+    """
+)
 REPORT_STALE_SECONDS = 1800
 RETENTION_INTERVAL_SECONDS = 3600
 
@@ -133,6 +145,18 @@ async def recover_stale_jobs(factory: async_sessionmaker[AsyncSession], stale_se
                 status=ReportStatus.FAILED,
                 pdf_status=PdfStatus.FAILED,
                 error="The worker generating this report stopped unexpectedly.",
+                finished_at=datetime.now(UTC),
+            )
+        )
+        await session.execute(
+            update(SearchSync)
+            .where(
+                SearchSync.status == SyncStatus.RUNNING,
+                SearchSync.started_at < datetime.now(UTC) - timedelta(seconds=REPORT_STALE_SECONDS),
+            )
+            .values(
+                status=SyncStatus.FAILED,
+                error="The worker running this sync stopped unexpectedly.",
                 finished_at=datetime.now(UTC),
             )
         )
@@ -267,6 +291,30 @@ async def process_next_report(*, factory: async_sessionmaker[AsyncSession] | Non
     return True
 
 
+async def process_next_search_sync(
+    *, factory: async_sessionmaker[AsyncSession] | None = None
+) -> bool:
+    """Claim and run one queued Search Console import. Returns False when none was queued."""
+    factory = factory or get_session_factory()
+    async with factory() as session:
+        sync_id: uuid.UUID | None = await session.scalar(CLAIM_SEARCH_SYNC_SQL)
+        await session.commit()
+    if sync_id is None:
+        return False
+    try:
+        await run_sync(sync_id, factory=factory)
+    except Exception:
+        logger.exception("Search Console sync failed", extra={"sync_id": str(sync_id)})
+        async with factory() as session:
+            sync = await session.get(SearchSync, sync_id)
+            if sync is not None:
+                sync.status = SyncStatus.FAILED
+                sync.error = "The sync failed because of an internal error. See worker logs."
+                sync.finished_at = datetime.now(UTC)
+                await session.commit()
+    return True
+
+
 async def run_worker(stop: asyncio.Event) -> None:
     settings = get_settings()
     worker_id = worker_identity()
@@ -283,6 +331,7 @@ async def run_worker(stop: asyncio.Event) -> None:
             worked = await process_next_analysis(factory=factory) or worked
             worked = await process_next_ai_task(factory=factory) or worked
             worked = await process_next_report(factory=factory) or worked
+            worked = await process_next_search_sync(factory=factory) or worked
         except Exception:
             logger.exception("Worker loop error")
             worked = False
@@ -299,6 +348,10 @@ async def run_worker(stop: asyncio.Event) -> None:
                     await apply_retention(factory)
                 except Exception:
                     logger.exception("Data retention failed")
+                try:
+                    await queue_due_syncs(factory)
+                except Exception:
+                    logger.exception("Queuing daily Search Console syncs failed")
                 last_retention = now
             last_recovery = now
         if not worked:

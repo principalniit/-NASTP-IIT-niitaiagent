@@ -16,9 +16,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageAssistant } from "@/components/ai/ai-actions";
 import { ApiError } from "@/lib/api";
 import { useCurrentOrg } from "@/lib/current-org";
-import { useCrawl, useCrawlPage, useLatestAnalysedCrawl } from "@/lib/queries";
+import { useCrawl, useCrawlPage, useLatestAnalysedCrawl, usePageSearchPerformance } from "@/lib/queries";
 import { FETCH_STATUS_LABELS, type CrawlLinkRef } from "@/lib/types";
-import { pathOf } from "@/lib/utils";
+import { ctrText, pathOf, positionText } from "@/lib/utils";
 
 function Fact({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -43,6 +43,52 @@ function CrawlPageAssistant({ crawlId, pageUrl }: { crawlId: string; pageUrl: st
     <div className="mb-6">
       <PageAssistant projectId={projectId} pageUrl={pageUrl} latestCrawl={latest.crawl?.id === crawlId} />
     </div>
+  );
+}
+
+/** Google Search Console figures for this page, when they have been imported. */
+function PageSearchCard({ crawlId, pageUrl }: { crawlId: string; pageUrl: string }) {
+  const crawl = useCrawl(crawlId);
+  const projectId = crawl.data?.project_id ?? null;
+  const search = usePageSearchPerformance(projectId, pageUrl);
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Google Search</CardTitle>
+        <CardDescription>
+          {search.data?.state === "ready" && search.data.start && search.data.end
+            ? `Search Console, ${search.data.start} to ${search.data.end}.`
+            : "From Search Console, when it is connected."}
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {search.isLoading || crawl.isLoading ? (
+          <LoadingState rows={2} />
+        ) : search.data?.state === "ready" && search.data.totals ? (
+          <dl>
+            <Fact label="Clicks">{search.data.totals.clicks.toLocaleString("en")}</Fact>
+            <Fact label="Impressions">{search.data.totals.impressions.toLocaleString("en")}</Fact>
+            <Fact label="Click-through rate">{ctrText(search.data.totals.ctr)}</Fact>
+            <Fact label="Average position">{positionText(search.data.totals.position)}</Fact>
+            <Fact label="Top queries">
+              {search.data.top_queries.length ? (
+                search.data.top_queries
+                  .slice(0, 5)
+                  .map((q) => `${q.query} (${q.clicks.toLocaleString("en")})`)
+                  .join(", ")
+              ) : (
+                <Missing text="None reported" />
+              )}
+            </Fact>
+          </dl>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            No Search Console figures for this page. Either Search Console is not connected, or Google reported no
+            impressions for it in the imported period.
+          </p>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -176,6 +222,7 @@ export function PageDetailView({ crawlId, pageId }: { crawlId: string; pageId: s
               </CardContent>
             ) : null}
           </Card>
+          <PageSearchCard crawlId={crawlId} pageUrl={page.url} />
         </TabsContent>
         {parsed ? (
           <TabsContent value="content" className="grid gap-6 lg:grid-cols-2">

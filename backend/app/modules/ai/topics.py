@@ -23,6 +23,7 @@ from app.modules.ai.tools import (
     get_page_details,
     issue_brief,
 )
+from app.modules.search_data.service import ai_evidence as search_evidence
 from app.modules.seo.models import ResolutionStatus, SeoIssue
 
 MAX_TOPICS = 3
@@ -125,6 +126,19 @@ UNAVAILABLE: tuple[tuple[str, re.Pattern[str]], ...] = (
     ),
 )
 
+# What Search Console data answers when it has been imported. Visitor totals,
+# competitors, backlinks and search volumes stay unavailable: Search Console has
+# Google Search clicks only, and no data about other sites.
+COVERED_BY_SEARCH_DATA = frozenset(
+    {"search rankings and positions", "clicks, impressions and conversions"}
+)
+SEARCH_DATA = re.compile(
+    r"search console|\bgoogle\b|\bsearch (results?|performance|queries|terms)\b|\bqueries\b|"
+    r"\bclicks?\b|\bimpressions?\b|\bctr\b|click-?through|\bposition\b|\brank|\bkeywords?\b|"
+    r"\bvisit(s|ors?)\b|\btraffic\b",
+    re.I,
+)
+
 # Questions about what to do next are answered from the overall priorities.
 PRIORITY = re.compile(
     r"\bfirst\b|priorit|most important|next steps?|way forward|where (to|should (we|i)) start|"
@@ -192,6 +206,11 @@ async def evidence_for(ctx: ToolContext, question: str) -> dict[str, Any] | None
         except ToolError as exc:
             found["page"] = {"requested": url, "note": str(exc)}
     missing = unavailable_in(question)
+    if SEARCH_DATA.search(question):
+        search = await search_evidence(ctx.session, ctx.project)
+        if search is not None:
+            found["search_performance"] = search
+            missing = [m for m in missing if m not in COVERED_BY_SEARCH_DATA]
     if missing:
         found["not_available"] = {
             "data": missing,

@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { KeyRound, Plug, Plus, Trash2 } from "lucide-react";
 import { useId, useState } from "react";
 
+import { SearchConsolePanel } from "@/components/admin/search-console-panel";
 import { NoOrganisation } from "@/components/app/no-organisation";
 import { PageHeader } from "@/components/app/page-header";
 import { EmptyState, ErrorState, LoadingState } from "@/components/app/states";
@@ -40,7 +41,10 @@ function ConfigFields({
   const required = new Set(provider.config_schema.required ?? []);
   return (
     <>
-      {Object.entries(provider.config_schema.properties).map(([name, prop]) => (
+      {Object.entries(provider.config_schema.properties)
+        // Read-only settings are filled in by the server, for example from a saved key.
+        .filter(([, prop]) => !prop.readOnly)
+        .map(([name, prop]) => (
         <div key={name} className="space-y-1.5">
           <Label htmlFor={`${base}-${name}`}>
             {prop.title ?? name}
@@ -62,6 +66,7 @@ function ConfigFields({
 function toConfig(provider: IntegrationProvider, values: Record<string, string>): Record<string, unknown> {
   const config: Record<string, unknown> = {};
   for (const [name, prop] of Object.entries(provider.config_schema.properties)) {
+    if (prop.readOnly) continue;
     const raw = values[name] ?? (prop.default !== undefined ? String(prop.default) : "");
     if (raw === "") continue;
     config[name] = prop.type === "integer" ? Number(raw) : raw;
@@ -172,9 +177,21 @@ function IntegrationCard({ integration, provider, org, canStoreSecrets }: { inte
         <CardTitle className="flex flex-wrap items-center gap-2 text-base">
           <Plug className="size-4" aria-hidden /> {integration.name}
           <Badge variant="secondary">{provider?.name ?? integration.provider}</Badge>
-          <Badge variant="outline">{integration.enabled ? "Enabled (recorded only)" : "Off"}</Badge>
+          <Badge variant="outline">
+            {integration.provider === "google_search_console"
+              ? integration.enabled
+                ? "On: imports daily"
+                : "Off: imports only on request"
+              : integration.enabled
+                ? "Enabled (recorded only)"
+                : "Off"}
+          </Badge>
         </CardTitle>
-        <CardDescription>Not connected: the platform does not contact this service.</CardDescription>
+        <CardDescription>
+          {integration.provider === "google_search_console"
+            ? "Reads search figures from Google with the saved key. It never changes anything in Search Console."
+            : "Not connected: the platform does not contact this service."}
+        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3 text-sm">
         {Object.keys(integration.config).length ? (
@@ -192,15 +209,33 @@ function IntegrationCard({ integration, provider, org, canStoreSecrets }: { inte
           {integration.secret_set ? `Credential stored (${integration.secret_hint})` : "No credential stored"}
         </p>
         <div className="flex flex-wrap items-end gap-2">
-          <div className="space-y-1.5">
-            <Label htmlFor={secretId}>{integration.secret_set ? "Replace credential" : "Add credential"}</Label>
-            <Input id={secretId} type="password" autoComplete="off" className="w-64" value={secret} disabled={!canStoreSecrets} onChange={(e) => setSecret(e.target.value)} />
-          </div>
+          {integration.provider === "google_search_console" ? (
+            <div className="space-y-1.5">
+              <Label htmlFor={secretId}>{integration.secret_set ? "Replace the JSON key file" : "Service account JSON key file"}</Label>
+              <Input
+                id={secretId}
+                type="file"
+                accept="application/json,.json"
+                className="w-72"
+                disabled={!canStoreSecrets}
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  setSecret(file && file.size < 20_000 ? await file.text() : "");
+                }}
+              />
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              <Label htmlFor={secretId}>{integration.secret_set ? "Replace credential" : "Add credential"}</Label>
+              <Input id={secretId} type="password" autoComplete="off" className="w-64" value={secret} disabled={!canStoreSecrets} onChange={(e) => setSecret(e.target.value)} />
+            </div>
+          )}
           <Button size="sm" variant="outline" disabled={!secret || update.isPending} onClick={() => update.mutate({ secret })}>Save credential</Button>
           {integration.secret_set ? (
             <Button size="sm" variant="ghost" disabled={update.isPending} onClick={() => update.mutate({ clear_secret: true })}>Remove credential</Button>
           ) : null}
         </div>
+        {integration.provider === "google_search_console" ? <SearchConsolePanel integration={integration} /> : null}
         <div className="flex flex-wrap gap-2 border-t pt-3">
           <Button size="sm" variant="outline" disabled={update.isPending} onClick={() => update.mutate({ enabled: !integration.enabled })}>
             {integration.enabled ? "Turn off" : "Turn on"}
@@ -250,11 +285,11 @@ export function IntegrationsView() {
       {header}
       <Alert className="mb-6">
         <Plug aria-hidden />
-        <AlertTitle>Records only</AlertTitle>
+        <AlertTitle>What connects</AlertTitle>
         <AlertDescription>
-          The platform does not connect to these services yet, and never publishes to the website. Connecting any of them,
-          and any paid service, needs the project owner&apos;s authorisation. Saving an integration here only records the
-          settings for later.
+          Google Search Console connects read-only with your own free service account, to import clicks, impressions and
+          positions. Every other service here is a record only: the platform does not contact it, and never publishes to
+          the website. Connecting any other service, and any paid service, needs the project owner&apos;s authorisation.
         </AlertDescription>
       </Alert>
       {encryption.data && !canStoreSecrets ? (

@@ -173,7 +173,7 @@ test("management reports, crawl-to-crawl monitoring and schedules", async ({ pag
 test("integration records keep credentials encrypted and never connect", async ({ page }) => {
   await signIn(page, ADMIN_EMAIL);
   await nav(page, "Integrations").click();
-  await expect(page.getByText("Records only")).toBeVisible();
+  await expect(page.getByText("What connects")).toBeVisible();
   await page.getByRole("button", { name: "Add integration" }).click();
   await page.getByLabel("Service", { exact: true }).selectOption({ label: "WordPress" });
   await page.getByLabel("Name", { exact: true }).fill("NIIT website CMS");
@@ -188,4 +188,23 @@ test("integration records keep credentials encrypted and never connect", async (
   await expect(page.getByText("Not connected: the platform does not contact this service.")).toBeVisible();
   await page.getByRole("button", { name: "Turn on" }).click();
   await expect(page.getByText("Enabled (recorded only)")).toBeVisible();
+});
+
+test("search performance shows no figures until Search Console is connected", async ({ page }) => {
+  await signIn(page, ADMIN_EMAIL);
+  await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Search Performance" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Search Performance" })).toBeVisible();
+  await expect(page.getByText("Search Console is not connected")).toBeVisible();
+  await expect(page.getByRole("group", { name: "Clicks" })).toHaveCount(0);
+  await page.getByRole("link", { name: "Connect Search Console" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Integrations" })).toBeVisible();
+
+  // A Search Console record explains the setup and refuses a file that is not a key.
+  await page.getByRole("button", { name: "Add integration" }).click();
+  await page.getByLabel("Service", { exact: true }).selectOption({ label: "Google Search Console" });
+  await page.getByLabel("Name", { exact: true }).fill("NIIT Search Console");
+  await page.getByLabel("Property Url").fill("sc-domain:niit.edu.pk");
+  await page.getByRole("button", { name: "Save integration" }).click();
+  const panel = page.getByRole("group", { name: "Search Console connection" });
+  await expect(panel.getByText("enable the Search Console API")).toBeVisible();
 });

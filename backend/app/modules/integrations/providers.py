@@ -19,7 +19,18 @@ class _Config(BaseModel):
 
 
 class SearchConsoleConfig(_Config):
-    property_url: str = Field(min_length=3, max_length=300, description="https://… or sc-domain:…")
+    property_url: str = Field(
+        min_length=3,
+        max_length=300,
+        pattern=r"^(sc-domain:[a-z0-9.-]+|https?://[^\s]+/)$",
+        description="The property exactly as in Search Console: sc-domain:example.org or "
+        "https://www.example.org/",
+    )
+    # Filled in by the server from the saved key: add this address as a user of the
+    # property in Search Console.
+    service_account_email: str | None = Field(
+        default=None, max_length=320, json_schema_extra={"readOnly": True}
+    )
 
 
 class AnalyticsConfig(_Config):
@@ -59,9 +70,10 @@ PROVIDERS: dict[str, Provider] = {
             "google_search_console",
             "Google Search Console",
             "search_data",
-            "Search performance data (queries, clicks, impressions) for verified properties.",
+            "Clicks, impressions, click-through rate and average position from your own "
+            "Search Console property. Free and read-only; uses a service account you create.",
             SearchConsoleConfig,
-            "Service account key (JSON)",
+            "Service account JSON key",
         ),
         Provider(
             "google_analytics",

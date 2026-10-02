@@ -591,7 +591,7 @@ The owner asked to close four gaps, all with free and self-hosted means only:
 | Gap | Status |
 |-----|--------|
 | Invitations and password reset by email | Done (16.1) |
-| Google Search Console data, using the customer's own free Google client | Pending |
+| Google Search Console data, using the customer's own free Google client | Done (16.5) |
 | JavaScript site rendering behind the SSRF guard | Pending |
 | Configurable product name and a one-command installer | Pending |
 
@@ -806,3 +806,41 @@ Delivered:
   findings from NIIT's own crawls.
 - A new `cites_page_issues` check: an answer about a named page must cite an open issue
   on it, or say none were found.
+
+### 16.5 Google Search Console
+
+Delivered (`modules/search_data/`, migration 0012, `docs/SEARCH_CONSOLE.md`):
+- **Connection by service account.** The organisation creates a free service account in
+  its own Google Cloud project and adds its email to the Search Console property. The JSON
+  key is checked and stored encrypted, and the account's email is shown for that step.
+  *Test connection* signs in and checks the permission on the property.
+- **Imports in the worker**, on request or daily when the integration is on:
+  - daily figures per page, and query totals per page, for the last
+    `SEARCH_CONSOLE_DAYS` (90);
+  - each import replaces its period, so revised figures are picked up;
+  - stale imports are failed like other jobs.
+- **Search Performance page** per project:
+  - clicks, impressions, CTR and average position for 7, 28 or 90 days;
+  - separate daily charts for clicks and impressions, each with a table view;
+  - top pages and top queries.
+  - Without data it says what is missing (not connected, or nothing imported for this
+    site) and shows no figures.
+- **Page detail** shows the page's clicks, impressions, CTR, position and top queries.
+- **AI assistant.** Questions about clicks, impressions, positions or queries get the
+  imported figures as evidence, so they are no longer "not available". Visitor totals,
+  competitors, backlinks and search volumes still are.
+  - The grounding check accepts traffic and position figures only when they come from
+    the imported data and the sentence reports rather than predicts. "Expect 12 more
+    visitors" and "you will reach position 1" are still rejected.
+
+Assumption A25: a service account (no browser sign-in) is the simplest free connection
+that works on a laptop at localhost, with no public callback address. One domain property
+can serve several projects because rows are matched by host.
+
+Known limitations:
+
+| Limitation | Plan |
+|------------|------|
+| Not run against a live Google account in development; tests use a fake that checks the signed sign-in request | First live import on the owner's laptop |
+| Google Analytics (visitors) is still a record only | Same service-account pattern if the owner wants it |
+| No per-country or per-device breakdown yet | Add dimensions when needed |

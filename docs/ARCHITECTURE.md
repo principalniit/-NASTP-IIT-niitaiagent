@@ -318,6 +318,7 @@ they concerned.
 | Retention | `monitoring/retention.py` | Off by default; owner-only. Run hourly by the worker. Removes page-level data of crawls older than the newest `keep_crawls` completed crawls (marking `pages_pruned_at`) and deletes reports older than `delete_reports_after_days`. Protected: the newest completed crawl, the latest analysed crawl, crawls under analysis. |
 | Platform administration | `audit_logs/router.py`, `app/cli.py` | Platform-wide audit log for platform administrators; CLI `reset-password` (ends sessions) and `rotate-secrets`. |
 | Deployment | `docs/DEPLOYMENT.md` | Windows single machine and Linux with nginx, TLS and systemd. |
+| Search Console | `modules/search_data/` | The first live integration, read-only. A service account JSON key, stored encrypted, signs a JWT that is exchanged for an access token at Google's fixed token address (the key's own `token_uri` is ignored). The worker imports daily page figures (`search_page_days`) and page-query totals (`search_page_queries`) for the last `SEARCH_CONSOLE_DAYS`, replacing the period each time. It runs on request or daily when the integration is on. Rows are matched to projects by page host, so one domain property serves several projects. Project, page and AI views show sums and impressions-weighted averages of Google's figures only. |
 
 ## 11. Provider interfaces
 

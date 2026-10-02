@@ -162,3 +162,10 @@ the Phase 4 report in `docs/IMPLEMENTATION_PLAN.md`.
 NIIT data lives in its own organisation. Commercial tenants get their own
 organisations with independent settings. No NIIT value is used as a fallback for
 another tenant.
+
+## Google Search Console
+
+NIIT's sites can be connected with one domain property, `sc-domain:niit.edu.pk`, which
+covers the main site and every portal subdomain. Figures are then shown per project by
+host. Follow `docs/SEARCH_CONSOLE.md`; the property must already be verified in Search
+Console by whoever manages NIIT's DNS or website.
