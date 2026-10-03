@@ -296,7 +296,7 @@ secrets, backups, upgrades and key rotation. The latest security review is
 |------|--------|
 | Authentication, sessions, rate limiting | Done |
 | Organisations, members, roles, audit log | Done |
-| Invitations (people choose their own password) and password reset by email | Done; email is optional and uses your own SMTP server |
+| Invitations (people choose their own password) and password reset by email | Done; email is optional and uses your own SMTP server (`docs/EMAIL.md`) |
 | AI measurement: run details, `ai-report`, `ai-eval` test sets, feedback on results | Done |
 | Google Search Console: clicks, impressions, CTR and position per project, page and query; click opportunities; used by the AI and its title drafts | Done; free, read-only, with your own service account (`docs/SEARCH_CONSOLE.md`) |
 | Configurable product name (`PRODUCT_NAME`, `NEXT_PUBLIC_PRODUCT_NAME`) | Done |

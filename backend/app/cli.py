@@ -4,6 +4,7 @@
     uv run python -m app.cli seed-niit --owner-email you@example.org
     uv run python -m app.cli reset-password --email you@example.org
     uv run python -m app.cli rotate-secrets
+    uv run python -m app.cli send-test-email --to you@example.org
     uv run python -m app.cli add-projects --org niit --owner-email you@example.org --file sites.csv
     uv run python -m app.cli ai-report --org niit --days 30
     uv run python -m app.cli ai-eval --org niit --project "NIIT website" [--model qwen2.5:7b]
@@ -186,6 +187,31 @@ async def reset_password(email: str) -> None:
         )
         await session.commit()
         print(f"Password reset for {user.email}. Existing sessions were signed out.")
+
+
+async def send_test_email(to: str) -> None:
+    """Send one message through the configured mail server, to check the SMTP settings."""
+    import smtplib
+
+    from app.core import mailer
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    if not settings.email_enabled:
+        sys.exit("Email is off. Set SMTP_HOST and SMTP_FROM in backend/.env, then try again.")
+    if "@" not in to:
+        sys.exit("Give a full email address with --to.")
+    print(f"Sending through {settings.smtp_host}:{settings.smtp_port} as {settings.smtp_from} ...")
+    try:
+        await mailer.send_now(
+            to,
+            f"{settings.product_name}: test email",
+            f"This is a test from {settings.product_name}. Email is working: invitations "
+            "and password-reset links will be delivered.\n",
+        )
+    except (OSError, smtplib.SMTPException) as exc:
+        sys.exit(f"Not sent ({type(exc).__name__}). {mailer.failure_hint(exc)}")
+    print(f"Sent to {to}. If it does not arrive within a few minutes, check the spam folder.")
 
 
 async def rotate_secrets() -> None:
@@ -434,6 +460,8 @@ def main() -> None:
     p_reset = sub.add_parser("reset-password", help="Set a new password for an account")
     p_reset.add_argument("--email", required=True)
     sub.add_parser("rotate-secrets", help="Re-encrypt integration credentials with the newest key")
+    p_mail = sub.add_parser("send-test-email", help="Check the SMTP settings by sending one email")
+    p_mail.add_argument("--to", required=True, help="Address to send the test to")
     p_add = sub.add_parser("add-projects", help="Create projects from a 'Name, address' list")
     p_add.add_argument("--org", required=True, help="Organisation slug, for example niit")
     p_add.add_argument("--owner-email", required=True, help="Owner or admin recorded as creator")
@@ -463,6 +491,8 @@ def main() -> None:
                 await reset_password(args.email)
             elif args.command == "rotate-secrets":
                 await rotate_secrets()
+            elif args.command == "send-test-email":
+                await send_test_email(args.to)
             elif args.command == "add-projects":
                 await add_projects(args.org, args.owner_email, args.file)
             elif args.command == "ai-report":

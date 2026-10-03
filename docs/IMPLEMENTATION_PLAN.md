@@ -635,6 +635,15 @@ Known limitations:
 | Access tokens stay valid for up to 15 minutes after a reset | Per-user token version (security review recommendation 4) |
 | Emails are plain text and English only | HTML templates and languages when needed |
 
+Follow-up when the owner set up email (16.1a):
+- `app.cli send-test-email --to <address>` sends one message and explains a failure
+  (refused password, refused sender, TLS, unreachable server) without showing secrets.
+- `docs/EMAIL.md`: Google Workspace or Gmail with an app password, Microsoft 365, or the
+  organisation's own server.
+- The installers keep settings added by hand to `deploy/.env` (such as `SMTP_*`) when
+  they run again. Fixed at the same time: `install.sh` refused to upgrade because it
+  treated its own empty CA placeholder as a missing certificate.
+
 ### 16.2 Measuring the AI assistant (AI step 1)
 
 The owner asked how to make the AI agent more accurate and faster. The plan, in order:

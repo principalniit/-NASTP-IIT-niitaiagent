@@ -114,6 +114,13 @@ if ($CaCert -and $CaCert -ne "./no-extra-ca.crt") {
 } else { $CaCert = "./no-extra-ca.crt" }
 $withChromium = if ($NoChromium) { "0" } else { "1" }
 
+# Settings added by hand (for example SMTP_* for email) are kept on upgrade.
+$written = "COMPOSE_FILE|COMPOSE_PATH_SEPARATOR|COMPOSE_PROFILES|PRODUCT_NAME|PUBLIC_BASE_URL|CORS_ORIGINS|WEB_PORT|WEB_BIND|SITE_ADDRESS|ENVIRONMENT|COOKIE_SECURE|JWT_SECRET|INTEGRATIONS_ENCRYPTION_KEYS|DB_PASSWORD|AI_PROVIDER|OLLAMA_DEFAULT_MODEL|WITH_CHROMIUM|CA_CERT_FILE"
+$kept = @()
+if (Test-Path .env) {
+    $kept = @(Get-Content .env | Where-Object { $_ -match '^[A-Za-z_][A-Za-z0-9_]*=' -and $_ -notmatch "^($written)=" })
+}
+
 Say "Writing deploy\.env"
 $content = @"
 # Written by install.ps1. Keep this file private and back it up with the database:
@@ -137,6 +144,9 @@ OLLAMA_DEFAULT_MODEL=$aiModel
 WITH_CHROMIUM=$withChromium
 CA_CERT_FILE=$CaCert
 "@
+if ($kept.Count -gt 0) {
+    $content = $content + "`n`n# Your own settings, kept when the installer runs again.`n" + ($kept -join "`n")
+}
 # UTF-8 without a byte-order mark: Docker Compose reads a BOM as part of the first name.
 [IO.File]::WriteAllText((Join-Path $PSScriptRoot ".env"), $content.Replace("`r`n", "`n") + "`n", (New-Object Text.UTF8Encoding $false))
 

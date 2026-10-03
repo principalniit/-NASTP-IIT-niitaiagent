@@ -128,9 +128,17 @@ COMPOSE_FILE="compose.yaml:$PORTS_FILE"
 [ "$GPU" = yes ] && COMPOSE_FILE="$COMPOSE_FILE:compose.gpu.yaml"
 COMPOSE_PROFILES=""
 [ "$AI" = yes ] && COMPOSE_PROFILES=ai
+[ "$CA_CERT" = ./no-extra-ca.crt ] && CA_CERT=""  # the empty placeholder from a previous run
 if [ -n "$CA_CERT" ]; then
   [ -s "$CA_CERT" ] || die "CA certificate not found: $CA_CERT"
   CA_CERT="$(cd "$(dirname "$CA_CERT")" && pwd)/$(basename "$CA_CERT")"
+fi
+
+# Settings added by hand (for example SMTP_* for email) are kept on upgrade.
+WRITTEN='COMPOSE_FILE|COMPOSE_PROFILES|PRODUCT_NAME|PUBLIC_BASE_URL|CORS_ORIGINS|WEB_PORT|WEB_BIND|SITE_ADDRESS|ENVIRONMENT|COOKIE_SECURE|JWT_SECRET|INTEGRATIONS_ENCRYPTION_KEYS|DB_PASSWORD|AI_PROVIDER|OLLAMA_DEFAULT_MODEL|WITH_CHROMIUM|CA_CERT_FILE'
+KEPT=""
+if [ -f .env ]; then
+  KEPT="$(grep -E '^[A-Za-z_][A-Za-z0-9_]*=' .env | grep -vE "^($WRITTEN)=" || true)"
 fi
 
 say "Writing deploy/.env"
@@ -156,6 +164,9 @@ OLLAMA_DEFAULT_MODEL=$([ "$AI" = yes ] && echo "$MODEL")
 WITH_CHROMIUM=$WITH_CHROMIUM
 CA_CERT_FILE=${CA_CERT:-./no-extra-ca.crt}
 ENV
+if [ -n "$KEPT" ]; then
+  printf '\n# Your own settings, kept when the installer runs again.\n%s\n' "$KEPT" >> .env
+fi
 umask 022
 
 say "Building and starting the containers (the first build takes several minutes)"

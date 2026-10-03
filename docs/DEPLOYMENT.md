@@ -54,7 +54,7 @@ production:
 | `SCHEDULER_ENABLED` | `false` until schedules are wanted | Scheduled crawls run only when this and the project's schedule are both on. |
 | `SEARCH_CONSOLE_DAYS` | `90` | Only matters when an organisation connects Search Console. The worker then needs outbound HTTPS to `oauth2.googleapis.com` and `searchconsole.googleapis.com`. |
 | `PUBLIC_BASE_URL` | the public dashboard address, e.g. `https://seo.niit.edu.pk` | Used in invitation and password reset links. |
-| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM` | your organisation's mail server and a sending account, e.g. `noreply@niit.edu.pk` | Optional. Use the SMTP service of the email you already have; no third-party service is needed. Port 465 uses TLS directly; 587 uses STARTTLS. Without it, invitation links are shared by hand and resets go through `app.cli reset-password`. |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM` | your organisation's mail server and a sending account, e.g. `noreply@niit.edu.pk` | Optional. Use the SMTP service of the email you already have; no third-party service is needed. Port 465 uses TLS directly; 587 uses STARTTLS. Without it, invitation links are shared by hand and resets go through `app.cli reset-password`. Setup and testing: `docs/EMAIL.md`. |
 
 Protect the file: on Linux `chmod 600 backend/.env` and own it by the service user; on
 Windows keep it in a folder only the operator account can read.

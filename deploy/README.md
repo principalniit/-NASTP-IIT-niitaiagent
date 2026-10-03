@@ -87,6 +87,12 @@ Run these from the `deploy` folder:
 | Another administrator command | `docker compose exec api python -m app.cli reset-password --email someone@example.org` |
 | Another AI model | `docker compose exec ollama ollama pull llama3.1:8b`, then set it in the dashboard's organisation settings |
 | Database backup | `docker compose exec -T db pg_dump -U seo -Fc seo > backup.dump` |
+| Test email | `docker compose exec api python -m app.cli send-test-email --to you@example.org` |
+
+## Email
+
+Add the `SMTP_*` lines from `docs/EMAIL.md` to `deploy/.env`, then run
+`docker compose up -d`. Settings you add by hand are kept when the installer runs again.
 
 Back up `deploy/.env` together with the database. Without its
 `INTEGRATIONS_ENCRYPTION_KEYS`, stored credentials (for example a Search Console key)
