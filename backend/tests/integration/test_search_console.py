@@ -381,3 +381,125 @@ async def test_records_from_before_the_connection_do_not_count_as_connected(
         )
     ).json()
     assert state["state"] == "not_connected" and state["properties"] == []
+
+
+async def test_click_opportunities_compare_with_the_sites_own_rate(
+    client: AsyncClient, fake_google: FakeGoogle
+) -> None:
+    from types import SimpleNamespace
+
+    from app.modules.ai.tasks import search_queries_for
+    from app.modules.ai.tools import ToolContext
+    from app.modules.crawler.models import (
+        AnalysisStatus,
+        CrawlJob,
+        CrawlPage,
+        CrawlStatus,
+        FetchStatus,
+    )
+    from app.modules.projects.models import Project
+    from app.modules.seo.models import Category, SeoIssue, Severity
+
+    def row(path: str, clicks: int, impressions: int, position: float) -> dict[str, Any]:
+        return {
+            "keys": [_day(2), f"https://example.org{path}"],
+            "clicks": clicks,
+            "impressions": impressions,
+            "position": position,
+        }
+
+    fake_google.day_rows = [
+        row("/", 100, 1000, 2.0),  # top 3 at 10%
+        row("/fees", 8, 400, 2.5),  # top 3 at 2%: below the band's 108 / 1400
+        row("/admissions", 25, 500, 6.0),  # positions 4-10 at 5%: above the band
+        row("/news", 3, 300, 8.0),  # 1%: below the band's 28 / 850
+        row("/small", 0, 50, 5.0),  # too few impressions to list, but in the band
+        row("/deep", 2, 2000, 25.0),  # not on the first page
+    ]
+    fake_google.query_rows = [
+        {"keys": ["https://example.org/fees", "example fees"], "clicks": 6, "impressions": 300, "position": 2.0},
+        {"keys": ["https://example.org/fees", "example fees 2026"], "clicks": 2, "impressions": 100, "position": 3.0},
+    ]  # fmt: skip
+    owner, org, project = await _org(client)
+    integration = (await _integration(client, owner, org)).json()
+    await client.post(
+        f"/api/v1/integrations/{integration['id']}/search-console/syncs", headers=owner.headers
+    )
+    assert await process_next_search_sync()
+
+    project_id, org_id = uuid.UUID(project["id"]), uuid.UUID(org["id"])
+    async with get_session_factory()() as session:
+        job = CrawlJob(
+            organisation_id=org_id,
+            project_id=project_id,
+            status=CrawlStatus.COMPLETED,
+            config={},
+            analysis_status=AnalysisStatus.COMPLETED,
+        )
+        session.add(job)
+        await session.flush()
+        page = CrawlPage(
+            organisation_id=org_id,
+            crawl_job_id=job.id,
+            url="https://example.org/fees",
+            discovered_via="link",
+            fetch_status=FetchStatus.FETCHED,
+            redirect_chain=[],
+            structured_data={},
+            title="Fees",
+            meta_description="Fee structure.",
+        )
+        session.add(page)
+        now = datetime.now(UTC)
+        for rule in ("onpage.title_length", "onpage.meta_description_length", "onpage.h1_missing"):
+            session.add(
+                SeoIssue(
+                    organisation_id=org_id,
+                    project_id=project_id,
+                    issue_key=f"{rule}:/fees",
+                    rule_id=rule,
+                    scope="page",
+                    category=Category.ON_PAGE,
+                    severity=Severity.MEDIUM,
+                    title=rule,
+                    description="d",
+                    recommendation="r",
+                    evidence={},
+                    affected_url=page.url,
+                    affected_urls=[page.url],
+                    affected_page_count=1,
+                    confidence="high",
+                    effort="low",
+                    priority_score=1.0,
+                    priority_breakdown=[],
+                    first_detected_at=now,
+                    last_detected_at=now,
+                )
+            )
+        await session.commit()
+        page_id = page.id
+
+    perf = (
+        await client.get(
+            f"/api/v1/projects/{project['id']}/search-performance",
+            params={"days": 28},
+            headers=owner.headers,
+        )
+    ).json()
+    found = perf["opportunities"]
+    assert [o["page"] for o in found] == ["https://example.org/fees", "https://example.org/news"]
+    fees, news = found
+    assert fees["band"] == "top_3" and fees["band_ctr"] == round(108 / 1400, 4)
+    assert fees["ctr"] == 0.02 and fees["position"] == 2.5
+    assert fees["page_id"] == str(page_id) and fees["title"] == "Fees"
+    assert fees["metadata_issues"] == 2  # title and description issues, not the H1 one
+    assert news["band"] == "positions_4_10" and news["band_ctr"] == round(28 / 850, 4)
+    assert news["page_id"] is None and news["metadata_issues"] == 0  # not in the crawl
+
+    async with get_session_factory()() as session:
+        p = await session.get(Project, project_id)
+        assert p is not None
+        env = SimpleNamespace(session=session, tools=ToolContext(session, p))
+        # A query with a year is left out: drafts take years and fees from the page only.
+        assert await search_queries_for(env, "https://example.org/fees") == ["example fees"]  # type: ignore[arg-type]
+        assert await search_queries_for(env, "https://example.org/other") == []  # type: ignore[arg-type]

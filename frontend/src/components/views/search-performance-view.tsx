@@ -9,13 +9,14 @@ import { PageHeader } from "@/components/app/page-header";
 import { EmptyState, ErrorState, LoadingState } from "@/components/app/states";
 import { StatTile } from "@/components/app/stat-tile";
 import { ProjectPicker, useProjectChoice } from "@/components/seo/project-picker";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { NativeSelect } from "@/components/ui/native-select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useCurrentOrg } from "@/lib/current-org";
 import { useSearchPerformance } from "@/lib/queries";
-import type { SearchPerformance, SearchRow } from "@/lib/types";
+import type { SearchOpportunity, SearchPerformance, SearchRow } from "@/lib/types";
 import { ctrText, formatDateTime, pathOf, positionText } from "@/lib/utils";
 
 const count = (n: number) => n.toLocaleString("en");
@@ -110,6 +111,77 @@ function RowsTable<T extends SearchRow>({ rows, first, label, render }: { rows: 
   );
 }
 
+const BAND: Record<SearchOpportunity["band"], string> = { top_3: "positions 1 to 3", positions_4_10: "positions 4 to 10" };
+
+/** First-page pages earning fewer clicks than the site's own pages at similar positions. */
+function Opportunities({ rows }: { rows: SearchOpportunity[] }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Click opportunities</CardTitle>
+        <CardDescription>
+          Pages on Google&apos;s first page whose click-through rate is below this site&apos;s own rate for pages at a
+          similar position. A clearer title and description often help. Largest gap first; pages with fewer than 100
+          impressions are left out.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {rows.length ? (
+          <Table aria-label="Click opportunities">
+            <TableHeader>
+              <TableRow>
+                <TableHead>Page</TableHead>
+                <TableHead className="hidden text-right sm:table-cell">Impressions</TableHead>
+                <TableHead className="text-right">CTR</TableHead>
+                <TableHead className="hidden text-right md:table-cell">Site CTR at this position</TableHead>
+                <TableHead className="hidden text-right sm:table-cell">Position</TableHead>
+                <TableHead className="text-right">Next step</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map((r) => (
+                <TableRow key={r.page}>
+                  <TableCell className="max-w-[20rem]">
+                    <span className="block truncate font-medium" title={r.page}>{pathOf(r.page)}</span>
+                    <span className="block truncate text-xs text-muted-foreground" title={r.title ?? undefined}>
+                      {r.page_id ? (r.title ? `Title: ${r.title}` : "No title") : "Not in the latest analysed crawl"}
+                    </span>
+                  </TableCell>
+                  <TableCell className="hidden text-right tabular-nums sm:table-cell">{count(r.impressions)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{ctrText(r.ctr)}</TableCell>
+                  <TableCell className="hidden text-right tabular-nums md:table-cell" title={BAND[r.band]}>
+                    {ctrText(r.band_ctr)}
+                  </TableCell>
+                  <TableCell className="hidden text-right tabular-nums sm:table-cell">{positionText(r.position)}</TableCell>
+                  <TableCell className="text-right">
+                    {r.page_id && r.crawl_id ? (
+                      <span className="inline-flex flex-wrap items-center justify-end gap-2">
+                        {r.metadata_issues ? (
+                          <Badge variant="outline">{r.metadata_issues === 1 ? "1 title or description issue" : `${r.metadata_issues} title or description issues`}</Badge>
+                        ) : null}
+                        <Button asChild size="sm" variant="outline">
+                          <Link href={`/crawls/${r.crawl_id}/pages/${r.page_id}`}>Open page</Link>
+                        </Button>
+                      </span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">Crawl the site to include it</span>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            No first-page page with at least 100 impressions has a click-through rate below the site&apos;s own rate at
+            its position.
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function Performance({ data }: { data: SearchPerformance }) {
   const { current } = useCurrentOrg();
   const t = data.totals!;
@@ -131,6 +203,7 @@ function Performance({ data }: { data: SearchPerformance }) {
         <DailyChart data={data.daily} metric="clicks" label="Clicks" />
         <DailyChart data={data.daily} metric="impressions" label="Impressions" />
       </div>
+      <Opportunities rows={data.opportunities} />
       <div className="grid gap-4 xl:grid-cols-2">
         <Card>
           <CardHeader>

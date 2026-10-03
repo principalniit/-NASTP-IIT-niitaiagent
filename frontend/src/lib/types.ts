@@ -788,6 +788,19 @@ export interface SearchPerformance {
   daily: { day: string; clicks: number; impressions: number }[];
   top_pages: (SearchRow & { page: string })[];
   top_queries: (SearchRow & { query: string })[];
+  opportunities: SearchOpportunity[];
+}
+
+/** A first-page page whose click-through rate is below the site's own rate at similar positions. */
+export interface SearchOpportunity extends SearchRow {
+  page: string;
+  band: "top_3" | "positions_4_10";
+  band_ctr: number;
+  crawl_id: string | null;
+  page_id: string | null;
+  title: string | null;
+  meta_description: string | null;
+  metadata_issues: number;
 }
 
 export interface PageSearchPerformance {

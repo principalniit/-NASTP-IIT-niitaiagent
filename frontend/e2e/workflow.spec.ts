@@ -208,3 +208,35 @@ test("search performance shows no figures until Search Console is connected", as
   const panel = page.getByRole("group", { name: "Search Console connection" });
   await expect(panel.getByText("enable the Search Console API")).toBeVisible();
 });
+
+test("click opportunities link each page to its crawl details", async ({ page }) => {
+  // Google is not contacted in tests: this stands in for imported Search Console figures.
+  const row = { clicks: 8, impressions: 400, ctr: 0.02, position: 2.5 };
+  await page.route("**/search-performance?*", (route) =>
+    route.fulfill({
+      json: {
+        state: "ready",
+        connected: true,
+        properties: ["sc-domain:example.org"],
+        last_synced_at: "2026-10-01T10:00:00Z",
+        start: "2026-09-04",
+        end: "2026-10-01",
+        totals: row,
+        daily: [{ day: "2026-10-01", clicks: 8, impressions: 400 }],
+        top_pages: [{ ...row, page: "http://127.0.0.1/fees" }],
+        top_queries: [],
+        opportunities: [
+          { ...row, page: "http://127.0.0.1/fees", band: "top_3", band_ctr: 0.0771, crawl_id: "c1", page_id: "p1", title: "Fees", meta_description: null, metadata_issues: 2 },
+          { ...row, page: "http://127.0.0.1/news", band: "positions_4_10", band_ctr: 0.035, crawl_id: null, page_id: null, title: null, meta_description: null, metadata_issues: 0 },
+        ],
+      },
+    }),
+  );
+  await signIn(page, ADMIN_EMAIL);
+  await nav(page, "Search Performance").click();
+  const table = page.getByRole("table", { name: "Click opportunities" });
+  await expect(table.getByText("Title: Fees")).toBeVisible();
+  await expect(table.getByText("2 title or description issues")).toBeVisible();
+  await expect(table.getByRole("link", { name: "Open page" })).toHaveAttribute("href", "/crawls/c1/pages/p1");
+  await expect(table.getByText("Not in the latest analysed crawl")).toBeVisible();
+});

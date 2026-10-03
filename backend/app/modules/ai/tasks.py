@@ -40,6 +40,7 @@ from app.modules.drafts.models import DraftField, DraftSource
 from app.modules.drafts.service import new_draft
 from app.modules.organisations.schemas import OrganisationSettings
 from app.modules.projects.schemas import ProjectSettingsData
+from app.modules.search_data.service import page_performance
 from app.modules.users.models import User
 
 TITLE_RULES = {
@@ -218,16 +219,25 @@ async def plan_metadata(env: TaskEnv) -> TaskPlan:
     page["open_issues"] = [
         i for i in page["open_issues"] if i["rule_id"] in TITLE_RULES | DESCRIPTION_RULES
     ]
+    queries = await search_queries_for(env, page["url"])
+    task = (
+        f"Draft a page title of {t.title_min_chars} to {t.title_max_chars} characters and a meta "
+        f"description of {t.description_min_chars} to {t.description_max_chars} characters for "
+        "this page. Describe only what the page text and headings say. Do not add facts, "
+        "figures, dates or claims that are not in the page. In facts_used, quote the phrases "
+        "from the page you relied on."
+    )
+    if queries:
+        task += (
+            " search_queries lists what people typed into Google when this page appeared. "
+            "Where the page text covers a query, prefer its wording, so searchers recognise the "
+            "page. Never add a topic the page does not cover."
+        )
     return TaskPlan(
-        task=(
-            f"Draft a page title of {t.title_min_chars} to {t.title_max_chars} characters and a meta "
-            f"description of {t.description_min_chars} to {t.description_max_chars} characters for "
-            "this page. Describe only what the page text and headings say. Do not add facts, "
-            "figures, dates or claims that are not in the page. In facts_used, quote the phrases "
-            "from the page you relied on."
-        ),
+        task=task,
         evidence={
             "page": page,
+            **({"search_queries": queries} if queries else {}),
             "limits": t.model_dump(
                 include={
                     "title_min_chars",
@@ -240,6 +250,18 @@ async def plan_metadata(env: TaskEnv) -> TaskPlan:
         schema=MetadataDraftOutput,
         crawl_id=await _latest_crawl_id(env),
     )
+
+
+async def search_queries_for(env: TaskEnv, url: str) -> list[str]:
+    """Google queries the page appeared for, from imported Search Console data.
+
+    Queries with digits are left out: they often carry years, fees or figures, and a
+    draft must take those from the page itself, never from what people searched for.
+    """
+    data = await page_performance(env.session, env.tools.project, url, 90)
+    if data["state"] != "ready":
+        return []
+    return [q["query"] for q in data["top_queries"] if not any(c.isdigit() for c in q["query"])]
 
 
 def metadata_warnings(env: TaskEnv, output: MetadataDraftOutput) -> list[str]:

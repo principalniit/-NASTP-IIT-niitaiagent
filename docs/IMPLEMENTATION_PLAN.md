@@ -783,7 +783,7 @@ Two weaknesses remained, both fixed in the same step:
   for that to be said first. The test's `admits_missing_data` check now requires the
   admission within the opening of the answer.
 
-`PROMPT_VERSION` is now 2026-10.4.
+`PROMPT_VERSION` was then 2026-10.4.
 
 ### 16.4 Feedback on AI results and organisation test sets
 
@@ -841,9 +841,23 @@ Known limitations:
 
 | Limitation | Plan |
 |------------|------|
-| Not run against a live Google account in development; tests use a fake that checks the signed sign-in request | First live import on the owner's laptop |
+| Tests use a fake Google that checks the signed sign-in request | Verified live on the owner's laptop on 2 October 2026: niit.edu.pk domain property, 90 days imported |
 | Google Analytics (visitors) is still a record only | Same service-account pattern if the owner wants it |
 | No per-country or per-device breakdown yet | Add dimensions when needed |
+
+Follow-up after the first live import (16.5a):
+- **Click opportunities** on Search Performance: first-page pages with at least 100
+  impressions whose click-through rate is below the site's own rate for pages at a
+  similar position (top 3, or 4 to 10). Each row links to the page in the latest analysed
+  crawl, with its current title and open title or description issues.
+- **Title and description drafts** get the page's Google queries as evidence, without
+  queries containing digits (years, fees and figures must come from the page).
+  `PROMPT_VERSION` is now 2026-10.5.
+- **AI questions** about click-through get the top five opportunities as evidence.
+- `docs/SEARCH_CONSOLE.md` gained a troubleshooting table from the first live setup.
+
+Assumption A27: the benchmark is the site's own click-through rate at similar positions.
+Published industry curves vary widely and would be figures we did not measure.
 
 ### 16.6 JavaScript rendering behind the SSRF guard
 

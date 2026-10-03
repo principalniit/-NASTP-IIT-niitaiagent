@@ -12,7 +12,7 @@ from datetime import UTC, date, datetime, timedelta
 from typing import Any
 from urllib.parse import urlsplit
 
-from sqlalchemy import delete, func, insert, select
+from sqlalchemy import case, delete, func, insert, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core import crypto
@@ -21,6 +21,8 @@ from app.core.database import get_session_factory
 from app.core.errors import AppError, ConflictError
 from app.core.request_context import RequestMeta
 from app.modules.audit_logs import service as audit
+from app.modules.crawler.models import CrawlPage
+from app.modules.crawler.urls import normalise_url
 from app.modules.integrations.models import Integration
 from app.modules.organisations.dependencies import IntegrationAccess
 from app.modules.projects.models import Project
@@ -31,6 +33,8 @@ from app.modules.search_data.models import (
     SearchSync,
     SyncStatus,
 )
+from app.modules.seo.models import ResolutionStatus, SeoIssue
+from app.modules.seo.service import latest_analysed_crawl
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +43,14 @@ MAX_PAGE_DAY_ROWS = 200_000
 MAX_QUERY_ROWS = 50_000
 INSERT_CHUNK = 5_000
 AUTO_SYNC_EVERY = timedelta(hours=20)
+
+# Click opportunities: pages on Google's first page whose click-through rate is below the
+# site's own rate for pages at a similar position. Positions are compared as shown,
+# rounded to one decimal, so a page shown at 3.0 counts as a top-3 page.
+OPPORTUNITY_MIN_IMPRESSIONS = 100
+OPPORTUNITY_LIMIT = 10
+TOP_3_BELOW = 3.05
+FIRST_PAGE_BELOW = 10.05
 
 
 def _require_search_console(integration: Integration) -> None:
@@ -371,7 +383,118 @@ async def performance(session: AsyncSession, project: Project, days: int) -> dic
             for page, c, i, w in pages
         ],
         "top_queries": await _top_queries(session, project, hosts, None),
+        "opportunities": await _opportunities(session, project, in_window),
     }
+
+
+async def _opportunities(
+    session: AsyncSession, project: Project, in_window: tuple[Any, ...]
+) -> list[dict[str, Any]]:
+    """First-page pages that earn fewer clicks than the site's own pages at similar positions.
+
+    The benchmark is this site's click-through rate for its pages in the same position band
+    (top 3, or 4 to 10), not an industry figure. Ordered by the clicks the page would have
+    had at that rate, a measure of size rather than a forecast.
+    """
+    per_page = (
+        select(
+            SearchPageDay.page.label("page"),
+            func.sum(SearchPageDay.clicks).label("clicks"),
+            func.sum(SearchPageDay.impressions).label("impressions"),
+            (
+                func.sum(SearchPageDay.position * SearchPageDay.impressions)
+                / func.sum(SearchPageDay.impressions)
+            ).label("position"),
+        )
+        .where(*in_window)
+        .group_by(SearchPageDay.page)
+        .having(func.sum(SearchPageDay.impressions) > 0)
+        .subquery()
+    )
+    band = case((per_page.c.position < TOP_3_BELOW, "top_3"), else_="positions_4_10")
+    bands = {
+        name: (int(c or 0), int(i or 0))
+        for name, c, i in (
+            await session.execute(
+                select(band, func.sum(per_page.c.clicks), func.sum(per_page.c.impressions))
+                .where(per_page.c.position < FIRST_PAGE_BELOW)
+                .group_by(band)
+            )
+        ).all()
+    }
+    candidates = (
+        await session.execute(
+            select(per_page, band.label("band")).where(
+                per_page.c.position < FIRST_PAGE_BELOW,
+                per_page.c.impressions >= OPPORTUNITY_MIN_IMPRESSIONS,
+            )
+        )
+    ).all()
+    found = []
+    for page, c, i, position, name in candidates:
+        clicks, impressions = int(c or 0), int(i or 0)
+        band_ctr = _ctr(*bands[name])
+        ctr = _ctr(clicks, impressions)
+        if band_ctr is None or ctr is None or ctr >= band_ctr:
+            continue
+        found.append(
+            {
+                "page": page,
+                "clicks": clicks,
+                "impressions": impressions,
+                "ctr": ctr,
+                "position": _weighted_position(position * impressions, impressions),
+                "band": name,
+                "band_ctr": band_ctr,
+                "_gap": impressions * band_ctr - clicks,
+            }
+        )
+    found.sort(key=lambda r: r["_gap"], reverse=True)
+    rows = found[:OPPORTUNITY_LIMIT]
+    for row in rows:
+        del row["_gap"]
+    await _attach_crawl_pages(session, project, rows)
+    return rows
+
+
+async def _attach_crawl_pages(
+    session: AsyncSession, project: Project, rows: list[dict[str, Any]]
+) -> None:
+    """Add the page's current title, description and open metadata issues from the crawl."""
+    crawl = await latest_analysed_crawl(session, project.id, project.organisation_id)
+    urls = {r["page"]: normalise_url(r["page"]) for r in rows}
+    pages: dict[str, CrawlPage] = {}
+    if crawl is not None and urls:
+        found = await session.scalars(
+            select(CrawlPage).where(
+                CrawlPage.crawl_job_id == crawl.id,
+                CrawlPage.organisation_id == project.organisation_id,
+                CrawlPage.url.in_([u for u in urls.values() if u]),
+            )
+        )
+        pages = {p.url: p for p in found}
+    for row in rows:
+        page = pages.get(urls[row["page"]] or "")
+        row["crawl_id"] = crawl.id if page is not None and crawl is not None else None
+        row["page_id"] = page.id if page is not None else None
+        row["title"] = page.title if page is not None else None
+        row["meta_description"] = page.meta_description if page is not None else None
+        row["metadata_issues"] = (
+            await session.scalar(
+                select(func.count(SeoIssue.id)).where(
+                    SeoIssue.organisation_id == project.organisation_id,
+                    SeoIssue.project_id == project.id,
+                    SeoIssue.resolution_status == ResolutionStatus.OPEN,
+                    SeoIssue.affected_urls.contains([page.url]),
+                    or_(
+                        SeoIssue.rule_id.startswith("onpage.title_"),
+                        SeoIssue.rule_id.startswith("onpage.meta_description_"),
+                    ),
+                )
+            )
+            if page is not None
+            else 0
+        )
 
 
 async def _top_queries(
@@ -461,6 +584,17 @@ async def ai_evidence(session: AsyncSession, project: Project) -> dict[str, Any]
         ctr = row.get("ctr")
         return {**row, "ctr_percent": round(ctr * 100, 1) if ctr is not None else None}
 
+    opportunities = [
+        {
+            "page": r["page"],
+            "clicks": r["clicks"],
+            "impressions": r["impressions"],
+            "ctr_percent": round(r["ctr"] * 100, 1),
+            "position": r["position"],
+            "site_ctr_percent_at_similar_positions": round(r["band_ctr"] * 100, 1),
+        }
+        for r in data["opportunities"][:5]
+    ]
     data["totals"] = with_percent(data["totals"])
     data["top_pages"] = [with_percent(r) for r in data["top_pages"]]
     data["top_queries"] = [with_percent(r) for r in data["top_queries"]]
@@ -472,4 +606,9 @@ async def ai_evidence(session: AsyncSession, project: Project) -> dict[str, Any]
         "totals": data["totals"],
         "top_pages": data["top_pages"][:10],
         "top_queries": data["top_queries"][:10],
+        "low_click_through_pages": {
+            "meaning": "First-page pages whose click-through rate is below this site's own rate "
+            "for pages at a similar position. Better titles and descriptions may help.",
+            "pages": opportunities,
+        },
     }

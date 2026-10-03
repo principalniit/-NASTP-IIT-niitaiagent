@@ -56,6 +56,18 @@ class QueryRow(BaseModel):
     position: float | None
 
 
+class OpportunityRow(PageRow):
+    # top_3 or positions_4_10, and this site's own click-through rate for that band.
+    band: Literal["top_3", "positions_4_10"]
+    band_ctr: float
+    # The page in the latest analysed crawl, when it is there.
+    crawl_id: uuid.UUID | None
+    page_id: uuid.UUID | None
+    title: str | None
+    meta_description: str | None
+    metadata_issues: int
+
+
 class PerformanceOut(BaseModel):
     # not_connected: no Search Console key saved; no_data: connected, but nothing imported
     # for this project's host yet; ready: figures below are Google's.
@@ -69,6 +81,7 @@ class PerformanceOut(BaseModel):
     daily: list[DayRow] = []
     top_pages: list[PageRow] = []
     top_queries: list[QueryRow] = []
+    opportunities: list[OpportunityRow] = []
 
 
 class PagePerformanceOut(BaseModel):

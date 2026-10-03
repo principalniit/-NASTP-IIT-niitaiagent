@@ -34,6 +34,30 @@ in your own Google Cloud project. Nothing is shown until real data has been impo
 8. **Look at the figures** in **Search Performance**, and on each page's detail. The AI
    assistant uses them when asked about clicks, impressions or positions.
 
+## Click opportunities
+
+Search Performance lists up to ten **click opportunities**: pages on Google's first page
+(average position 10 or better) with at least 100 impressions in the period, whose
+click-through rate is below this site's own rate for pages at a similar position (top 3,
+or 4 to 10). The comparison uses only this site's imported figures, never an industry
+benchmark. The largest gap comes first.
+
+Each row shows the page's current title from the latest analysed crawl and its open
+title or description issues. *Open page* leads to the page's details, where *Draft title
+and description* asks the AI for a draft. The draft is given the Google queries the page
+appeared for, so it can use searchers' wording where the page text covers it. Queries
+containing digits are left out, so years, fees and figures in a draft come from the page
+only. Every draft goes through review and approval; nothing is published automatically.
+
+## Troubleshooting
+
+| What you see | Cause and fix |
+|--------------|---------------|
+| Search Console says the email was not found when adding the user | Copy the address from the *Email* column of the service account list (not its name or ID). A new account can take a few minutes to be recognised; try again. |
+| "The stored secret cannot be decrypted with the configured keys" | The credential was saved under another `INTEGRATIONS_ENCRYPTION_KEYS` value. Keep a single key line in `.env`, restart the API and the worker, then delete the integration and add it again with the key file. |
+| *Test connection* reports `siteOwner` or `siteFullUser` | It works, but the account has more access than it needs. Change it to **Restricted** in Search Console; the test then reports `siteRestrictedUser`. |
+| The import stays at *Waiting for the worker* | The worker is not running. Start it (`uv run python -m app.worker`). |
+
 ## Notes
 
 - Google reports data with a delay of two to three days, and withholds rare queries for
