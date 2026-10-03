@@ -38,3 +38,26 @@ async def test_private_addresses_are_refused(monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setattr(get_settings(), "crawler_allowed_private_networks", "")
     with pytest.raises(SystemExit, match="Only public websites"):
         await crawl_check("http://127.0.0.1/")
+
+
+async def test_render_finds_links_built_by_scripts(
+    site: FixtureSite, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import os
+
+    path = os.environ.get("TEST_PDF_BROWSER_PATH", "")
+    if not path:
+        pytest.skip("No Chromium here (set TEST_PDF_BROWSER_PATH)")
+    monkeypatch.setattr(get_settings(), "crawler_browser_path", path)
+    site.page("/", "App", "<div id='app'></div><script src='/app.js'></script>")
+    site.routes["/app.js"] = Response(
+        200,
+        b"for (const p of ['/a', '/b', '/c']) { const l = document.createElement('a');"
+        b" l.href = p; l.textContent = p; document.getElementById('app').appendChild(l); }",
+        {"Content-Type": "application/javascript"},
+    )
+    await crawl_check(f"{site.base}/", render=True)
+    out = capsys.readouterr().out
+    assert "4. Links to this site in the HTML: 0" in out
+    assert "Links to this site after rendering: 3" in out
+    assert "Result: a crawl can start here" in out

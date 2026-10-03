@@ -899,6 +899,9 @@ Second round, after the owner still saw short crawls on other sites:
   connections, and invalid responses.
 - **`app.cli crawl-check --url <site>`** runs the start of a crawl (address, robots.txt,
   start page, links) with the crawler's own client and says where it would stop.
+  `--render` also runs the page's scripts as a rendering crawl would, counts the links
+  they create, and names hosts whose scripts were refused as outside the crawl scope.
+  The first use found ilo.niit.edu.pk serves a page with no links in its HTML.
 
 ### 16.6 JavaScript rendering behind the SSRF guard
 

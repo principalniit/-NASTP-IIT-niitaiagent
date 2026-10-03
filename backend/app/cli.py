@@ -5,7 +5,7 @@
     uv run python -m app.cli reset-password --email you@example.org
     uv run python -m app.cli rotate-secrets
     uv run python -m app.cli send-test-email --to you@example.org
-    uv run python -m app.cli crawl-check --url example.org
+    uv run python -m app.cli crawl-check --url example.org [--render]
     uv run python -m app.cli add-projects --org niit --owner-email you@example.org --file sites.csv
     uv run python -m app.cli ai-report --org niit --days 30
     uv run python -m app.cli ai-eval --org niit --project "NIIT website" [--model qwen2.5:7b]
@@ -23,6 +23,7 @@ import sys
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -37,6 +38,10 @@ from app.modules.organisations.schemas import OrganisationSettings
 from app.modules.projects.models import Project, ProjectSettings
 from app.modules.projects.schemas import ContentType, ProjectSettingsData
 from app.modules.users.service import build_user, get_by_email
+
+if TYPE_CHECKING:
+    from app.modules.crawler.fetcher import Fetcher, FetchResult
+    from app.modules.crawler.robots import RobotsPolicy
 
 # Facts supplied in the project brief only. Everything else is entered by authorised users.
 NIIT_ORG = {
@@ -215,7 +220,7 @@ async def send_test_email(to: str) -> None:
     print(f"Sent to {to}. If it does not arrive within a few minutes, check the spam folder.")
 
 
-async def crawl_check(url: str) -> None:
+async def crawl_check(url: str, render: bool = False) -> None:
     """Fetch a site's robots.txt and start page the way a crawl does, and report each step.
 
     Uses the crawler's own guarded client, so the result matches what a crawl would see.
@@ -314,7 +319,17 @@ async def crawl_check(url: str) -> None:
         print(f"4. Links to this site in the HTML: {len(internal)}")
         for link in internal[:5]:
             print(f"   {link}")
-        if len(internal) < 3:
+        if render:
+            rendered = await _render_check(page, root, hosts, robots, fetcher)
+            if rendered is None:
+                return
+            internal = rendered
+        if len(internal) < 3 and render:
+            print(
+                "Result: very few links even with JavaScript rendering. If scripts from "
+                "other hosts were refused above, the page cannot be built without them."
+            )
+        elif len(internal) < 3:
             print(
                 "Result: very few links. If the site builds its menus with JavaScript, turn on "
                 "JavaScript rendering in the project's crawl settings."
@@ -323,6 +338,66 @@ async def crawl_check(url: str) -> None:
             print("Result: a crawl can start here and follow these links.")
     finally:
         await fetcher.aclose()
+
+
+async def _render_check(
+    page: "FetchResult", root: str, hosts: set[str], robots: "RobotsPolicy", fetcher: "Fetcher"
+) -> list[str] | None:
+    """Render the start page as a crawl with JavaScript rendering would, and count links."""
+    from app.core.config import get_settings
+    from app.modules.crawler.engine import SUBRESOURCE_MAX_BYTES
+    from app.modules.crawler.parser import parse_html
+    from app.modules.crawler.renderer import Renderer, RendererUnavailableError, SubResponse
+    from app.modules.crawler.urls import host_of, normalise_url, path_with_query
+
+    settings = get_settings()
+    agent = fetcher.user_agent
+    refused_hosts: dict[str, int] = {}
+
+    async def sub_fetch(url: str, resource_type: str) -> SubResponse | None:
+        target = normalise_url(url)
+        if target is None:
+            return None
+        if host_of(target) not in hosts:
+            refused_hosts[host_of(target)] = refused_hosts.get(host_of(target), 0) + 1
+            return None
+        if not robots.can_fetch(agent, path_with_query(target)):
+            return None
+        result = await fetcher.fetch(
+            target,
+            in_scope=lambda u: host_of(u) in hosts,
+            read_body=lambda _: True,
+            max_bytes=SUBRESOURCE_MAX_BYTES,
+        )
+        if result.outcome != "ok" or result.status_code is None:
+            return None
+        kind = result.headers.get("content-type", "application/octet-stream")
+        return SubResponse(result.status_code, kind, result.body or b"")
+
+    renderer = Renderer(settings.crawler_browser_path or settings.report_pdf_browser_path, agent)
+    try:
+        await renderer.start()
+    except RendererUnavailableError as exc:
+        print(f"5. JavaScript rendering is not available: {exc}")
+        return None
+    try:
+        rendered = await renderer.render(
+            page.final_url or root, page.body or b"", page.content_type, sub_fetch
+        )
+    finally:
+        await renderer.close()
+    print(f"5. With JavaScript: {rendered.fetched} resources loaded from this site")
+    for other, count in sorted(refused_hosts.items(), key=lambda kv: -kv[1])[:5]:
+        print(f"   refused {count} from {other} (outside the crawl scope)")
+    if rendered.html is None:
+        print(f"   Not rendered: {rendered.error}")
+        return []
+    parsed = parse_html(rendered.html, page.final_url or root)
+    internal = sorted({link.url for link in parsed.links if host_of(link.url) in hosts})
+    print(f"   Links to this site after rendering: {len(internal)}")
+    for link in internal[:5]:
+        print(f"   {link}")
+    return internal
 
 
 async def rotate_secrets() -> None:
@@ -573,6 +648,9 @@ def main() -> None:
     sub.add_parser("rotate-secrets", help="Re-encrypt integration credentials with the newest key")
     p_check = sub.add_parser("crawl-check", help="Check why a site might not crawl")
     p_check.add_argument("--url", required=True, help="Site address, for example example.org")
+    p_check.add_argument(
+        "--render", action="store_true", help="Also run the page's JavaScript, as a crawl can"
+    )
     p_mail = sub.add_parser("send-test-email", help="Check the SMTP settings by sending one email")
     p_mail.add_argument("--to", required=True, help="Address to send the test to")
     p_add = sub.add_parser("add-projects", help="Create projects from a 'Name, address' list")
@@ -605,7 +683,7 @@ def main() -> None:
             elif args.command == "rotate-secrets":
                 await rotate_secrets()
             elif args.command == "crawl-check":
-                await crawl_check(args.url)
+                await crawl_check(args.url, args.render)
             elif args.command == "send-test-email":
                 await send_test_email(args.to)
             elif args.command == "add-projects":
