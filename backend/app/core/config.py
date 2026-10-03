@@ -71,7 +71,7 @@ class Settings(BaseSettings):
     # Platform switch: "none" disables AI for every organisation regardless of their
     # settings. The Ollama address is operator-controlled and never set by tenants.
     ai_provider: Literal["none", "ollama"] = "none"
-    ollama_base_url: str = "http://localhost:11434"
+    ollama_base_url: str = "http://127.0.0.1:11434"
     ollama_default_model: str = ""
     ai_timeout_seconds: int = 180
     # Tokens the model reads per request. Set explicitly because some Ollama versions

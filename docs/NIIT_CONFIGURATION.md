@@ -115,7 +115,7 @@ How this works since Phase 4:
 | Setting | Where | Recommended value |
 |---------|-------|-------------------|
 | Platform AI switch | Server `.env`: `AI_PROVIDER` | `ollama` once Ollama is installed; `none` otherwise |
-| Ollama address | Server `.env`: `OLLAMA_BASE_URL` | `http://localhost:11434` (only operators can change it) |
+| Ollama address | Server `.env`: `OLLAMA_BASE_URL` | `http://127.0.0.1:11434` (only operators can change it) |
 | Default model | Server `.env`: `OLLAMA_DEFAULT_MODEL` | A model the server can run, for example `llama3.1` (8B) on a machine with 16 GB RAM |
 | Organisation AI | Settings, AI provider | Off until the owner has checked the output quality on NIIT pages |
 | Brand tone and approved terminology | Settings | Enter NIIT's preferred names (for example the official programme names) so drafts use them and reviewers see warnings when they do not |

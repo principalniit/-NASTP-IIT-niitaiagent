@@ -188,7 +188,7 @@ Backend variables live in `backend/.env` (template: `backend/.env.example`).
 | `WORKER_POLL_SECONDS` | `2.0` | How often an idle worker checks for queued crawls |
 | `WORKER_STALE_AFTER_SECONDS` | `300` | Running crawls without a heartbeat for this long are marked failed |
 | `AI_PROVIDER` | `none` | `none` or `ollama` |
-| `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama address. Operator-only; organisations cannot change it. |
+| `OLLAMA_BASE_URL` | `http://127.0.0.1:11434` | Ollama address. Operator-only; organisations cannot change it. |
 | `OLLAMA_DEFAULT_MODEL` | empty | Model used when an organisation does not name one, for example `llama3.1:8b` |
 | `AI_TIMEOUT_SECONDS` | `180` | Longest wait for one model reply. Use `600` on a PC without a GPU |
 | `REPORT_PDF_BROWSER_PATH` | empty | Chromium executable for PDF reports. Empty uses the browser installed by `uv run playwright install chromium` |
