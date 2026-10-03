@@ -903,6 +903,21 @@ Second round, after the owner still saw short crawls on other sites:
   they create, and names hosts whose scripts were refused as outside the crawl scope.
   The first use found ilo.niit.edu.pk serves a page with no links in its HTML.
 
+Third round, from `crawl-check --render` on ilo.niit.edu.pk ("the page's scripts
+navigated away from it"):
+- **Single-page sites render.** The renderer dropped any page whose address changed
+  after its scripts ran. Single-page sites change it without loading a new page (the
+  History API, or a `#/home` fragment), so their rendering was always thrown away. Only
+  an attempt to load a different document now drops the result, and the note names the
+  page it tried to open. Links resolve against the address the scripts left, as in a
+  browser.
+- **Pages addressed by `#/…` are explained.** Search engines treat everything after `#`
+  as one address, so such a site is a single page to Google. The crawl note says so and
+  what the developer should change; `crawl-check --render` reports it too.
+- **A sitemap address that returns a web page** (single-page sites answer every address
+  with the app) is reported as such, not as an XML syntax error.
+- Render failures in the crawl notes give the first reason instead of always "in time".
+
 ### 16.6 JavaScript rendering behind the SSRF guard
 
 Delivered (`crawler/renderer.py`, `CrawlEngine._sub_fetch`, migration 0013):

@@ -27,7 +27,12 @@ from app.modules.crawler.models import (
     CrawlStatus,
     FetchStatus,
 )
-from app.modules.crawler.parser import ParsedPage, parse_html, robots_directives
+from app.modules.crawler.parser import (
+    ParsedPage,
+    hash_route_links,
+    parse_html,
+    robots_directives,
+)
 from app.modules.crawler.renderer import (
     Renderer,
     RendererUnavailableError,
@@ -116,15 +121,26 @@ class CrawlEngine:
         self.limit_reached = False
         self.renderer: Renderer | None = None
         self.render_failures = 0
+        self.render_failure_reason: str | None = None
         self._script_cache: dict[str, SubResponse] = {}
         self._script_cache_bytes = 0
         # Why the crawl could not get past its start page, when it could not.
         self.start_problem: str | None = None
         self.start_links: int | None = None
+        self.start_hash_links = 0
 
     # ------------------------------------------------------------------ helpers
 
     def _few_links_warning(self, count: int) -> str:
+        if self.start_hash_links:
+            hashed = self.start_hash_links
+            return (
+                f"The start page links to its other pages with #-addresses ({hashed} links "
+                "such as #/about). Search engines treat everything after # as the same address, "
+                "so to Google this site is a single page. Ask its developer to give each page a "
+                "real address (History API routing) and to serve its content without "
+                "JavaScript (server-side rendering or prerendering)."
+            )
         found = "no links" if count == 0 else f"only {count} link{'s' if count > 1 else ''}"
         if self.config.render_javascript:
             return (
@@ -285,6 +301,14 @@ class CrawlEngine:
                     error=result.error or f"HTTP {result.status_code}",
                 )
                 continue
+            if result.is_html:
+                # Single-page sites often answer every address, sitemap.xml included, with
+                # the app's own page. Search engines get no sitemap from it either.
+                entry["error"] = (
+                    "The sitemap address returns a web page, not a sitemap. Search engines "
+                    "cannot read it either; the site should serve a real XML sitemap here."
+                )
+                continue
             try:
                 content = parse_sitemap(result.body or b"")
             except SitemapError as exc:
@@ -385,6 +409,9 @@ class CrawlEngine:
                     extracted.append((old.target_url, old.nofollow))
         elif result.status_code and 200 <= result.status_code < 300 and result.is_html:
             body = result.body or b""
+            # Links resolve against the address the page's scripts left it at, as in a
+            # browser (a single-page site may move / to /home without loading a page).
+            base = result.final_url or item.url
             if self.renderer is not None:
                 rendered = await self.renderer.render(
                     result.final_url or item.url, body, result.content_type, self._sub_fetch
@@ -392,15 +419,21 @@ class CrawlEngine:
                 if rendered.html is not None:
                     body = rendered.html.encode()
                     page.rendered_with_js = True
+                    base = rendered.final_url or base
                 else:
                     self.render_failures += 1
-            parsed = parse_html(body, result.final_url or item.url)
+                    self.render_failure_reason = self.render_failure_reason or rendered.error
+            parsed = parse_html(body, base)
             self._apply_parsed(page, parsed, result)
             for link in parsed.links:
                 links.append(self._link(page, link.url, link.anchor_text, link.nofollow))
                 extracted.append((link.url, link.nofollow))
             if item.via == "root":
-                self.start_links = page.internal_links_count
+                # Other pages it links to: #-links of a single-page site all resolve to
+                # this page itself, so they do not count.
+                targets = {link.url for link in parsed.links if self.in_scope(link.url)}
+                self.start_links = len(targets - {item.url, base})
+                self.start_hash_links = hash_route_links(body)
         elif result.status_code and 200 <= result.status_code < 300:
             page.fetch_status = FetchStatus.SKIPPED_CONTENT_TYPE
             if item.via == "root":
@@ -602,8 +635,8 @@ class CrawlEngine:
             await self.fetcher.aclose()
         if self.render_failures:
             self.warnings.append(
-                f"{self.render_failures} page(s) could not be rendered with JavaScript in time "
-                "and were analysed as served."
+                f"{self.render_failures} page(s) could not be rendered with JavaScript and were "
+                f"analysed as served. First reason: {self.render_failure_reason or 'unknown'}."
             )
         if self.stop_reason == "internal_error":
             raise RuntimeError("Crawl results could not be stored")

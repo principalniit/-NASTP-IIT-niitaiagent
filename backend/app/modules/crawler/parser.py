@@ -23,6 +23,15 @@ MAX_TEXT_CHARS = 50_000
 NON_CONTENT_TAGS = ["script", "style", "noscript", "template", "svg", "iframe"]
 _WS = re.compile(r"\s+")
 _WORD = re.compile(r"\w+", re.UNICODE)
+# Links such as href="#/about" or "#!/about": pages of a single-page site that exist only
+# after the #, which search engines treat as one address.
+_HASH_ROUTE = re.compile(r"""href\s*=\s*["']#!?/[^"'\s]""", re.IGNORECASE)
+
+
+def hash_route_links(html: bytes | str) -> int:
+    """How many links point to #/ or #!/ addresses."""
+    text = html.decode("utf-8", errors="replace") if isinstance(html, bytes) else html
+    return len(_HASH_ROUTE.findall(text))
 
 
 def _clean(text: str | None, limit: int = MAX_TEXT) -> str:

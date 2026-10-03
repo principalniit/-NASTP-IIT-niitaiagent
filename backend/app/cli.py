@@ -314,7 +314,8 @@ async def crawl_check(url: str, render: bool = False) -> None:
         if not page.is_html or page.body is None:
             sys.exit("Stopped: the start page is not HTML, so it has no links to follow.")
         parsed = parse_html(page.body, page.final_url or root)
-        internal = sorted({link.url for link in parsed.links if host_of(link.url) in hosts})
+        own = {root, page.final_url}
+        internal = sorted({link.url for link in parsed.links if host_of(link.url) in hosts} - own)
         print(f"   Title: {parsed.title or '(none)'}")
         print(f"4. Links to this site in the HTML: {len(internal)}")
         for link in internal[:5]:
@@ -346,7 +347,7 @@ async def _render_check(
     """Render the start page as a crawl with JavaScript rendering would, and count links."""
     from app.core.config import get_settings
     from app.modules.crawler.engine import SUBRESOURCE_MAX_BYTES
-    from app.modules.crawler.parser import parse_html
+    from app.modules.crawler.parser import hash_route_links, parse_html
     from app.modules.crawler.renderer import Renderer, RendererUnavailableError, SubResponse
     from app.modules.crawler.urls import host_of, normalise_url, path_with_query
 
@@ -392,9 +393,19 @@ async def _render_check(
     if rendered.html is None:
         print(f"   Not rendered: {rendered.error}")
         return []
-    parsed = parse_html(rendered.html, page.final_url or root)
-    internal = sorted({link.url for link in parsed.links if host_of(link.url) in hosts})
+    if rendered.final_url and rendered.final_url != (page.final_url or root):
+        print(f"   The scripts changed the address to {rendered.final_url}")
+    base = rendered.final_url or page.final_url or root
+    parsed = parse_html(rendered.html, base)
+    own = {root, page.final_url, normalise_url(base)}
+    internal = sorted({link.url for link in parsed.links if host_of(link.url) in hosts} - own)
     print(f"   Links to this site after rendering: {len(internal)}")
+    hashed = hash_route_links(rendered.html)
+    if hashed:
+        print(
+            f"   {hashed} links use #-addresses (such as #/about). Search engines treat "
+            "everything after # as one address, so to Google this site is a single page."
+        )
     for link in internal[:5]:
         print(f"   {link}")
     return internal

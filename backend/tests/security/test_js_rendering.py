@@ -131,3 +131,58 @@ async def test_a_crawl_continues_when_no_browser_is_available(
         assert any(
             "JavaScript rendering was requested but is not available" in w for w in job.warnings
         )
+
+
+def _single_page_site(site: FixtureSite, script: str) -> None:
+    site.page("/", "App", "<div id='app'></div><script src='/spa.js'></script>")
+    site.routes["/spa.js"] = Response(
+        200, script.encode(), {"Content-Type": "application/javascript"}
+    )
+    for path in ("/home", "/about", "/contact"):
+        site.page(path, path, "<h1>Page</h1>")
+
+
+async def test_a_single_page_site_that_changes_its_address_is_rendered(
+    client: AsyncClient, site: FixtureSite, browser: str
+) -> None:
+    # Single-page sites move / to /home with the History API, without loading a page.
+    _single_page_site(
+        site,
+        "history.replaceState({}, '', '/home');"
+        "document.getElementById('app').innerHTML ="
+        '  \'<a href="about">About</a><a href="/contact">Contact</a>\';',
+    )
+    pages = await _crawl(client, site, render=True)
+    assert pages["/"].rendered_with_js
+    # The relative link resolves against /home, as in a browser.
+    assert "/about" in pages and "/contact" in pages
+
+
+async def test_a_script_that_opens_another_page_is_refused_and_named(
+    client: AsyncClient, site: FixtureSite, browser: str
+) -> None:
+    _single_page_site(site, "location.href = '/home';")
+    await _crawl(client, site, render=True)
+    async with get_session_factory()() as session:
+        job = await session.scalar(select(CrawlJob))
+        assert job is not None
+        assert any("tried to open another page" in w and "/home" in w for w in job.warnings)
+
+
+async def test_hash_addresses_are_explained(
+    client: AsyncClient, site: FixtureSite, browser: str
+) -> None:
+    _single_page_site(
+        site,
+        "location.hash = '#/home';"
+        "document.getElementById('app').innerHTML ="
+        '  \'<a href="#/about">About</a><a href="#/contact">Contact</a>\';',
+    )
+    del site.routes["/robots.txt"]
+    pages = await _crawl(client, site, render=True)
+    assert pages["/"].rendered_with_js and len(pages) == 1
+    async with get_session_factory()() as session:
+        job = await session.scalar(select(CrawlJob))
+        assert job is not None
+        assert "#-addresses (2 links" in job.warnings[0]
+        assert "to Google this site is a single page" in job.warnings[0]

@@ -68,6 +68,11 @@ class RenderResult:
     fetched: int = 0
     refused: int = 0
     error: str | None = None
+    # The document's address after its scripts ran. Single-page sites often change it
+    # with the History API or a #fragment (/ to /#/home) without loading a new page.
+    final_url: str | None = None
+    # A different page the scripts tried to load; it is refused and the result dropped.
+    navigated_to: str | None = None
 
 
 class RendererUnavailableError(Exception):
@@ -135,17 +140,21 @@ class Renderer:
             java_script_enabled=True,
         )
         lock = asyncio.Lock()
+        served: list[str] = []
 
         async def handle(route: Any) -> None:
             request = route.request
-            if (
-                request.url == url
-                and request.resource_type == "document"
-                and request.is_navigation_request()
-            ):
-                # The document itself is the response the crawler already has.
-                await route.fulfill(status=200, content_type=content_type or "text/html", body=html)
-                return
+            if request.resource_type == "document" and request.is_navigation_request():
+                main = request.frame.parent_frame is None
+                if main and request.url == url and not served:
+                    # The document itself is the response the crawler already has.
+                    served.append(url)
+                    await route.fulfill(
+                        status=200, content_type=content_type or "text/html", body=html
+                    )
+                    return
+                if main and result.navigated_to is None:
+                    result.navigated_to = request.url
             async with lock:
                 allowed = (
                     request.method == "GET"
@@ -174,9 +183,13 @@ class Renderer:
             # A page that keeps polling never goes idle; it is rendered all the same.
             with contextlib.suppress(PlaywrightTimeout):
                 await page.wait_for_load_state("networkidle", timeout=SETTLE_TIMEOUT_MS)
-            if page.url != url:
-                result.error = "The page's scripts navigated away from it"
+            if result.navigated_to is not None:
+                # Loading another document is refused, so what remains is not this page.
+                result.error = (
+                    f"The page's scripts tried to open another page ({result.navigated_to})"
+                )
                 return result
+            result.final_url = page.url
             rendered = await page.content()
             if len(rendered.encode()) > MAX_RENDERED_BYTES:
                 result.error = "The rendered page is too large"

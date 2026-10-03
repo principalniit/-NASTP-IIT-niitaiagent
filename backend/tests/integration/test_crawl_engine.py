@@ -385,3 +385,11 @@ async def test_crawl_scope_includes_the_sites_www_name(project) -> None:  # type
         assert p is not None
         p.root_url = "https://example.org/"
         assert (await build_config(session, p)).allowed_hosts == ["example.org", "www.example.org"]
+
+
+async def test_a_sitemap_address_that_returns_a_web_page_is_explained(
+    site: FixtureSite, project
+) -> None:  # type: ignore[no-untyped-def]
+    site.page("/sitemap.xml", "App", "<div id='app'></div>")
+    job, _ = await run_crawl(site, project)
+    assert "returns a web page, not a sitemap" in job.sitemaps[0]["error"]
