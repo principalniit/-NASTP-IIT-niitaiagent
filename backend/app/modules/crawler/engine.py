@@ -118,8 +118,25 @@ class CrawlEngine:
         self.render_failures = 0
         self._script_cache: dict[str, SubResponse] = {}
         self._script_cache_bytes = 0
+        # Why the crawl could not get past its start page, when it could not.
+        self.start_problem: str | None = None
+        self.start_links: int | None = None
 
     # ------------------------------------------------------------------ helpers
+
+    def _few_links_warning(self, count: int) -> str:
+        found = "no links" if count == 0 else f"only {count} link{'s' if count > 1 else ''}"
+        if self.config.render_javascript:
+            return (
+                f"The start page has {found} to other pages on this site, even with JavaScript "
+                "rendering, so little could be crawled. Add the site's sitemap, or check that "
+                "its pages link to each other."
+            )
+        return (
+            f"The start page has {found} to other pages on this site in its HTML, so little "
+            "could be crawled. If the site builds its menus with JavaScript, turn on JavaScript "
+            "rendering in the project's crawl settings and crawl again."
+        )
 
     def in_scope(self, url: str) -> bool:
         return host_of(url) in self.allowed_hosts
@@ -293,6 +310,12 @@ class CrawlEngine:
     async def _process(self, item: QueueItem) -> None:
         robots = await self._robots_for(host_of(item.url))
         if not robots.can_fetch(self.config.user_agent, path_with_query(item.url)):
+            if item.via == "root" and robots.status != "unreachable":
+                self.start_problem = (
+                    f"robots.txt on {host_of(item.url)} does not allow this crawler "
+                    f"({self.config.user_agent}) to fetch the start page, so no links could be "
+                    "followed. Only the site owner can allow it."
+                )
             self.counts["blocked"] += 1
             await self._save(self._page(item, FetchStatus.BLOCKED_BY_ROBOTS), [])
             return
@@ -305,6 +328,8 @@ class CrawlEngine:
         result = await self._fetch(item.url, conditional=conditional or None)
 
         if result.outcome in FAILED_OUTCOMES:
+            if item.via == "root":
+                self.start_problem = _start_failure(result)
             self.counts["failed"] += 1
             page = self._page(item, FAILED_OUTCOMES[result.outcome], result)
             await self._save(page, [])
@@ -318,6 +343,13 @@ class CrawlEngine:
             redirect.content_type = None
             if result.outcome == "redirect_out_of_scope":
                 redirect.fetch_status = FetchStatus.REDIRECT_OUT_OF_SCOPE
+                if item.via == "root":
+                    self.start_problem = (
+                        f"The start address redirects to {result.final_url}, which is outside "
+                        "this project's site, so nothing else was crawled. Change the project "
+                        "address to that site, or add its host to the allowed extra hosts in "
+                        "the project settings."
+                    )
             self.counts["crawled"] += 1
             await self._save(redirect, [])
             target = result.final_url
@@ -367,8 +399,21 @@ class CrawlEngine:
             for link in parsed.links:
                 links.append(self._link(page, link.url, link.anchor_text, link.nofollow))
                 extracted.append((link.url, link.nofollow))
+            if item.via == "root":
+                self.start_links = page.internal_links_count
         elif result.status_code and 200 <= result.status_code < 300:
             page.fetch_status = FetchStatus.SKIPPED_CONTENT_TYPE
+            if item.via == "root":
+                kind = result.content_type or "unknown type"
+                self.start_problem = (
+                    f"The start page is not an HTML page ({kind}), so it has no links to follow."
+                )
+        elif item.via == "root" and result.status_code and result.status_code >= 400:
+            self.start_problem = (
+                f"The start page answered HTTP {result.status_code}, so no links could be "
+                "followed. The site may be down, need a login, or refuse automated crawlers; "
+                "only the site owner can allow this crawler."
+            )
         self.counts["crawled"] += 1
         await self._save(page, links)
         # Links on sitemap-only pages are recorded but not followed, which keeps the
@@ -584,6 +629,10 @@ class CrawlEngine:
                 ),
                 params,
             )
+            if self.start_problem:
+                self.warnings.insert(0, self.start_problem)
+            elif self.start_links is not None and self.start_links < 3 and len(self.seen) <= 3:
+                self.warnings.insert(0, self._few_links_warning(self.start_links))
             if self.limit_reached:
                 self.warnings.append(
                     f"The page limit ({self.config.max_pages}) was reached before the whole site "
@@ -625,6 +674,20 @@ class CrawlEngine:
             job.heartbeat_at = job.finished_at
             await session.commit()
             return job.status
+
+
+def _start_failure(result: FetchResult) -> str:
+    if result.outcome == "blocked_destination":
+        return (
+            "The start address points to a private or reserved network address, which the "
+            "crawler refuses for safety. Only public websites can be crawled."
+        )
+    if result.outcome == "too_large":
+        return "The start page is larger than the crawler's size limit, so it was not read."
+    return (
+        f"The start page could not be fetched ({result.error or 'no response'}). Check the "
+        "address and that the site is up, then crawl again."
+    )
 
 
 EngineFactory = Callable[[uuid.UUID], CrawlEngine]

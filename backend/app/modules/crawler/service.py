@@ -31,7 +31,7 @@ from app.modules.crawler.schemas import (
     PageSort,
     StatusClass,
 )
-from app.modules.crawler.urls import host_of, port_of
+from app.modules.crawler.urls import host_of, port_of, www_twin
 from app.modules.organisations.dependencies import CrawlAccess, ProjectAccess
 from app.modules.organisations.models import Organisation
 from app.modules.organisations.schemas import OrganisationSettings
@@ -63,9 +63,12 @@ async def build_config(session: AsyncSession, project: Project) -> CrawlConfig:
     plan_pages = await pages_cap(session, org) if org else None
     root_host = host_of(project.root_url)
     port = port_of(project.root_url)
+    # The site's www and bare names are one site: either may redirect to the other.
+    twin = www_twin(root_host)
+    hosts = {root_host, *settings.allowed_extra_hosts, *([twin] if twin else [])}
     return CrawlConfig(
         root_url=project.root_url,
-        allowed_hosts=sorted({root_host, *settings.allowed_extra_hosts}),
+        allowed_hosts=sorted(hosts),
         excluded_paths=settings.excluded_paths,
         max_pages=min(crawl.max_pages, caps.max_pages, plan_pages or caps.max_pages),
         max_depth=min(crawl.max_depth, caps.max_depth),

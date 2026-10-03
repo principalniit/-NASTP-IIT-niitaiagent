@@ -50,6 +50,17 @@ def host_of(url: str) -> str:
     return (urlsplit(url).hostname or "").lower()
 
 
+def www_twin(host: str) -> str | None:
+    """The same site's other common name: www.example.org for example.org and back.
+
+    Sites usually redirect one to the other, and link to either, so both belong to the
+    crawl. None for addresses without a domain name (IP addresses, localhost).
+    """
+    if "." not in host or host.replace(".", "").isdigit() or ":" in host:
+        return None
+    return host.removeprefix("www.") if host.startswith("www.") else f"www.{host}"
+
+
 def port_of(url: str) -> int:
     parts = urlsplit(url)
     return parts.port or (443 if parts.scheme == "https" else 80)

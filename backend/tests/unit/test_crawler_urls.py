@@ -1,6 +1,6 @@
 import pytest
 
-from app.modules.crawler.urls import is_excluded, normalise_url, path_with_query
+from app.modules.crawler.urls import is_excluded, normalise_url, path_with_query, www_twin
 
 
 @pytest.mark.parametrize(
@@ -46,3 +46,11 @@ def test_exclusions_and_paths() -> None:
     assert not is_excluded("https://example.org/news", ["/wp-admin/*"])
     assert path_with_query("https://example.org/a?b=1") == "/a?b=1"
     assert path_with_query("https://example.org") == "/"
+
+
+def test_the_www_and_bare_names_are_one_site() -> None:
+    assert www_twin("example.org") == "www.example.org"
+    assert www_twin("www.example.org") == "example.org"
+    assert www_twin("admissions.example.org") == "www.admissions.example.org"
+    for no_domain in ("localhost", "127.0.0.1", "::1"):
+        assert www_twin(no_domain) is None

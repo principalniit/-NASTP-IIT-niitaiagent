@@ -45,7 +45,7 @@ user must enter them, ideally with a source link.
 | User agent | `NIIT-SEO-Agent/<version> (+contact URL)` | Identify the crawler honestly |
 | Respect robots.txt | true | Cannot be disabled for sites the organisation does not own |
 | Render JavaScript | false | Enable only for pages that need it |
-| Allowed extra hosts | empty | For example a separate admissions portal, if owned by NIIT |
+| Allowed extra hosts | empty | For example a separate admissions portal, if owned by NIIT. The `www.` and bare names of the project's host are always included |
 | Excluded paths | empty | Glob patterns, for example `/wp-admin/*` |
 | Important pages | empty | URLs that raise issue priority |
 | Page groups | empty | Named groups of URL patterns |

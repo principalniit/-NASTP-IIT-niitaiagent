@@ -868,6 +868,27 @@ Follow-up after the first live import (16.5a):
 Assumption A27: the benchmark is the site's own click-through rate at similar positions.
 Published industry curves vary widely and would be figures we did not measure.
 
+### 16.5b Crawls that stopped after one or two pages
+
+The owner reported that crawls of sites other than niit.edu.pk returned one or two
+pages, although those sites have many issues. The crawl gave no reason.
+
+Delivered:
+- **The www and bare names are one site.** The crawl scope now includes the project
+  host's twin (`example.org` and `www.example.org`). Before, a site whose address
+  redirected to its `www.` name stopped at the redirect, recorded as "redirect out of
+  scope". Every request still passes the SSRF guard and the twin's own robots.txt.
+- **The crawl explains a stop at the start page**, first in its notes:
+  - robots.txt forbids this crawler (the user agent is named);
+  - the start page answered an error status such as 403 (bot protection, a login, or
+    the site is down);
+  - the start address redirects to another site (change the address, or add the host);
+  - the start page could not be fetched, points to a private address, or is too large;
+  - the start page has fewer than three links to the site in its HTML and little else
+    was found (turn on JavaScript rendering for sites that build menus with scripts).
+- The crawler never changes its user agent to get past a site's bot protection; the
+  note says only the site owner can allow it.
+
 ### 16.6 JavaScript rendering behind the SSRF guard
 
 Delivered (`crawler/renderer.py`, `CrawlEngine._sub_fetch`, migration 0013):

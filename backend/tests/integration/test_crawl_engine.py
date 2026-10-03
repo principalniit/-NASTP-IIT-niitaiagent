@@ -329,3 +329,59 @@ async def test_storage_failure_fails_the_crawl_instead_of_completing(
     monkeypatch.setattr(engine, "_save", broken_save)
     with pytest.raises(RuntimeError, match="could not be stored"):
         await engine.run()
+
+
+async def test_a_start_page_that_answers_an_error_is_explained(site: FixtureSite, project) -> None:  # type: ignore[no-untyped-def]
+    site.routes["/"] = Response(403, b"Forbidden", {"Content-Type": "text/html"})
+    del site.routes["/sitemap.xml"]
+    job, pages = await run_crawl(site, project)
+    assert len(pages) == 1
+    assert job.warnings[0].startswith("The start page answered HTTP 403")
+
+
+async def test_a_start_page_blocked_by_robots_is_explained(site: FixtureSite, project) -> None:  # type: ignore[no-untyped-def]
+    site.routes["/robots.txt"] = Response(
+        200, b"User-agent: *\nDisallow: /\n", {"Content-Type": "text/plain"}
+    )
+    job, pages = await run_crawl(site, project)
+    assert pages["/"].fetch_status == FetchStatus.BLOCKED_BY_ROBOTS
+    assert "does not allow this crawler" in job.warnings[0] and UA in job.warnings[0]
+
+
+async def test_a_start_address_redirecting_off_site_is_explained(
+    site: FixtureSite, project
+) -> None:  # type: ignore[no-untyped-def]
+    elsewhere = f"http://localhost:{site.port}/"
+    site.routes["/"] = Response(301, b"", {"Location": elsewhere})
+    job, pages = await run_crawl(site, project)
+    assert pages["/"].fetch_status == FetchStatus.REDIRECT_OUT_OF_SCOPE
+    assert f"redirects to {elsewhere}" in job.warnings[0]
+    assert "allowed extra hosts" in job.warnings[0]
+
+
+async def test_a_start_page_with_almost_no_links_suggests_rendering(
+    site: FixtureSite, project
+) -> None:  # type: ignore[no-untyped-def]
+    site.page("/", "Home", "<div id='app'></div><a href='/about'>About</a>")
+    del site.routes["/sitemap.xml"]
+    job, pages = await run_crawl(site, project)
+    assert len(pages) <= 3  # the start page, /about and the one page /about links to
+    assert job.warnings[0].startswith("The start page has only 1 link")
+    assert "turn on JavaScript rendering" in job.warnings[0]
+
+
+async def test_a_healthy_start_page_adds_no_explanation(site: FixtureSite, project) -> None:  # type: ignore[no-untyped-def]
+    job, _ = await run_crawl(site, project)
+    assert not any("start page" in w or "start address" in w for w in job.warnings)
+
+
+async def test_crawl_scope_includes_the_sites_www_name(project) -> None:  # type: ignore[no-untyped-def]
+    from app.modules.crawler.service import build_config
+    from app.modules.projects.models import Project
+
+    _, project_id = project
+    async with get_session_factory()() as session:
+        p = await session.get(Project, project_id)
+        assert p is not None
+        p.root_url = "https://example.org/"
+        assert (await build_config(session, p)).allowed_hosts == ["example.org", "www.example.org"]
