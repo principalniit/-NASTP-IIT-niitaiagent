@@ -144,3 +144,39 @@ async def test_environment_proxies_are_ignored(monkeypatch: pytest.MonkeyPatch) 
         assert result.outcome == "blocked_destination"
     finally:
         await fetcher.aclose()
+
+
+class FirstFailsBackend(RecordingBackend):
+    """Refuses the first address, as a network with broken IPv6 does."""
+
+    async def connect_tcp(  # type: ignore[override]
+        self,
+        host: str,
+        port: int,
+        timeout: float | None = None,  # noqa: ASYNC109
+        local_address: str | None = None,
+        socket_options: Iterable[object] | None = None,
+    ) -> httpcore.AsyncNetworkStream:
+        self.connected.append((host, port))
+        if len(self.connected) == 1:
+            raise httpcore.ConnectError("unreachable")
+        return "stream"  # type: ignore[return-value]
+
+
+async def test_other_checked_addresses_are_tried_ipv4_first() -> None:
+    answers = {
+        "dual.example": ["2606:2800:220:1:248:1893:25c8:1946", "93.184.216.34", "93.184.216.35"]
+    }
+    inner = FirstFailsBackend()
+    backend = GuardedNetworkBackend(POLICY, fake_resolver(answers), inner)
+    assert await backend.connect_tcp("dual.example", 443) == "stream"
+    assert inner.connected == [("93.184.216.34", 443), ("93.184.216.35", 443)]
+
+
+async def test_one_unsafe_address_blocks_every_fallback() -> None:
+    inner = RecordingBackend()
+    resolver = fake_resolver({"mixed.example": ["93.184.216.34", "10.0.0.5"]})
+    backend = GuardedNetworkBackend(POLICY, resolver, inner)
+    with pytest.raises(BlockedDestinationError):
+        await backend.connect_tcp("mixed.example", 443)
+    assert inner.connected == []

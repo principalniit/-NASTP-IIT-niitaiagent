@@ -70,6 +70,22 @@ async def resolve_checked(
     host: str, port: int, policy: SafetyPolicy, resolver: Resolver = system_resolve
 ) -> str:
     """Return one address for host that is safe to connect to, or raise."""
+    return (await resolve_all_checked(host, port, policy, resolver))[0]
+
+
+def _ipv4_first(addresses: list[str]) -> list[str]:
+    """IPv4 before IPv6, keeping the resolver's order within each family.
+
+    Browsers fall back between families (Happy Eyeballs); a crawler that tried only the
+    first answer failed on networks with broken IPv6 while the site worked in a browser.
+    """
+    return sorted(addresses, key=lambda a: ipaddress.ip_address(a).version)
+
+
+async def resolve_all_checked(
+    host: str, port: int, policy: SafetyPolicy, resolver: Resolver = system_resolve
+) -> list[str]:
+    """Every address for host, IPv4 first, when all of them are safe; otherwise raise."""
     if port not in policy.allowed_ports:
         raise BlockedDestinationError(f"Port {port} is not allowed")
     try:
@@ -79,7 +95,7 @@ async def resolve_checked(
     if literal is not None:
         if not policy.is_allowed_ip(literal):
             raise BlockedDestinationError("Destination address is not public")
-        return literal.compressed
+        return [literal.compressed]
     try:
         addresses = await resolver(host, port)
     except OSError as exc:
@@ -89,7 +105,11 @@ async def resolve_checked(
     for address in addresses:
         if not policy.is_allowed_ip(ipaddress.ip_address(address)):
             raise BlockedDestinationError("Destination resolves to a non-public address")
-    return addresses[0]
+    return _ipv4_first(addresses)
+
+
+# How long to wait for one address before trying the next one of the same host.
+FALLBACK_TIMEOUT = 5.0
 
 
 class GuardedNetworkBackend(httpcore.AsyncNetworkBackend):
@@ -111,14 +131,24 @@ class GuardedNetworkBackend(httpcore.AsyncNetworkBackend):
         local_address: str | None = None,
         socket_options: Iterable[httpcore.SOCKET_OPTION] | None = None,
     ) -> httpcore.AsyncNetworkStream:
-        address = await resolve_checked(host, port, self._policy, self._resolver)
-        return await self._inner.connect_tcp(
-            address,
-            port,
-            timeout=timeout,
-            local_address=local_address,
-            socket_options=socket_options,
-        )
+        # Every address was checked above, from one resolution: the socket only ever
+        # goes to one of them, so a second (rebinding) answer is never used.
+        addresses = await resolve_all_checked(host, port, self._policy, self._resolver)
+        for index, address in enumerate(addresses):
+            last = index == len(addresses) - 1
+            attempt = timeout if last or timeout is None else min(timeout, FALLBACK_TIMEOUT)
+            try:
+                return await self._inner.connect_tcp(
+                    address,
+                    port,
+                    timeout=attempt,
+                    local_address=local_address,
+                    socket_options=socket_options,
+                )
+            except (httpcore.ConnectError, httpcore.ConnectTimeout, OSError):
+                if last:
+                    raise
+        raise httpcore.ConnectError(f"Could not connect to {host}")  # pragma: no cover
 
     async def connect_unix_socket(
         self,

@@ -96,6 +96,8 @@ Other administrative commands:
 ```bash
 uv run python -m app.cli reset-password --email someone@niit.edu.pk   # also ends their sessions
 uv run python -m app.cli rotate-secrets   # after putting a new key first in INTEGRATIONS_ENCRYPTION_KEYS
+uv run python -m app.cli crawl-check --url example.org   # why a site might not crawl, step by step
+uv run python -m app.cli send-test-email --to you@niit.edu.pk   # check the SMTP settings
 uv run python -m app.cli add-projects --org niit --owner-email you@niit.edu.pk --file sites.csv
 uv run python -m app.cli ai-report --org niit --days 30      # how AI tasks went and why they failed
 uv run python -m app.cli ai-eval --org niit --project "NIIT website" --out before.json   # score the AI

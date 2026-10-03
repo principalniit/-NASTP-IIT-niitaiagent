@@ -889,6 +889,17 @@ Delivered:
 - The crawler never changes its user agent to get past a site's bot protection; the
   note says only the site owner can allow it.
 
+Second round, after the owner still saw short crawls on other sites:
+- **Every checked address is tried, IPv4 first.** The guarded client connected only to
+  the first address a name resolved to. On a network with broken IPv6 that failed for
+  any site with an IPv6 address, while browsers fell back to IPv4. All addresses must
+  still be public, and only addresses from the checked resolution are used.
+- **Plain error messages** instead of "Request failed: ConnectError": certificate
+  problems (with the reason, such as an incomplete chain), DNS, refused or closed
+  connections, and invalid responses.
+- **`app.cli crawl-check --url <site>`** runs the start of a crawl (address, robots.txt,
+  start page, links) with the crawler's own client and says where it would stop.
+
 ### 16.6 JavaScript rendering behind the SSRF guard
 
 Delivered (`crawler/renderer.py`, `CrawlEngine._sub_fetch`, migration 0013):

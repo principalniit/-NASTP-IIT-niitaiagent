@@ -89,8 +89,11 @@ never reach the platform's own network. Controls, all covered by
 - **Connection-time checks.** The check runs inside the HTTP client's network backend,
   not before the request, so no code path can skip it. Every resolved address is
   checked; if any is not public the connection is refused.
-- **Address pinning.** The socket is opened to the address that was checked. A second
-  DNS answer (DNS rebinding) is never used. TLS still verifies the original hostname.
+- **Address pinning.** The socket is opened only to addresses from the one resolution
+  that was checked. A second DNS answer (DNS rebinding) is never used. When a name has
+  several addresses, all must be public; they are tried IPv4 first, the next one after
+  a failed connection (at most 5 seconds each), as browsers do. TLS still verifies the
+  original hostname.
 - **Blocked ranges.** Loopback, RFC 1918, link-local (including `169.254.169.254`
   metadata), CGNAT `100.64.0.0/10`, multicast, reserved, unspecified, benchmarking
   `198.18.0.0/15`, IPv6 loopback, link-local, unique-local, and IPv4-mapped forms of

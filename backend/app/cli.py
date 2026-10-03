@@ -5,6 +5,7 @@
     uv run python -m app.cli reset-password --email you@example.org
     uv run python -m app.cli rotate-secrets
     uv run python -m app.cli send-test-email --to you@example.org
+    uv run python -m app.cli crawl-check --url example.org
     uv run python -m app.cli add-projects --org niit --owner-email you@example.org --file sites.csv
     uv run python -m app.cli ai-report --org niit --days 30
     uv run python -m app.cli ai-eval --org niit --project "NIIT website" [--model qwen2.5:7b]
@@ -212,6 +213,116 @@ async def send_test_email(to: str) -> None:
     except (OSError, smtplib.SMTPException) as exc:
         sys.exit(f"Not sent ({type(exc).__name__}). {mailer.failure_hint(exc)}")
     print(f"Sent to {to}. If it does not arrive within a few minutes, check the spam folder.")
+
+
+async def crawl_check(url: str) -> None:
+    """Fetch a site's robots.txt and start page the way a crawl does, and report each step.
+
+    Uses the crawler's own guarded client, so the result matches what a crawl would see.
+    """
+    import httpcore
+
+    from app.core.config import get_settings
+    from app.modules.crawler.fetcher import Fetcher
+    from app.modules.crawler.parser import parse_html
+    from app.modules.crawler.robots import RobotsPolicy, RobotsTxt
+    from app.modules.crawler.url_safety import (
+        BlockedDestinationError,
+        SafetyPolicy,
+        resolve_all_checked,
+    )
+    from app.modules.crawler.urls import host_of, normalise_url, path_with_query, port_of, www_twin
+
+    settings = get_settings()
+    root = normalise_url(url if "://" in url else f"https://{url}")
+    if root is None:
+        sys.exit("Give a full address, for example https://example.org/")
+    host = host_of(root)
+    hosts = {host, *([twin] if (twin := www_twin(host)) else [])}
+    agent = settings.crawler_user_agent
+    print(f"Checking {root}\n  as {agent}")
+    port = port_of(root)
+    # The same address safety rules as a crawl of a project with this address.
+    policy = SafetyPolicy.from_settings([] if port in (80, 443) else [port])
+    try:
+        addresses = await resolve_all_checked(host, port, policy)
+    except BlockedDestinationError as exc:
+        sys.exit(f"Stopped: {exc}. Only public websites can be crawled.")
+    except httpcore.ConnectError:
+        sys.exit(f"Stopped: the name {host} could not be found (DNS). Check the address.")
+    print(f"1. Address: {', '.join(addresses)}")
+
+    fetcher = Fetcher(
+        user_agent=agent,
+        timeout_seconds=15,
+        max_bytes=settings.crawler_max_response_bytes,
+        max_redirects=settings.crawler_max_redirects,
+        policy=policy,
+    )
+    try:
+        scheme, netloc = root.split("://", 1)[0], root.split("://", 1)[1].split("/", 1)[0]
+        robots_result = await fetcher.fetch(
+            f"{scheme}://{netloc}/robots.txt",
+            in_scope=lambda u: host_of(u) == host,
+            read_body=lambda _: True,
+        )
+        code = robots_result.status_code
+        if robots_result.outcome == "ok" and code and 200 <= code < 300:
+            body = (robots_result.body or b"").decode("utf-8", errors="replace")
+            robots = RobotsPolicy("found", RobotsTxt.parse(body))
+            print(f"2. robots.txt: found (HTTP {code})")
+        elif robots_result.outcome == "ok" and code and 400 <= code < 500:
+            robots = RobotsPolicy("not_found")
+            print(f"2. robots.txt: none (HTTP {code}), so everything is allowed")
+        elif robots_result.outcome == "redirect_out_of_scope":
+            robots = RobotsPolicy("not_found")
+            print("2. robots.txt: redirects to another host; ignored")
+        else:
+            reason = robots_result.error or f"HTTP {code}"
+            print(f"2. robots.txt: could not be fetched ({reason})")
+            sys.exit(
+                "Stopped: when robots.txt cannot be fetched, the crawler must not crawl the "
+                "site (RFC 9309). This is usually the same problem as the start page; fix "
+                "that and try again."
+            )
+        if not robots.can_fetch(agent, path_with_query(root)):
+            sys.exit("Stopped: robots.txt does not allow this crawler to fetch the start page.")
+        print("   The start page is allowed.")
+
+        page = await fetcher.fetch(root, in_scope=lambda u: host_of(u) in hosts)
+        for hop in page.redirect_chain:
+            print(f"   {hop['url']} redirects (HTTP {hop['status_code']})")
+        if page.outcome == "redirect_out_of_scope":
+            sys.exit(
+                f"Stopped: the start address redirects to {page.final_url}, another site. "
+                "Use that address for the project, or add its host to allowed extra hosts."
+            )
+        if page.outcome != "ok" or page.status_code is None:
+            reason = page.error or page.outcome
+            sys.exit(f"Stopped: the start page could not be fetched ({reason}).")
+        print(f"3. Start page: HTTP {page.status_code}, {page.content_type or 'no type'}")
+        if page.status_code >= 400:
+            sys.exit(
+                f"Stopped: the site answered HTTP {page.status_code}. It may be down, need a "
+                "login, or refuse automated crawlers; only the site owner can allow this crawler."
+            )
+        if not page.is_html or page.body is None:
+            sys.exit("Stopped: the start page is not HTML, so it has no links to follow.")
+        parsed = parse_html(page.body, page.final_url or root)
+        internal = sorted({link.url for link in parsed.links if host_of(link.url) in hosts})
+        print(f"   Title: {parsed.title or '(none)'}")
+        print(f"4. Links to this site in the HTML: {len(internal)}")
+        for link in internal[:5]:
+            print(f"   {link}")
+        if len(internal) < 3:
+            print(
+                "Result: very few links. If the site builds its menus with JavaScript, turn on "
+                "JavaScript rendering in the project's crawl settings."
+            )
+        else:
+            print("Result: a crawl can start here and follow these links.")
+    finally:
+        await fetcher.aclose()
 
 
 async def rotate_secrets() -> None:
@@ -460,6 +571,8 @@ def main() -> None:
     p_reset = sub.add_parser("reset-password", help="Set a new password for an account")
     p_reset.add_argument("--email", required=True)
     sub.add_parser("rotate-secrets", help="Re-encrypt integration credentials with the newest key")
+    p_check = sub.add_parser("crawl-check", help="Check why a site might not crawl")
+    p_check.add_argument("--url", required=True, help="Site address, for example example.org")
     p_mail = sub.add_parser("send-test-email", help="Check the SMTP settings by sending one email")
     p_mail.add_argument("--to", required=True, help="Address to send the test to")
     p_add = sub.add_parser("add-projects", help="Create projects from a 'Name, address' list")
@@ -491,6 +604,8 @@ def main() -> None:
                 await reset_password(args.email)
             elif args.command == "rotate-secrets":
                 await rotate_secrets()
+            elif args.command == "crawl-check":
+                await crawl_check(args.url)
             elif args.command == "send-test-email":
                 await send_test_email(args.to)
             elif args.command == "add-projects":

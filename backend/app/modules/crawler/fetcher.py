@@ -5,6 +5,7 @@ SSRF-checked by the guarded transport. Response bodies are read with a size cap 
 applies after decompression, which also defeats compression bombs.
 """
 
+import ssl
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
@@ -56,6 +57,40 @@ KEPT_HEADERS = (
     "last-modified",
     "location",
 )
+
+
+def _causes(exc: BaseException) -> list[BaseException]:
+    found: list[BaseException] = []
+    current: BaseException | None = exc
+    while current is not None and current not in found:
+        found.append(current)
+        current = current.__cause__ or current.__context__
+    return found
+
+
+def describe_error(exc: BaseException) -> str:
+    """A plain explanation of a failed request, for crawl notes and page errors."""
+    causes = _causes(exc)
+    for cause in causes:
+        if isinstance(cause, ssl.SSLCertVerificationError):
+            reason = cause.verify_message or "verification failed"
+            if "local issuer" in reason:
+                reason += "; the server does not send its full certificate chain"
+            return f"The site's security certificate could not be verified ({reason})"
+    if any(isinstance(c, ssl.SSLError) for c in causes):
+        return "The secure (TLS) connection to the server failed"
+    text = " ".join(str(c) for c in causes).lower()
+    if "could not resolve" in text:
+        return "The site's name could not be found (DNS)"
+    if any(isinstance(c, ConnectionRefusedError) for c in causes) or "refused" in text:
+        return "The server refused the connection"
+    if any(isinstance(c, ConnectionResetError) for c in causes) or "reset" in text:
+        return "The server closed the connection"
+    if isinstance(exc, httpx.RemoteProtocolError):
+        return "The server sent an invalid or empty response"
+    if isinstance(exc, httpx.ConnectError):
+        return "Could not connect to the server"
+    return f"Request failed: {type(exc).__name__}"
 
 
 class Fetcher:
@@ -169,7 +204,7 @@ class Fetcher:
                 result.error = "Request timed out"
                 return result
             except (httpx.HTTPError, httpx.InvalidURL) as exc:
-                result.error = f"Request failed: {type(exc).__name__}"
+                result.error = describe_error(exc)
                 return result
         result.error = f"More than {self.max_redirects} redirects"
         return result

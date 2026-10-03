@@ -178,7 +178,7 @@ Code: `backend/app/modules/crawler/` and `backend/app/worker.py`.
 
 | Part | File | Behaviour |
 |------|------|-----------|
-| SSRF guard | `url_safety.py` | A custom httpx network backend resolves each hostname, rejects the connection if any resolved address is not public (or explicitly allowed), and connects to the exact address it checked. Environment proxies are ignored. See `docs/SECURITY.md`. |
+| SSRF guard | `url_safety.py` | A custom httpx network backend resolves each hostname, rejects the connection if any resolved address is not public (or explicitly allowed), and connects only to addresses it checked (IPv4 first, the next one if a connection fails). Environment proxies are ignored. See `docs/SECURITY.md`. |
 | Fetcher | `fetcher.py` | Follows redirects one hop at a time (each hop scope-checked and SSRF-checked, each hop waits for the per-host delay), caps body size after decompression, supports conditional requests. |
 | robots.txt | `robots.py` | RFC 9309 parser with `*` and `$` wildcards, longest-match precedence, agent groups, `Crawl-delay` (capped at 30 s). 4xx means allow all; 5xx or network failure means disallow all. |
 | Sitemaps | `sitemaps.py` | `urlset` and `sitemapindex`, gzip, 50 MB decompressed limit, entity resolution and network access disabled. Sitemaps are read from robots.txt `Sitemap:` lines, or `/sitemap.xml` if none are listed; only in-scope sitemaps are fetched. |
