@@ -258,7 +258,7 @@ and crawl schedules. Tests never contact live NIIT infrastructure or a real AI m
 
 | Symptom | Fix |
 |---------|-----|
-| `connection refused` on port 5432 | Start PostgreSQL: `docker compose up -d db` |
+| `connection refused` on port 5432 (on Windows: `WinError 1225`) | Start PostgreSQL: open Docker Desktop, then `docker compose up -d db`. Once started this way, it comes back by itself after a reboot while Docker Desktop starts at sign-in (Settings → General) |
 | `password authentication failed for user "niit"` | Create the role as shown in step 2, or fix `DATABASE_URL` |
 | Dashboard shows "Could not load data" with "Internal Server Error" or "The API server is not responding" | The dashboard cannot reach the API. Look at the API window: if it stopped with "The database schema is out of date", run `uv run alembic upgrade head` in `backend` and start it again. Otherwise start it (`uv run uvicorn app.main:app --reload`) and check that `API_ORIGIN` matches; rebuild after changing it |
 | Signed out after every page reload | Access tokens live in memory by design; the refresh cookie restores the session. If it does not, check that you open the dashboard via `localhost:3000`, not the API port. |

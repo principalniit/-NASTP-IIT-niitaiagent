@@ -4,6 +4,9 @@
 services:
   db:
     image: postgres:16
+    # Comes back after a reboot once Docker Desktop is running (it is not restarted
+    # after `docker compose stop`).
+    restart: unless-stopped
     environment:
       POSTGRES_USER: niit
       POSTGRES_PASSWORD: niit  # local development only
