@@ -143,19 +143,22 @@ UUID primary keys, `created_at`/`updated_at` timestamps, foreign keys with expli
 |--------|-------|-------|
 | users | 1 | Email unique (case-insensitive), Argon2 hash, platform-admin flag, active flag |
 | refresh_tokens | 1 | Hashed token, family ID, expiry, revoked flag |
+| password_reset_tokens | 16.1 | Hashed single-use token, user, expiry, used time |
+| invitations | 16.1 | Organisation, email, role, hashed single-use token, expiry, accepted or revoked |
 | organisations | 1 | Name, slug, domain, time zone, language, settings JSON |
 | organisation_members | 1 | Unique (organisation, user), role |
 | projects | 1 | Organisation, name, root URL, normalised domain, soft delete |
 | project_settings | 1 | One-to-one with project; crawl limits, excluded paths, page groups, content types, institutional profile |
 | audit_logs | 1 | Append-only; actor, organisation, action, target, metadata, IP |
 | crawl_jobs | 2 | Status, config snapshot, counters, error, timings; also the job queue |
-| crawl_pages | 2 | URL, status, timings, redirect chain, extracted SEO fields, content hash |
+| crawl_pages | 2 | URL, status, timings, redirect chain, extracted SEO fields, content hash; `rendered_with_js` (16.6) |
 | crawl_links | 2 | Source page, target URL, anchor, internal flag, nofollow |
 | schema_findings | 3 | Per JSON-LD block or microdata set: types, validity, errors, warnings |
 | seo_issues | 3 | Fields listed in section 8 of the product brief |
 | seo_scores | 3 | One row per analysed crawl: overall and category scores with the rule contributions |
 | internal_link_recommendations | 3 | Source, target, anchor phrase, reason, matched sentence |
-| ai_analyses | 4 | Kind, subject, status, evidence, validated output, grounding report, provider, model, prompt version, attempts, duration; also the AI task queue |
+| ai_analyses | 4 | Kind, subject, status, evidence, validated output, grounding report, provider, model, prompt version, attempts, duration, `metrics` (16.2: tokens and timings); also the AI task queue |
+| ai_feedback | 16.4 | Helpful or not helpful, reason and comment on an AI result; one per result and person |
 | seo_recommendations | 4 | Grounded recommendation linked to issues and the analysis that produced it; open, accepted or dismissed |
 | content_drafts | 4 | Page, field, original, proposed, reason, evidence, source (AI or person), status, version, protected flag and reasons, reviewer, source reference |
 | content_draft_versions | 4 | Every proposed version with its author and reason |
@@ -163,10 +166,14 @@ UUID primary keys, `created_at`/`updated_at` timestamps, foreign keys with expli
 | reports | 5 | Crawl, title, status, include-AI flag, data snapshot, rendered HTML, PDF and its status |
 | crawl_schedules | 5 | One per project: enabled, frequency, hour, next and last run |
 | plans | 6 | Key, name, limits (projects, members, pages per crawl, crawls a month, AI tasks a day, reports a month), default flag; `organisations.plan_id` (null means the default plan) |
-| integrations | 6 | Provider, name, validated settings, Fernet-encrypted credential (deferred column) and hint, enabled flag; records only, never connected |
+| integrations | 6 | Provider, name, validated settings, Fernet-encrypted credential (deferred column) and hint, enabled flag. Only Google Search Console connects (16.5); the others are records |
+| search_syncs | 16.5 | One Search Console import: status, period, row counts, safe error; also the import queue |
+| search_page_days | 16.5 | Google's daily clicks, impressions and position per page, matched to projects by page host |
+| search_page_queries | 16.5 | Query totals per page for the latest imported period |
 
 Entities are introduced in the phase that first uses them, each with its own
-migration. This keeps every migration small and tested against real code.
+migration. Numbers such as 16.1 refer to sections of `docs/IMPLEMENTATION_PLAN.md`.
+`docs/DATABASE.md` is the full reference: columns, constraints, migrations and backups. This keeps every migration small and tested against real code.
 
 Structured configuration (organisation settings, project settings) is stored as
 `JSONB` but always read and written through Pydantic models, so the database never
