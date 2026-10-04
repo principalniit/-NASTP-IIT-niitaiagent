@@ -121,16 +121,18 @@ UNAVAILABLE: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("keywords and search volumes", re.compile(r"\bkeywords?\b|search volumes?", re.I)),
     ("backlinks", re.compile(r"\bbacklinks?\b|inbound links from other sites", re.I)),
     (
-        "clicks, impressions and conversions",
-        re.compile(r"\bclicks?\b|\bimpressions?\b|\bconversions?\b|bounce rate|\bctr\b", re.I),
+        "Google Search clicks and impressions",
+        re.compile(r"\bclicks?\b|\bimpressions?\b|\bctr\b|click-?through", re.I),
     ),
+    # Search Console has none of these, so they stay unavailable when it is connected.
+    ("conversions and bounce rate", re.compile(r"\bconversions?\b|bounce rate", re.I)),
 )
 
 # What Search Console data answers when it has been imported. Visitor totals,
-# competitors, backlinks and search volumes stay unavailable: Search Console has
-# Google Search clicks only, and no data about other sites.
+# conversions, competitors, backlinks and search volumes stay unavailable: Search Console
+# has Google Search clicks only, and no data about other sites.
 COVERED_BY_SEARCH_DATA = frozenset(
-    {"search rankings and positions", "clicks, impressions and conversions"}
+    {"search rankings and positions", "Google Search clicks and impressions"}
 )
 SEARCH_DATA = re.compile(
     r"search console|\bgoogle\b|\bsearch (results?|performance|queries|terms)\b|\bqueries\b|"

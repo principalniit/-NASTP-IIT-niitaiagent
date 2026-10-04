@@ -42,9 +42,12 @@ every task and by the question agent. Lines, in order:
 Key rules, verbatim:
 - Rule 1: "Use only facts contained in EVIDENCE. If the answer is not in the evidence, say
   that the information is not available in the project data."
-- Rule 2: "Never invent, estimate or guess numbers. Do not mention rankings, traffic,
-  visitor numbers, keyword or search volumes, backlinks or competitors: this platform has
-  no such data."
+- Rule 2: "Never invent, estimate or guess numbers. This platform has no data on visitor
+  numbers, keyword search volumes, backlinks or competitors: do not mention them. Google
+  Search clicks, impressions and positions are known only when EVIDENCE contains
+  search_performance from Google Search Console. Then quote its figures exactly, as Google
+  Search figures for its period, never as all visitors and never as a forecast. Without
+  it, do not mention rankings or traffic."
 - Rule 3: "Never promise search results or ranking outcomes."
 - Rule 4: keep observations separate from recommendations.
 - Rule 5: "Do not state or change official facts such as dates, fees, eligibility,
@@ -123,7 +126,7 @@ as `Editor's goal: ...`).
 
 ### PROMPT_VERSION
 
-`prompts.PROMPT_VERSION` (currently `2026-10.5`) is stored on every analysis
+`prompts.PROMPT_VERSION` (currently `2026-10.6`) is stored on every analysis
 (`ai_analyses.prompt_version`) and in `ai-eval --out` results, so any output can be traced
 to the prompt that produced it. The format is year, month and a sequence number.
 
@@ -138,6 +141,7 @@ of the evidence, or an output schema.
 | 2026-10.3 | Topic evidence first and citation follow-up (16.3) |
 | 2026-10.4 | "None found" limited to crawled pages; unavailable data said first (16.3) |
 | 2026-10.5 | Search Console queries in metadata drafts, digits excluded (16.5a) |
+| 2026-10.6 | Rule 2 allows Search Console figures when the evidence has them; conversions stay unavailable |
 
 ## 3. Task kinds
 
@@ -257,8 +261,8 @@ the model sees and never decides the answer.
 | Topic words (broken pages, titles, meta descriptions, headings, images, redirects, canonicals, indexing, speed, structured data, internal links, content, language, URL structure) | Up to 3 topics, each with the real `open_issues_total` and up to 8 open issues whose rule id starts with the topic's prefixes, for example `onpage.title` or `schema.` |
 | A topic with no open issues | A note: the latest analysed crawl found none "on the pages it crawled. Say exactly that; do not claim more." |
 | A URL or path | That page's facts and open issues, or a note that it is not in the latest crawl |
-| Visitors or traffic, rankings, competitors, keywords or search volumes, backlinks, clicks, impressions or conversions | `not_available`, with "Start the answer by saying so in one sentence." |
-| Search Console words, when data has been imported | `search_performance` (below); rankings and clicks or impressions are then no longer listed as unavailable |
+| Visitors or traffic, rankings, competitors, keywords or search volumes, backlinks, clicks or impressions, conversions or bounce rate | `not_available`, with "Start the answer by saying so in one sentence." |
+| Search Console words, when data has been imported | `search_performance` (below); rankings and Google Search clicks or impressions are then no longer listed as unavailable. Conversions and bounce rate always are: Search Console has neither |
 | A priority question with no topic and no missing data | A pointer to `top_open_issues`, which is ordered by priority |
 
 **Search Console evidence** (`search_data.ai_evidence`, last 28 days): source, period, a

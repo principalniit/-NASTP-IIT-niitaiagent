@@ -66,7 +66,7 @@ async def _key(session: AsyncSession, integration: Integration) -> google.Servic
         )
     try:
         return google.parse_key(crypto.decrypt(integration.secret))
-    except ValueError as exc:
+    except (ValueError, google.SearchConsoleError) as exc:
         raise ConflictError(str(exc), code="credential_unreadable") from exc
 
 

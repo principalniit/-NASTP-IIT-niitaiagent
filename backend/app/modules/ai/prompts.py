@@ -7,13 +7,17 @@ from pydantic import BaseModel
 
 from app.modules.organisations.schemas import OrganisationSettings
 
-PROMPT_VERSION = "2026-10.5"
+PROMPT_VERSION = "2026-10.6"
 
 RULES = """Rules you must follow:
 1. Use only facts contained in EVIDENCE. If the answer is not in the evidence, say that the
    information is not available in the project data.
-2. Never invent, estimate or guess numbers. Do not mention rankings, traffic, visitor numbers,
-   keyword or search volumes, backlinks or competitors: this platform has no such data.
+2. Never invent, estimate or guess numbers. This platform has no data on visitor numbers,
+   keyword search volumes, backlinks or competitors: do not mention them. Google Search
+   clicks, impressions and positions are known only when EVIDENCE contains
+   search_performance from Google Search Console. Then quote its figures exactly, as Google
+   Search figures for its period, never as all visitors and never as a forecast. Without it,
+   do not mention rankings or traffic.
 3. Never promise search results or ranking outcomes. Describe benefits in general terms.
 4. Keep observations (what the evidence shows) separate from recommendations (what to do).
 5. Do not state or change official facts such as dates, fees, eligibility, admission

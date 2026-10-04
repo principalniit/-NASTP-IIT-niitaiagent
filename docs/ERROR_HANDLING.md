@@ -118,7 +118,7 @@ Only codes that exist in the code. Messages are quoted where they are fixed.
 | `invalid_credential` | 400 | Search Console key rejected when saved | e.g. "The JSON key must be a Google service account key." |
 | `wrong_provider` | 400 | Search Console action on another integration type | "This integration is not Google Search Console" |
 | `no_credential` | 409 | Test or sync before a key is saved | "Save the service account JSON key for this integration first." |
-| `credential_unreadable` | 409 | The stored key cannot be decrypted with the configured keys | "The stored secret cannot be decrypted with the configured keys" |
+| `credential_unreadable` | 409 | The stored key cannot be decrypted with the configured keys, or is no longer a valid service account key | "The stored secret cannot be decrypted with the configured keys", or the key check's message, such as "The credential is not a JSON key file." |
 | `search_console_error` | 400 | *Test connection* fails | The fixed explanation from section 7 |
 
 Frontend-only codes, set by `frontend/src/lib/api.ts` when the response is not JSON:

@@ -44,3 +44,9 @@ def test_questions_about_data_the_platform_lacks() -> None:
         "visitor numbers and traffic"
     ]
     assert unavailable_in("Which pages are missing an H1 heading?") == []
+    assert unavailable_in("How many conversions did the admissions page get?") == [
+        "conversions and bounce rate"
+    ]
+    assert unavailable_in("Which pages have a low click-through rate?") == [
+        "Google Search clicks and impressions"
+    ]

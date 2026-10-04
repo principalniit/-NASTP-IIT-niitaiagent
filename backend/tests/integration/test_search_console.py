@@ -325,6 +325,10 @@ async def test_the_assistant_answers_from_search_console(
         visitors = await evidence_for(ToolContext(session, p), "How many visitors did we get?")
         assert visitors is not None and "search_performance" in visitors
         assert visitors["not_available"]["data"] == ["visitor numbers and traffic"]
+        # Search Console has no conversions: they stay unavailable when it is connected.
+        sales = await evidence_for(ToolContext(session, p), "How many clicks and conversions?")
+        assert sales is not None and "search_performance" in sales
+        assert sales["not_available"]["data"] == ["conversions and bounce rate"]
 
     facts = {"search_performance": search}
     grounded = check_output(AgentAnswer(answer="Google Search sent 80 clicks."), facts, set())
@@ -503,3 +507,23 @@ async def test_click_opportunities_compare_with_the_sites_own_rate(
         # A query with a year is left out: drafts take years and fees from the page only.
         assert await search_queries_for(env, "https://example.org/fees") == ["example fees"]  # type: ignore[arg-type]
         assert await search_queries_for(env, "https://example.org/other") == []  # type: ignore[arg-type]
+
+
+async def test_an_unreadable_stored_key_is_explained(
+    client: AsyncClient, fake_google: FakeGoogle
+) -> None:
+    from app.core import crypto
+    from app.modules.integrations.models import Integration
+
+    owner, org, _ = await _org(client)
+    integration = (await _integration(client, owner, org)).json()
+    async with get_session_factory()() as session:
+        row = await session.get(Integration, uuid.UUID(integration["id"]))
+        assert row is not None
+        row.secret = crypto.encrypt("not a key")  # stored before keys were checked
+        await session.commit()
+    tested = await client.post(
+        f"/api/v1/integrations/{integration['id']}/search-console/test", headers=owner.headers
+    )
+    assert tested.status_code == 409
+    assert tested.json()["error"]["code"] == "credential_unreadable"

@@ -867,9 +867,21 @@ Follow-up after the first live import (16.5a):
   crawl, with its current title and open title or description issues.
 - **Title and description drafts** get the page's Google queries as evidence, without
   queries containing digits (years, fees and figures must come from the page).
-  `PROMPT_VERSION` is now 2026-10.5.
+  `PROMPT_VERSION` was then 2026-10.5.
 - **AI questions** about click-through get the top five opportunities as evidence.
 - `docs/SEARCH_CONSOLE.md` gained a troubleshooting table from the first live setup.
+
+Corrections found while writing `docs/PROMPTS.md` and `docs/ERROR_HANDLING.md`:
+- Rule 2 of the system prompt still said the platform has no traffic or ranking data,
+  which contradicted the Search Console evidence. It now allows Google Search clicks,
+  impressions and positions when the evidence contains them, quoted exactly and never as
+  all visitors or a forecast. `PROMPT_VERSION` is now 2026-10.6.
+- Conversions and bounce rate were dropped from the "not available" note together with
+  clicks once Search Console was connected. They are now a separate entry that always
+  stays: Search Console has neither.
+- *Test connection* on a stored key that is no longer valid returned a generic server
+  error; it now returns `credential_unreadable` with the reason.
+- Re-run `ai-eval` on the owner's laptop to compare with the previous results.
 
 Assumption A27: the benchmark is the site's own click-through rate at similar positions.
 Published industry curves vary widely and would be figures we did not measure.
