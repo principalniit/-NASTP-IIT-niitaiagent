@@ -8,7 +8,10 @@ multi-tenant SaaS. It crawls sites, runs a deterministic SEO rules engine, score
 prioritises issues, and uses AI only as an optional layer for explanations and drafts.
 
 Read before non-trivial work: `docs/ARCHITECTURE.md`, `docs/IMPLEMENTATION_PLAN.md`
-(phases and feature status), `docs/SECURITY.md`, `docs/NIIT_CONFIGURATION.md`.
+(phases and feature status; `docs/PHASES.md` is the overview), `docs/SECURITY.md`,
+`docs/NIIT_CONFIGURATION.md`. By topic: `docs/DATABASE.md` (tables, migrations),
+`docs/PROMPTS.md` (AI prompts, grounding, evaluation), `docs/ERROR_HANDLING.md` (error
+codes, job failures, troubleshooting).
 
 ## Core architecture
 

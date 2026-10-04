@@ -26,7 +26,10 @@ a development machine instead.
 ## Contents
 
 - [Architecture](docs/ARCHITECTURE.md)
-- [Implementation plan and roadmap](docs/IMPLEMENTATION_PLAN.md)
+- [Phases overview](docs/PHASES.md) and the detailed [implementation plan](docs/IMPLEMENTATION_PLAN.md)
+- [Database](docs/DATABASE.md)
+- [AI prompts and grounding](docs/PROMPTS.md)
+- [Error handling](docs/ERROR_HANDLING.md)
 - [Security](docs/SECURITY.md)
 - [NIIT configuration](docs/NIIT_CONFIGURATION.md)
 - [Deployment guide](docs/DEPLOYMENT.md) and [security review](docs/SECURITY_REVIEW.md)
