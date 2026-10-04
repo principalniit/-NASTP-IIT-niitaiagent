@@ -159,10 +159,10 @@ or admin then turns AI on under **Settings → AI provider**. The Overview shows
 the model is available.
 
 Everything else works with AI off. With AI on, the platform produces explanations,
-recommendations and drafts for human review; it never changes the website. The AI code
-has been tested against a scripted stand-in for Ollama, not a live model. Check the
-output on your own pages before relying on it (see `docs/IMPLEMENTATION_PLAN.md`,
-section 12).
+recommendations and drafts for human review; it never changes the website. Automated
+tests use a scripted stand-in for Ollama. The owner has also run the `ai-eval` test sets
+against qwen2.5:7b on their own laptop (see `docs/IMPLEMENTATION_PLAN.md`, sections 16.2
+to 16.4, and `docs/PROMPTS.md`). Check the output on your own pages before relying on it.
 
 ## Environment variables
 
@@ -307,7 +307,7 @@ secrets, backups, upgrades and key rotation. The latest security review is
 | Dashboard shell, overview, projects, settings, administration | Done |
 | Crawler, Crawl Explorer, Pages browser (Phase 2) | Done; optional JavaScript rendering per project, with every browser request fetched by the guarded crawler |
 | SEO engine: 50 rules, scoring, prioritisation, issue lifecycle, SEO dashboards (Phase 3) | Done |
-| AI assistant, recommendations, content drafts, approvals (Phase 4) | Done; not yet validated against a live Ollama model |
+| AI assistant, recommendations, content drafts, approvals (Phase 4) | Done; measured against qwen2.5:7b with the `ai-eval` test sets on the owner's laptop |
 | Reports (13 sections, HTML and PDF), monitoring, crawl comparison, schedule foundation (Phase 5) | Done |
 | Interface uplift: animated sign-in, grouped navigation, interactive overview tiles and tabs, page thumbnails drawn from crawl data, search-result previews, project tiles | Done; motion stops under reduced-motion settings |
 | Commercial readiness: tenant verification suite, plans and usage limits, integration records with encrypted credentials, white-label reports, data retention, platform audit log, deployment guide, security review (Phase 6) | Done; integrations are records only, no payments |

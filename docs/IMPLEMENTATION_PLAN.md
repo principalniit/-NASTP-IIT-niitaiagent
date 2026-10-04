@@ -173,10 +173,14 @@ tenancy and security before any crawl data exists.
 | Foundation (auth, organisations, projects, RBAC, dashboard shell) | Done |
 | Crawler, crawl explorer and page browser | Done |
 | SEO engine: rules, scoring, prioritisation, issues, SEO dashboards | Done |
-| AI agent: provider, tools, grounded tasks, recommendations, drafts and approvals | Done (not yet validated against a live Ollama model; see section 12) |
+| AI agent: provider, tools, grounded tasks, recommendations, drafts and approvals | Done; measured against qwen2.5:7b on the owner's laptop (16.2 to 16.4) |
+| AI measurement and quality: metrics, `ai-report`, `ai-eval`, relevant data first, feedback buttons, NIIT test sets | Done (16.2 to 16.4) |
 | Reports and monitoring: 13-section reports, PDF export, score history, crawl comparison, schedule foundation | Done |
 | Interface uplift: animated sign-in, grouped navigation, interactive tiles and tabs, data-drawn page thumbnails, search-result previews | Done |
-| Invitations and password reset by email (own SMTP server, optional) | Done |
+| Invitations and password reset by email (own SMTP server, optional), `send-test-email` | Done (16.1) |
+| Google Search Console: clicks, impressions, positions, click opportunities | Done (16.5) |
+| JavaScript rendering behind the SSRF guard; crawl diagnostics and `crawl-check` | Done (16.5b, 16.6) |
+| Configurable product name and one-command container installer | Done (16.7) |
 | Commercial readiness: tenant verification suite, plans and usage limits, integration records with encrypted credentials, white-label reports, retention, platform audit, deployment guide, security review | Done |
 
 ## 8. Known limitations after Phase 1
@@ -522,7 +526,7 @@ account pre-hijacking across organisations (H1).
 | Seeded `starter` and `professional` plans hold example numbers | Owner sets real numbers before commercial use |
 | The dashboard's CSP allows inline scripts | A nonce- or hash-based policy later |
 | Access tokens stay valid for up to 15 minutes after a password reset | Per-user token version later |
-| AI not yet validated against a live Ollama model on the owner's hardware | Owner validation (section 12) on the GPU laptop |
+| AI not yet validated against a live Ollama model on the owner's hardware | Closed: measured with `ai-eval` on the owner's laptop (16.2 to 16.4) |
 | No profile page for users; notifications are preferences only | Profile page with the interface uplift; notifications need an approved provider |
 
 Recommended next step: the interface uplift the owner asked for:
@@ -596,7 +600,9 @@ The owner asked to close four gaps, all with free and self-hosted means only:
 | Configurable product name and a one-command installer | Done (16.7) |
 
 Added by the owner: improve the AI assistant's accuracy and speed with free, local
-means. Step 1 (measure) is done (16.2); steps 2 and 3 follow.
+means. Step 1 (measure) is done (16.2), and step 3 (relevant data first) is done (16.3).
+Step 2 (shorter prompts, facts computed in code, worked examples) is not recorded as done;
+its eval fixes are part of 16.2.
 
 ### 16.1 Invitations and password reset
 
