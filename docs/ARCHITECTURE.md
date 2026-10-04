@@ -136,8 +136,10 @@ Recommendations, Reports.
 
 ## 6. Data model
 
-UUID primary keys, `created_at`/`updated_at` timestamps, foreign keys with explicit
-`ON DELETE` behaviour, and indexes on every foreign key and common filter.
+UUID primary keys, `created_at` timestamps (and `updated_at` where rows change),
+foreign keys with explicit `ON DELETE` behaviour, and indexes on the tenant and project
+keys and common filters. `docs/DATABASE.md` is the full reference: columns, constraints,
+indexes, job queues, migrations and backups.
 
 | Entity | Phase | Notes |
 |--------|-------|-------|
@@ -172,8 +174,8 @@ UUID primary keys, `created_at`/`updated_at` timestamps, foreign keys with expli
 | search_page_queries | 16.5 | Query totals per page for the latest imported period |
 
 Entities are introduced in the phase that first uses them, each with its own
-migration. Numbers such as 16.1 refer to sections of `docs/IMPLEMENTATION_PLAN.md`.
-`docs/DATABASE.md` is the full reference: columns, constraints, migrations and backups. This keeps every migration small and tested against real code.
+migration. This keeps every migration small and tested against real code. Numbers
+such as 16.1 refer to sections of `docs/IMPLEMENTATION_PLAN.md`.
 
 Structured configuration (organisation settings, project settings) is stored as
 `JSONB` but always read and written through Pydantic models, so the database never
