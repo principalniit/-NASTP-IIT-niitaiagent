@@ -261,7 +261,7 @@ the model sees and never decides the answer.
 | Topic words (broken pages, titles, meta descriptions, headings, images, redirects, canonicals, indexing, speed, structured data, internal links, content, language, URL structure) | Up to 3 topics, each with the real `open_issues_total` and up to 8 open issues whose rule id starts with the topic's prefixes, for example `onpage.title` or `schema.` |
 | A topic with no open issues | A note: the latest analysed crawl found none "on the pages it crawled. Say exactly that; do not claim more." |
 | A URL or path | That page's facts and open issues, or a note that it is not in the latest crawl |
-| Visitors or traffic, rankings, competitors, keywords or search volumes, backlinks, clicks or impressions, conversions or bounce rate | `not_available`, with "Start the answer by saying so in one sentence." |
+| Visitors or traffic, rankings, competitors (including comparisons with other universities, institutions, colleges, schools or sites), keywords or search volumes, backlinks, clicks or impressions, conversions or bounce rate | `not_available`, with "Start the answer by saying so in one sentence." |
 | Search Console words, when data has been imported | `search_performance` (below); rankings and Google Search clicks or impressions are then no longer listed as unavailable. Conversions and bounce rate always are: Search Console has neither |
 | A priority question with no topic and no missing data | A pointer to `top_open_issues`, which is ordered by priority |
 

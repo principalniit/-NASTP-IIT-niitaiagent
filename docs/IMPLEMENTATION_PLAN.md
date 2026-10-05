@@ -881,7 +881,13 @@ Corrections found while writing `docs/PROMPTS.md` and `docs/ERROR_HANDLING.md`:
   stays: Search Console has neither.
 - *Test connection* on a stored key that is no longer valid returned a generic server
   error; it now returns `credential_unreadable` with the reason.
-- Re-run `ai-eval` on the owner's laptop to compare with the previous results.
+- Re-run `ai-eval` on the owner's laptop to compare with the previous results. Result:
+  NIIT website 8 of 8. Admissions 5 of 7: "How do we rank against other universities…"
+  was no longer told the data is missing, because Search Console now covers rankings and
+  "other universities" was not recognised as competitor data. Comparisons with other
+  institutions, sites or the competition are now detected as competitor data, which no
+  source here has. The other failure, a count of 9 not in the evidence on "What should
+  we fix first…", is being checked with a second run.
 
 Assumption A27: the benchmark is the site's own click-through rate at similar positions.
 Published industry curves vary widely and would be figures we did not measure.

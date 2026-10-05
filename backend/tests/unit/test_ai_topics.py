@@ -44,6 +44,14 @@ def test_questions_about_data_the_platform_lacks() -> None:
         "visitor numbers and traffic"
     ]
     assert unavailable_in("Which pages are missing an H1 heading?") == []
+    # Comparing with other institutions needs data on them, which no source here has.
+    assert unavailable_in(
+        "How do we rank against other universities for BS Computer Science in Lahore?"
+    ) == ["search rankings and positions", "competitors"]
+    assert unavailable_in("Is our site faster than other websites?") == ["competitors"]
+    assert unavailable_in("Which pages compete for the same keyword?") == [
+        "keywords and search volumes"
+    ]
     assert unavailable_in("How many conversions did the admissions page get?") == [
         "conversions and bounce rate"
     ]

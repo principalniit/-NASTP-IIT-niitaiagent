@@ -117,7 +117,15 @@ UNAVAILABLE: tuple[tuple[str, re.Pattern[str]], ...] = (
         "search rankings and positions",
         re.compile(r"\brank(s|ed|ing|ings)?\b|position (on|in) (google|search)", re.I),
     ),
-    ("competitors", re.compile(r"\bcompetitors?\b|\brivals?\b", re.I)),
+    (
+        "competitors",
+        re.compile(
+            r"\bcompetit(ors?|ion)\b|\brivals?\b|\b(against|than|versus|vs\.?|compared? (to|with))"
+            r" (other|similar|rival|competing)\b|\bother (universit(y|ies)|institut(e|es|ions)|"
+            r"colleges?|schools?|websites?|sites)\b",
+            re.I,
+        ),
+    ),
     ("keywords and search volumes", re.compile(r"\bkeywords?\b|search volumes?", re.I)),
     ("backlinks", re.compile(r"\bbacklinks?\b|inbound links from other sites", re.I)),
     (
