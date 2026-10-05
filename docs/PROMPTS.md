@@ -126,7 +126,7 @@ as `Editor's goal: ...`).
 
 ### PROMPT_VERSION
 
-`prompts.PROMPT_VERSION` (currently `2026-10.6`) is stored on every analysis
+`prompts.PROMPT_VERSION` (currently `2026-10.7`) is stored on every analysis
 (`ai_analyses.prompt_version`) and in `ai-eval --out` results, so any output can be traced
 to the prompt that produced it. The format is year, month and a sequence number.
 
@@ -142,6 +142,7 @@ of the evidence, or an output schema.
 | 2026-10.4 | "None found" limited to crawled pages; unavailable data said first (16.3) |
 | 2026-10.5 | Search Console queries in metadata drafts, digits excluded (16.5a) |
 | 2026-10.6 | Rule 2 allows Search Console figures when the evidence has them; conversions stay unavailable |
+| 2026-10.7 | Comparisons with other institutions count as competitor data; answers that skip a detected gap are opened with it by the platform |
 
 ## 3. Task kinds
 
@@ -283,7 +284,11 @@ backlinks and search volumes stay unavailable.
    `{"error": ...}` to the model. After `MAX_TOOL_CALLS` (4) calls, a further request is
    answered with "No more tool calls are allowed. Answer now with the evidence you have."
 4. An answer is expanded from references and grounding-checked against the tool data
-   only (no tool arguments, no error results).
+   only (no tool arguments, no error results). When the question asked for data the
+   platform does not have (`not_available`) and the answer does not say so in its first
+   250 characters, `topics.admit_missing` opens it with "This platform has no data on …",
+   generated from the detected gaps. A 7B model skipped the evidence note once Search
+   Console figures made the evidence longer.
 5. **Citation follow-up:** when the answer passes but cites no issues, and the question
    matched topic, page or priority issues, the model is asked once to reply with the same
    text and references chosen from those issues. If the follow-up fails grounding, the

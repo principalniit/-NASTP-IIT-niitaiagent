@@ -136,6 +136,34 @@ UNAVAILABLE: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("conversions and bounce rate", re.compile(r"\bconversions?\b|bounce rate", re.I)),
 )
 
+# Wording that says the platform has no data for the question. Deliberately broad: the
+# check only confirms the answer admits the gap instead of inventing figures, and the
+# grounding check separately rejects numbers that are not in the data.
+MISSING_DATA = re.compile(
+    r"\b(not available|unavailable|no data|"
+    r"(does not|doesn't|do not|don't) (have|include|contain|provide|cover|hold|record)|"
+    r"do(es)? not track|not (tracked|measured|collected|provided|included|recorded)|"
+    r"no information|isn't available|cannot (tell|answer|say|determine)|not part of)\b",
+    re.I,
+)
+
+# Where an answer about missing data must say so: its opening, about two sentences.
+ADMISSION_WITHIN_CHARS = 250
+
+
+def admit_missing(answer: str, found: dict[str, Any] | None) -> str:
+    """Open the answer with what the platform has no data on, when the model did not.
+
+    The evidence already asks the model to say so first; smaller models skip it when the
+    evidence is long. The sentence is generated here from the detected gaps, never by
+    the model, so it cannot add a figure.
+    """
+    missing = (found or {}).get("not_available", {}).get("data") or []
+    if not missing or MISSING_DATA.search(answer[:ADMISSION_WITHIN_CHARS]):
+        return answer
+    return f"This platform has no data on {'; '.join(missing)}. {answer}"
+
+
 # What Search Console data answers when it has been imported. Visitor totals,
 # conversions, competitors, backlinks and search volumes stay unavailable: Search Console
 # has Google Search clicks only, and no data about other sites.

@@ -98,23 +98,31 @@ async def test_cases_are_scored_and_leave_nothing_behind(
     explained = await run_case(factory, pid, EvalCase(name="e", kind="issue_explanation"))
     assert explained.passed, explained.problems
 
-    # The fake model answers with an issue instead of admitting the data is missing.
+    # The fake model answers with an issue instead of admitting the data is missing. The
+    # platform detected the gap, so it opens the answer with it itself.
     traffic = EvalCase(
         name="t",
         kind="question",
         question="How many visitors did we get?",
         expect={"admits_missing_data": True},
     )
-    failed = await run_case(factory, pid, traffic)
-    assert not failed.passed and failed.completed
-    assert failed.problems == ["Does not start by saying that the platform has no data for this"]
+    opened = await run_case(factory, pid, traffic)
+    assert opened.passed, opened.problems
+    assert opened.output and opened.output["answer"].startswith(
+        "This platform has no data on visitor numbers and traffic. "
+    )
     ollama.script({"action": "answer", "answer": "The platform does not have traffic data."})
     honest = await run_case(factory, pid, traffic)
     assert honest.passed, honest.problems
-    # An admission buried after other material does not count.
+    assert honest.output and honest.output["answer"] == "The platform does not have traffic data."
+
+    # Where the platform detects no gap, the check still applies to the model's own words,
+    # and an admission buried after other material does not count.
+    vague = traffic.model_copy(update={"question": "How did the site do last month?"})
     buried = "Fix the faculty page titles and the canonical tags first. " * 6
     ollama.script({"action": "answer", "answer": buried + "Traffic data is not available."})
-    late = await run_case(factory, pid, traffic)
+    late = await run_case(factory, pid, vague)
+    assert not late.passed and late.completed
     assert late.problems == ["Does not start by saying that the platform has no data for this"]
 
     # A bare "no answer" fails where the project data does have one.
@@ -183,7 +191,8 @@ async def test_eval_command_prints_and_saves_results(
     await ai_eval(org["slug"], project["name"].upper(), None, None, str(out))
     printed = capsys.readouterr().out
     assert "PASS  management-summary" in printed
-    assert "FAIL  traffic-not-available" in printed  # the fake model does not admit it
+    # The fake model does not admit the gap; the platform opens the answer with it.
+    assert "PASS  traffic-not-available" in printed
     saved = json.loads(out.read_text())
     assert saved["project"] == project["name"] and saved["prompt_version"]
     assert saved["summary"]["cases"] == len(load_cases())
@@ -260,7 +269,7 @@ async def test_report_counts_tasks_and_groups_failure_reasons(
 
 
 def test_honest_replies_about_missing_data_are_recognised() -> None:
-    from app.modules.ai.evaluation import _MISSING_DATA
+    from app.modules.ai.topics import MISSING_DATA as _MISSING_DATA
 
     for honest in (
         "The data does not provide information on which competitors rank above us.",

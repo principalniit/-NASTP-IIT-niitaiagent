@@ -1,6 +1,12 @@
 """Working out what a question is about, so the matching data is fetched first."""
 
-from app.modules.ai.topics import is_priority_question, page_in, topics_in, unavailable_in
+from app.modules.ai.topics import (
+    admit_missing,
+    is_priority_question,
+    page_in,
+    topics_in,
+    unavailable_in,
+)
 
 
 def labels(question: str) -> list[str]:
@@ -58,3 +64,17 @@ def test_questions_about_data_the_platform_lacks() -> None:
     assert unavailable_in("Which pages have a low click-through rate?") == [
         "Google Search clicks and impressions"
     ]
+
+
+def test_answers_open_with_the_data_the_platform_lacks() -> None:
+    found = {"not_available": {"data": ["competitors"], "note": "..."}}
+    drifted = "Several pages are missing an H1 heading."
+    assert admit_missing(drifted, found) == (
+        "This platform has no data on competitors. Several pages are missing an H1 heading."
+    )
+    # Already said by the model: left as written.
+    said = "Data on other universities is not available in this platform."
+    assert admit_missing(said, found) == said
+    # Nothing missing: unchanged.
+    assert admit_missing(drifted, {"topics": []}) == drifted
+    assert admit_missing(drifted, None) == drifted

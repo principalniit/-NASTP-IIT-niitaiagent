@@ -887,7 +887,12 @@ Corrections found while writing `docs/PROMPTS.md` and `docs/ERROR_HANDLING.md`:
   "other universities" was not recognised as competitor data. Comparisons with other
   institutions, sites or the competition are now detected as competitor data, which no
   source here has. The other failure, a count of 9 not in the evidence on "What should
-  we fix first…", is being checked with a second run.
+  we fix first…", did not recur in a second run (6 of 7, all grounded).
+- In that second run the model still skipped the "not available" note and answered about
+  H1 headings: with Search Console figures the evidence is longer, and the 7B model
+  follows the note less reliably. When a gap was detected and the answer does not admit
+  it in its opening, the platform now opens it with "This platform has no data on …",
+  generated from the detected gaps, never by the model. `PROMPT_VERSION` is 2026-10.7.
 
 Assumption A27: the benchmark is the site's own click-through rate at similar positions.
 Published industry curves vary widely and would be figures we did not measure.

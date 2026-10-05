@@ -32,7 +32,13 @@ from app.modules.ai.models import AIAnalysis, AIFeedback, AIKind, AIStatus, Feed
 from app.modules.ai.provider import AIError
 from app.modules.ai.runner import _execute, _fail
 from app.modules.ai.tools import IssuesArgs, ToolContext, ToolError, get_seo_issues
-from app.modules.ai.topics import page_in, topics_in, unavailable_in
+from app.modules.ai.topics import (
+    ADMISSION_WITHIN_CHARS,
+    MISSING_DATA,
+    page_in,
+    topics_in,
+    unavailable_in,
+)
 from app.modules.crawler.urls import normalise_url
 from app.modules.projects.models import Project
 from app.modules.seo.models import ResolutionStatus, SeoIssue
@@ -41,17 +47,6 @@ DEFAULT_CASES = Path(__file__).with_name("eval_cases.json")
 # A model load longer than this means the model was not in memory when the task began.
 LOAD_THRESHOLD_MS = 1000
 TOP_ISSUES = 5
-# Wording that says the platform has no data for the question. Deliberately broad: the
-# check only confirms the answer admits the gap instead of inventing figures, and the
-# grounding check separately rejects numbers that are not in the data.
-_MISSING_DATA = re.compile(
-    r"\b(not available|unavailable|no data|"
-    r"(does not|doesn't|do not|don't) (have|include|contain|provide|cover|hold|record)|"
-    r"do(es)? not track|not (tracked|measured|collected|provided|included|recorded)|"
-    r"no information|isn't available|cannot (tell|answer|say|determine)|not part of)\b",
-    re.I,
-)
-
 # A reply that only says there is no answer. Checked on short answers only, so an answer
 # that mentions a gap in passing still counts as an answer.
 _REFUSAL = re.compile(
@@ -61,8 +56,6 @@ _REFUSAL = re.compile(
     re.I,
 )
 REFUSAL_MAX_CHARS = 200
-# Where an answer about missing data must say so: its opening, about two sentences.
-ADMISSION_WITHIN_CHARS = 250
 # Saying that the latest crawl found none of what was asked about.
 _NONE_FOUND = re.compile(
     r"\b(no|not any|none of the) (open |current )?([\w-]+ ){0,3}"
@@ -460,7 +453,7 @@ def _score(
         # Said up front, not after a list of unrelated issues.
         texts = _texts(analysis.output)
         opening = texts[0][:ADMISSION_WITHIN_CHARS] if texts else ""
-        if not _MISSING_DATA.search(opening):
+        if not MISSING_DATA.search(opening):
             problems.append("Does not start by saying that the platform has no data for this")
     return problems, skipped
 

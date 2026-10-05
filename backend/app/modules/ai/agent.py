@@ -18,7 +18,7 @@ from app.modules.ai.tools import (
     get_seo_issues,
     run_tool,
 )
-from app.modules.ai.topics import evidence_for, focus_issue_ids
+from app.modules.ai.topics import admit_missing, evidence_for, focus_issue_ids
 from app.providers.interfaces import AIProvider
 
 MAX_TOOL_CALLS = 4
@@ -140,7 +140,7 @@ async def answer_question(
             AgentAnswer(
                 # AgentStep guarantees text here: an empty answer is sent back to the model
                 # with the error instead of being replaced by a stock sentence.
-                answer=step.answer,
+                answer=admit_missing(step.answer, evidence.get("for_this_question")),
                 issue_ids=step.issue_ids,
                 tools_used=tools_used,
             )
