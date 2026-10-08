@@ -263,6 +263,7 @@ and crawl schedules. Tests never contact live NIIT infrastructure or a real AI m
 
 | Symptom | Fix |
 |---------|-----|
+| Dashboard shows "404 This page could not be found" for a page that exists, after `git pull` | The development server is serving stale files. Stop `pnpm dev` (Ctrl+C), delete `frontend/.next` (PowerShell: `Remove-Item -Recurse -Force .next`), start `pnpm dev` again and refresh with Ctrl+F5 |
 | `connection refused` on port 5432 (on Windows: `WinError 1225`) | Start PostgreSQL: open Docker Desktop, then `docker compose up -d db`. Once started this way, it comes back by itself after a reboot while Docker Desktop starts at sign-in (Settings → General) |
 | `password authentication failed for user "niit"` | Create the role as shown in step 2, or fix `DATABASE_URL` |
 | Dashboard shows "Could not load data" with "Internal Server Error" or "The API server is not responding" | The dashboard cannot reach the API. Look at the API window: if it stopped with "The database schema is out of date", run `uv run alembic upgrade head` in `backend` and start it again. Otherwise start it (`uv run uvicorn app.main:app --reload`) and check that `API_ORIGIN` matches; rebuild after changing it |

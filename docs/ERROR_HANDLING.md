@@ -386,6 +386,7 @@ Common operator errors (more in `README.md` under Troubleshooting):
 | A crawl, AI task, report or import stays *Queued* | Start the worker |
 | "The AI service (Ollama) is not reachable." or "The AI assistant is unavailable" | Start Ollama; `OLLAMA_BASE_URL` defaults to `http://127.0.0.1:11434`; check the model with `ollama list` |
 | "The AI model did not respond in time." | Set `AI_TIMEOUT_SECONDS=600` and restart, or use a smaller model or a GPU |
+| Dashboard shows "404 This page could not be found" for a page that exists, after `git pull` | The development server is serving stale files. Stop `pnpm dev` (Ctrl+C), delete `frontend/.next` (PowerShell: `Remove-Item -Recurse -Force .next`), start `pnpm dev` again and refresh with Ctrl+F5 |
 | A crawl stops after one page | Read the crawl notes, then run `uv run python -m app.cli crawl-check --url <site> [--render]` |
 | "The stored secret cannot be decrypted with the configured keys" | Keep a single `INTEGRATIONS_ENCRYPTION_KEYS` line in `backend/.env`, restart the API and worker, then save the credential again |
 | "Credentials cannot be stored until the server operator sets INTEGRATIONS_ENCRYPTION_KEYS." | Generate a Fernet key and set it (`docs/DEPLOYMENT.md`) |
