@@ -893,6 +893,8 @@ Corrections found while writing `docs/PROMPTS.md` and `docs/ERROR_HANDLING.md`:
   follows the note less reliably. When a gap was detected and the answer does not admit
   it in its opening, the platform now opens it with "This platform has no data on …",
   generated from the detected gaps, never by the model. `PROMPT_VERSION` is 2026-10.7.
+- Result on the owner's laptop with qwen2.5:7b and prompt 2026-10.7: Admissions 7 of 7,
+  all grounded, median 11.4 s per case (NIIT website 8 of 8 on 2026-10.6).
 
 Assumption A27: the benchmark is the site's own click-through rate at similar positions.
 Published industry curves vary widely and would be figures we did not measure.
