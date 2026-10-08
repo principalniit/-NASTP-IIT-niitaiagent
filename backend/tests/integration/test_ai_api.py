@@ -611,6 +611,15 @@ def _cite_first_candidate(request: dict) -> dict:  # type: ignore[type-arg]
     return {"action": "answer", "answer": "Fix the broken links first.", "issue_ids": [first]}
 
 
+def _cite_unrelated(request: dict) -> dict:  # type: ignore[type-arg]
+    """Cite an open issue that is not one of the issues the question is about."""
+    first = request["messages"][1]["content"]
+    evidence = json.loads(first.split("EVIDENCE so far:\n", 1)[1].split("\n\n", 1)[0])
+    about = {i["id"] for t in evidence["for_this_question"]["topics"] for i in t["issues"]}
+    other = next(i["id"] for i in evidence["top_open_issues"]["issues"] if i["id"] not in about)
+    return {"action": "answer", "answer": "Fix the broken links first.", "issue_ids": [other]}
+
+
 async def test_an_answer_that_cites_nothing_is_asked_to_cite(
     client: AsyncClient, site: FixtureSite, ollama: FakeOllama
 ) -> None:
@@ -622,9 +631,16 @@ async def test_an_answer_that_cites_nothing_is_asked_to_cite(
     )
     cited = await run(client, owner, project["id"], kind="question", question=question)
     assert cited["status"] == "completed" and cited["attempts"] == 2
-    assert "cites no issues" in ollama.requests[-1]["messages"][-1]["content"]
+    assert "cites none of the issues" in ollama.requests[-1]["messages"][-1]["content"]
     focus = {i["id"] for i in cited["evidence"]["for_this_question"]["topics"][0]["issues"]}
     assert cited["output"]["issue_ids"] and set(cited["output"]["issue_ids"]) <= focus
+
+    # Citing only an issue the question is not about counts as citing none of them.
+    ollama.script(_cite_unrelated, _cite_first_candidate)
+    redirected = await run(client, owner, project["id"], kind="question", question=question)
+    assert redirected["attempts"] == 2
+    assert "cites none of the issues" in ollama.requests[-1]["messages"][-1]["content"]
+    assert set(redirected["output"]["issue_ids"]) <= focus
 
     # If the cited reply then invents something, the first grounded answer is kept.
     ollama.script(
@@ -634,3 +650,32 @@ async def test_an_answer_that_cites_nothing_is_asked_to_cite(
     kept = await run(client, owner, project["id"], kind="question", question=question)
     assert kept["status"] == "completed"
     assert kept["output"]["answer"] == "Fix the broken links first."
+
+
+async def test_terms_to_avoid_are_flagged_on_outlines_and_page_plans(
+    client: AsyncClient, site: FixtureSite, ollama: FakeOllama
+) -> None:
+    owner, org, project = await analysed(client, site)
+    terms = [
+        {"preferred": "applicants", "avoid": ["prospective students"]},
+        {"preferred": "Fix", "avoid": ["Address"]},
+    ]
+    response = await client.patch(
+        f"/api/v1/organisations/{org['id']}",
+        json={"settings": {"ai": {"provider": "ollama"}, "approved_terminology": terms}},
+        headers=owner.headers,
+    )
+    assert response.status_code == 200, response.text
+    pid = project["id"]
+
+    outline = await run(client, owner, pid, kind="content_outline", page_url="/about")
+    assert outline["status"] == "completed"
+    expected = "Uses 'prospective students'; the approved term is 'applicants'"
+    assert expected in outline["grounding"]["warnings"]
+    draft = (
+        await client.get(f"/api/v1/drafts/{outline['draft_ids'][0]}", headers=owner.headers)
+    ).json()
+    assert expected in draft["evidence"]["warnings"]
+
+    plan = await run(client, owner, pid, kind="page_plan", page_url="/about")
+    assert "Uses 'Address'; the approved term is 'Fix'" in plan["grounding"]["warnings"]

@@ -107,7 +107,7 @@ async def test_plan_administration(client: AsyncClient) -> None:
     refused = await client.patch(
         f"/api/v1/plans/{starter['id']}", json={"is_default": False}, headers=admin.headers
     )
-    assert refused.status_code == 400
+    assert refused.status_code == 422
     renamed = await client.patch(
         f"/api/v1/plans/{starter['id']}",
         json={"limits": {**TIGHT, "max_projects": 3}},

@@ -14,7 +14,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ApiError } from "@/lib/api";
+import { signInErrorText } from "@/lib/api";
 import { PRODUCT_NAME } from "@/lib/brand";
 import { useSession } from "@/lib/session";
 
@@ -56,11 +56,7 @@ export function LoginView() {
     try {
       await signIn(values.email, values.password);
     } catch (err) {
-      setError(
-        err instanceof ApiError && (err.status === 401 || err.status === 429)
-          ? err.message
-          : "Sign-in is unavailable right now. Please try again.",
-      );
+      setError(signInErrorText(err));
     }
   });
 

@@ -90,7 +90,7 @@ async def test_settings_update_respects_org_caps(client: AsyncClient) -> None:
     current = (await client.get(url, headers=owner.headers)).json()["settings"]
     current["crawl"]["max_pages"] = 1000
     too_big = await client.put(url, json=current, headers=owner.headers)
-    assert too_big.status_code == 400
+    assert too_big.status_code == 422
     assert too_big.json()["error"]["details"][0]["loc"] == ["settings", "crawl", "max_pages"]
     current["crawl"]["max_pages"] = 250
     current["excluded_paths"] = ["/wp-admin/*"]

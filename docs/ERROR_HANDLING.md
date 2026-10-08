@@ -95,7 +95,7 @@ Only codes that exist in the code. Messages are quoted where they are fixed.
 |------|--------|------|--------------------|
 | `bad_request` | 400 | Default for `AppError` without a code, e.g. an unknown draft action | "Unsupported action" |
 | `validation_error` | 422 | Request body, query or path fails schema validation | "Request validation failed"; form fields marked from `details` |
-| `validation_error` | 400 | Service checks: `name` or `root_url` set to null; crawl settings above the organisation's caps; invalid integration settings; draft page address not on the project's site; issues from another project; unsetting the default plan | The message, e.g. "Crawl settings exceed organisation limits", with per-field `details` |
+| `validation_error` | 422 | Service checks (`ValidationAppError`): `name` or `root_url` set to null; crawl settings above the organisation's caps; invalid integration settings; draft page address not on the project's site; issues from another project; unsetting the default plan | The message, e.g. "Crawl settings exceed organisation limits", with per-field `details` |
 | `unauthorized` | 401 | No token, invalid or expired token, wrong login, expired or reused refresh token | "Authentication required", "Invalid or expired access token", "Invalid email or password", "Session expired" |
 | `forbidden` | 403 | Role lacks the permission; platform-admin-only action; missing `X-Requested-With` on refresh or logout; invitation for another email; an author approving their own draft; non-owner changing the owner role or data retention | The message; the dashboard's `ErrorState` replaces it with "Your role does not allow access to this information." |
 | `not_found` | 404 | Missing or foreign resource; unknown route; invalid or expired reset or invitation link | e.g. "Project not found", "This reset link is not valid or has expired", "This invitation is not valid or has expired" |
@@ -334,11 +334,15 @@ contains credentials. See `docs/EMAIL.md`.
 ## 8. Frontend handling
 
 - `frontend/src/lib/api.ts` turns every failed response into an `ApiError` with `status`,
-  `code`, `message`, `details` and `requestId` (from the body). A 401 triggers one session
+  `code`, `message`, `details` and `requestId` (from the body, or else the `X-Request-ID`
+  header, so errors that are not JSON keep their reference too). A 401 triggers one session
   refresh and a retry; if the refresh fails, the session is cleared with its cached data
   and the dashboard returns to the sign-in state.
-- A non-JSON 5xx becomes `api_unreachable` (section 3). It has no request ID because the
-  API never answered.
+- A non-JSON 5xx becomes `api_unreachable` (section 3). It has a request ID only when the
+  response carried the header; when the API is down there is none.
+- Sign-in (and signing in from an invitation) shows the server's message for 401, 429 and
+  `api_unreachable` (`signInErrorText` in `lib/api.ts`), and "Sign-in is unavailable right
+  now. Please try again." otherwise.
 - TanStack Query does not retry `ApiError`s below 500; other failures are retried up to
   twice (`components/providers.tsx`).
 - `ErrorState` (`components/app/states.tsx`) shows "Could not load data", the message (or

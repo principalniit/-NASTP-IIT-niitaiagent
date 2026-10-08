@@ -37,6 +37,8 @@ export function setSessionExpiredHandler(handler: (() => void) | null) {
 const XHR = { "X-Requested-With": "XMLHttpRequest" };
 
 async function toError(response: Response): Promise<ApiError> {
+  // The API sets X-Request-ID on every response, including ones that are not JSON.
+  const headerId = response.headers.get("x-request-id");
   try {
     const body = await response.json();
     return new ApiError(
@@ -44,7 +46,7 @@ async function toError(response: Response): Promise<ApiError> {
       body?.error?.code ?? "http_error",
       body?.error?.message ?? response.statusText,
       body?.error?.details ?? null,
-      body?.request_id ?? null,
+      body?.request_id ?? headerId,
     );
   } catch {
     // The API always answers in JSON. A plain-text 5xx comes from the dashboard's proxy,
@@ -54,10 +56,20 @@ async function toError(response: Response): Promise<ApiError> {
         response.status,
         "api_unreachable",
         "The API server is not responding. Check that it is running (and that the database is upgraded), then try again.",
+        null,
+        headerId,
       );
     }
-    return new ApiError(response.status, "http_error", response.statusText || "Request failed");
+    return new ApiError(response.status, "http_error", response.statusText || "Request failed", null, headerId);
   }
+}
+
+/** What a failed sign-in shows: the reason when it helps the person, a generic line otherwise. */
+export function signInErrorText(err: unknown): string {
+  if (err instanceof ApiError && (err.status === 401 || err.status === 429 || err.code === "api_unreachable")) {
+    return err.message;
+  }
+  return "Sign-in is unavailable right now. Please try again.";
 }
 
 /** Exchange the refresh cookie for a new access token. Concurrent callers share one request. */

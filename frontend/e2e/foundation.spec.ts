@@ -138,3 +138,25 @@ test("signing out ends the session", async ({ page }) => {
   await page.goto("/projects");
   await expect(page).toHaveURL(/\/login/);
 });
+
+test("sign-in says when the API server is not responding", async ({ page }) => {
+  // Stands in for the dashboard's proxy when the API is down: a plain-text 500.
+  await page.route("**/api/v1/auth/login", (route) =>
+    route.fulfill({ status: 500, contentType: "text/plain", body: "Internal Server Error" }),
+  );
+  await page.goto("/login");
+  await page.getByLabel("Email").fill(ADMIN_EMAIL);
+  await page.getByLabel("Password").fill(ADMIN_PASSWORD);
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "The API server is not responding" })).toBeVisible();
+});
+
+test("an error that is not JSON still shows its reference", async ({ page }) => {
+  await signIn(page);
+  // A list the Overview has not loaded yet, so the page has no earlier data to show.
+  await page.route(/\/api\/v1\/organisations\/[^/]+\/audit-logs(\?|$)/, (route) =>
+    route.fulfill({ status: 502, contentType: "text/html", body: "<h1>Bad gateway</h1>", headers: { "X-Request-ID": "ref-1234" } }),
+  );
+  await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Administration" }).click();
+  await expect(page.getByText("Reference: ref-1234")).toBeVisible({ timeout: 15_000 });
+});

@@ -16,7 +16,7 @@ import { MISMATCH, NewPasswordFields, passwordFields, passwordsMatch } from "@/c
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, signInErrorText } from "@/lib/api";
 import { applyApiErrors } from "@/lib/form-errors";
 import { useSession } from "@/lib/session";
 import { ROLE_LABELS, type InvitationPreview } from "@/lib/types";
@@ -196,11 +196,7 @@ function JoinWithAccount({ token, invitation }: { token: string; invitation: Inv
     try {
       await signIn(invitation.email, password);
     } catch (err) {
-      setError(
-        err instanceof ApiError && (err.status === 401 || err.status === 429)
-          ? err.message
-          : "Sign-in is unavailable right now. Please try again.",
-      );
+      setError(signInErrorText(err));
       return;
     }
     await join();

@@ -896,6 +896,17 @@ Corrections found while writing `docs/PROMPTS.md` and `docs/ERROR_HANDLING.md`:
 - Result on the owner's laptop with qwen2.5:7b and prompt 2026-10.7: Admissions 7 of 7,
   all grounded, median 11.4 s per case (NIIT website 8 of 8 on 2026-10.6).
 
+Small fixes from the documentation review:
+- Every `validation_error` is now 422. Service checks (organisation caps, null names,
+  integration settings, draft addresses, foreign issues, the default plan) returned 400.
+- The AI citation follow-up also applies when an answer cites only issues the question is
+  not about, not just when it cites none.
+- Terms to avoid are flagged on content outlines and page plans, not only on title and
+  description drafts.
+- Sign-in shows "The API server is not responding…" when the API is down, instead of a
+  generic line.
+- Errors that are not JSON keep their reference number from the `X-Request-ID` header.
+
 Assumption A27: the benchmark is the site's own click-through rate at similar positions.
 Published industry curves vary widely and would be figures we did not measure.
 

@@ -25,6 +25,15 @@ class AppError(Exception):
             self.code = code
 
 
+class ValidationAppError(AppError):
+    """Input that passed the schema but breaks a rule the service checks, such as an
+    organisation limit. Same status and code as schema validation, so clients handle
+    every invalid input one way."""
+
+    status_code = status.HTTP_422_UNPROCESSABLE_CONTENT
+    code = "validation_error"
+
+
 class NotFoundError(AppError):
     status_code = status.HTTP_404_NOT_FOUND
     code = "not_found"

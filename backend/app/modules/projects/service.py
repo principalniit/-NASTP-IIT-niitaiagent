@@ -5,7 +5,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.errors import AppError, ConflictError, NotFoundError
+from app.core.errors import ConflictError, NotFoundError, ValidationAppError
 from app.core.pagination import PageParams
 from app.core.request_context import RequestMeta
 from app.core.urls import normalise_site_url
@@ -132,13 +132,13 @@ async def update(
     changes = data.model_dump(exclude_unset=True)
     if "name" in changes:
         if changes["name"] is None:
-            raise AppError("name cannot be null", code="validation_error")
+            raise ValidationAppError("name cannot be null")
         project.name = changes["name"]
     if "description" in changes:
         project.description = changes["description"]
     if "root_url" in changes:
         if changes["root_url"] is None:
-            raise AppError("root_url cannot be null", code="validation_error")
+            raise ValidationAppError("root_url cannot be null")
         project.root_url, project.domain = normalise_site_url(changes["root_url"])
     audit.record(
         session,
@@ -188,9 +188,7 @@ async def update_settings(
         raise NotFoundError("Project not found")
     violations = _cap_violations(data, _caps(org))
     if violations:
-        raise AppError(
-            "Crawl settings exceed organisation limits", code="validation_error", details=violations
-        )
+        raise ValidationAppError("Crawl settings exceed organisation limits", details=violations)
     row = await get_settings_row(session, access.project)
     row.settings = data.model_dump(mode="json")
     row.updated_by_id = access.user.id

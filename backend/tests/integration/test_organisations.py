@@ -59,7 +59,7 @@ async def test_update_organisation_settings(client: AsyncClient) -> None:
     assert bad.status_code == 422
     assert bad.json()["error"]["code"] == "validation_error"
     null_name = await client.patch(url, json={"name": None}, headers=admin.headers)
-    assert null_name.status_code == 400
+    assert null_name.status_code == 422
 
 
 async def test_member_management_rules(client: AsyncClient) -> None:

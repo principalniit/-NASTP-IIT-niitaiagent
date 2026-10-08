@@ -23,7 +23,13 @@ from urllib.parse import urlsplit
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.errors import AppError, ConflictError, ForbiddenError, NotFoundError
+from app.core.errors import (
+    AppError,
+    ConflictError,
+    ForbiddenError,
+    NotFoundError,
+    ValidationAppError,
+)
 from app.core.pagination import PageParams
 from app.core.request_context import RequestMeta
 from app.modules.ai.models import AIAnalysis
@@ -169,9 +175,7 @@ def _project_url(project: Project, value: str) -> str:
     host = (urlsplit(url).hostname or "") if url else ""
     domain = project.domain.lower()
     if not url or not (host == domain or host.endswith("." + domain)):
-        raise AppError(
-            "The page address must be on this project's website", code="validation_error"
-        )
+        raise ValidationAppError("The page address must be on this project's website")
     return url
 
 
@@ -226,7 +230,7 @@ async def create(
             )
         )
         if found != set(issue_ids):
-            raise AppError("Some issues do not belong to this project", code="validation_error")
+            raise ValidationAppError("Some issues do not belong to this project")
     crawled, crawl_page_id = await _crawled_value(session, project, page_url, body.field)
     draft = await new_draft(
         session,

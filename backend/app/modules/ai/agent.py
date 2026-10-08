@@ -149,17 +149,19 @@ async def answer_question(
         report = check_output(
             answer.model_copy(update={"tools_used": []}), facts, issue_ids_in(facts)
         )
-        if report.passed and focus and not answer.issue_ids and uncited is None:
+        # An answer that cites none of the issues the question is about (no issues, or
+        # only unrelated ones) is asked once to cite them.
+        if report.passed and focus and not focus & set(answer.issue_ids) and uncited is None:
             uncited = (answer, report)
             candidates = ", ".join(sorted(r for r in map(refs.reference, focus) if r))
             messages.append(
                 {
                     "role": "user",
                     "content": (
-                        "Your answer cites no issues, but it relies on the issues in the "
-                        "evidence. Reply again with action 'answer', the same answer text, and "
-                        "the references of the issues it relies on in issue_ids, chosen from: "
-                        f"{candidates}."
+                        "Your answer cites none of the issues this question is about, but it "
+                        "relies on them. Reply again with action 'answer', the same answer text, "
+                        "and the references of the issues it relies on in issue_ids, chosen "
+                        f"from: {candidates}."
                     ),
                 }
             )

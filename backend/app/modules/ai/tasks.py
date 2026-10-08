@@ -193,8 +193,19 @@ async def plan_page(env: TaskEnv) -> TaskPlan:
     )
 
 
+def _terminology(env: TaskEnv, texts: list[str]) -> list[str]:
+    """Reviewer warnings for terms the organisation asked to avoid."""
+    terms = [e.model_dump() for e in env.org_settings.approved_terminology]
+    return terminology_warnings(texts, terms)
+
+
+def _warn(env: TaskEnv, warnings: list[str]) -> None:
+    env.analysis.grounding = {**env.analysis.grounding, "warnings": warnings}
+
+
 async def finish_page(env: TaskEnv, plan: TaskPlan, output: BaseModel) -> None:
     output = _as(output, PagePlanOutput)
+    _warn(env, _terminology(env, [i.suggestion for i in output.improvements]))
     url = plan.evidence["page"]["url"]
     for item in output.improvements:
         env.session.add(
@@ -276,15 +287,14 @@ def metadata_warnings(env: TaskEnv, output: MetadataDraftOutput) -> list[str]:
             f"Meta description is {len(output.meta_description)} characters "
             f"(target {t.description_min_chars}-{t.description_max_chars})"
         )
-    terminology = [e.model_dump() for e in env.org_settings.approved_terminology]
-    return warnings + terminology_warnings([output.title, output.meta_description], terminology)
+    return warnings + _terminology(env, [output.title, output.meta_description])
 
 
 async def finish_metadata(env: TaskEnv, plan: TaskPlan, output: BaseModel) -> None:
     output = _as(output, MetadataDraftOutput)
     page = plan.evidence["page"]
     warnings = metadata_warnings(env, output)
-    env.analysis.grounding = {**env.analysis.grounding, "warnings": warnings}
+    _warn(env, warnings)
     pairs = [
         (DraftField.TITLE, page.get("title"), output.title, TITLE_RULES),
         (
@@ -378,6 +388,10 @@ async def finish_outline(env: TaskEnv, plan: TaskPlan, output: BaseModel) -> Non
     output = _as(output, ContentOutlineOutput)
     page = plan.evidence["page"]
     current = "\n".join(page.get("headings") or []) or None
+    texts = [output.purpose] + [s.heading for s in output.sections]
+    texts += [p for s in output.sections for p in s.points]
+    warnings = _terminology(env, texts)
+    _warn(env, warnings)
     await new_draft(
         env.session,
         project=env.tools.project,
@@ -386,7 +400,10 @@ async def finish_outline(env: TaskEnv, plan: TaskPlan, output: BaseModel) -> Non
         original=current,
         proposed=render_outline(output),
         reason="Content outline proposed by the AI assistant from the page's own content and issues.",
-        evidence={"issue_ids": [i["id"] for i in page.get("open_issues", [])][:20]},
+        evidence={
+            "issue_ids": [i["id"] for i in page.get("open_issues", [])][:20],
+            "warnings": warnings,
+        },
         source=DraftSource.AI,
         author=None,
         ai_analysis_id=env.analysis.id,

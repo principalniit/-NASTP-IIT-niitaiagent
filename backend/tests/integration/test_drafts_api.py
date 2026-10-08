@@ -191,7 +191,7 @@ async def test_permissions_and_validation(client: AsyncClient) -> None:
         assert (await create(client, p["editor"], project["id"], **bad)).status_code == 422, bad
     for url in ("javascript:alert(1)", "https://other.example.com/", "ftp://example.org/x"):
         outside = await create(client, p["editor"], project["id"], page_url=url)
-        assert outside.status_code == 400, url
+        assert outside.status_code == 422, url
     relative = await create(client, p["editor"], project["id"], page_url="/fees?year=next")
     assert relative.json()["page_url"] == "https://example.org/fees?year=next"
     sub = await create(client, p["editor"], project["id"], page_url="https://apply.example.org/")
@@ -199,7 +199,7 @@ async def test_permissions_and_validation(client: AsyncClient) -> None:
     unknown_issue = await create(
         client, p["editor"], project["id"], issue_ids=["11111111-2222-3333-4444-555555555555"]
     )
-    assert unknown_issue.status_code == 400
+    assert unknown_issue.status_code == 422
     did = (await create(client, p["editor"], project["id"])).json()["id"]
     assert (await act(client, p["viewer"], did, "submit")).status_code == 403
     assert (

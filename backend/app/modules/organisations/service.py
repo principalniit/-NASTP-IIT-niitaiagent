@@ -4,7 +4,13 @@ import uuid
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.errors import AppError, ConflictError, ForbiddenError, NotFoundError
+from app.core.errors import (
+    AppError,
+    ConflictError,
+    ForbiddenError,
+    NotFoundError,
+    ValidationAppError,
+)
 from app.core.pagination import PageParams
 from app.core.request_context import RequestMeta
 from app.modules.audit_logs import service as audit
@@ -122,7 +128,7 @@ async def update(
             details["data_retention"] = {"from": before, "to": after}
     for field, value in changes.items():
         if value is None and field in _REQUIRED_FIELDS:
-            raise AppError(f"{field} cannot be null", code="validation_error")
+            raise ValidationAppError(f"{field} cannot be null")
         setattr(org, field, value)
     audit.record(
         session,

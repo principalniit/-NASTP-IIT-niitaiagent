@@ -12,7 +12,7 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.errors import AppError, ConflictError, NotFoundError
+from app.core.errors import AppError, ConflictError, NotFoundError, ValidationAppError
 from app.core.request_context import RequestMeta
 from app.modules.ai.models import AIAnalysis
 from app.modules.audit_logs import service as audit
@@ -196,7 +196,7 @@ async def update_plan(
     if plan is None:
         raise NotFoundError("Plan not found")
     if body.is_default is False:
-        raise AppError("Make another plan the default instead", code="validation_error")
+        raise ValidationAppError("Make another plan the default instead")
     if body.name is not None:
         plan.name = body.name
     if body.description is not None:

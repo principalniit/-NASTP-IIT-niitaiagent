@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import crypto
-from app.core.errors import AppError
+from app.core.errors import AppError, ValidationAppError
 from app.core.request_context import RequestMeta
 from app.modules.audit_logs import service as audit
 from app.modules.integrations.models import Integration
@@ -51,9 +51,8 @@ def _config(provider: str, config: dict[str, object]) -> dict[str, object]:
     try:
         return validate_config(provider, config)
     except ValidationError as exc:
-        raise AppError(
+        raise ValidationAppError(
             "Invalid settings for this integration",
-            code="validation_error",
             details=[{"loc": ["config", *e["loc"]], "msg": e["msg"]} for e in exc.errors()],
         ) from exc
 

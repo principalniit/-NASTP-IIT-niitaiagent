@@ -201,6 +201,8 @@ audit-logged as `ai.requested`.
   `meta_description`, `headings`, `content`, `links`, `images`, `structured_data`,
   `technical`), `suggestion` and `issue_ids`.
 - **Result:** one recommendation per improvement, titled `<Area>: <url>`.
+- **Warnings:** any avoided term from approved terminology in the suggestions, stored in
+  the grounding report.
 
 ### Metadata draft
 
@@ -238,6 +240,8 @@ audit-logged as `ai.requested`.
 - **Result:** one `content_outline` draft. The original is the page's current headings;
   the proposal is rendered as `Purpose:`, `## heading`, `- point`, `- [verify: ...]` lines
   and "Questions for the editor:".
+- **Warnings:** any avoided term from approved terminology in the purpose, headings or
+  points, stored in the grounding report and the draft's evidence.
 
 ## 4. The question agent
 
@@ -289,8 +293,9 @@ backlinks and search volumes stay unavailable.
    250 characters, `topics.admit_missing` opens it with "This platform has no data on …",
    generated from the detected gaps. A 7B model skipped the evidence note once Search
    Console figures made the evidence longer.
-5. **Citation follow-up:** when the answer passes but cites no issues, and the question
-   matched topic, page or priority issues, the model is asked once to reply with the same
+5. **Citation follow-up:** when the answer passes but cites none of the issues the
+   question is about (no issues, or only unrelated ones), and the question matched topic,
+   page or priority issues, the model is asked once to reply with the same
    text and references chosen from those issues. If the follow-up fails grounding, the
    first answer is kept.
 6. A failed grounding check gets one retry with `retry_instruction()` and "Answer the
@@ -464,7 +469,7 @@ Organisation settings:
 | `ai.provider` | `none` (default) or `ollama`. Both this and `AI_PROVIDER` must be `ollama`. |
 | `ai.model` | Ollama model, up to 100 characters; falls back to `OLLAMA_DEFAULT_MODEL` |
 | `brand_tone` | Added to the system prompt (up to 1,000 characters) |
-| `approved_terminology` | Preferred terms and terms to avoid. The first 30 entries go into the system prompt; all are checked in metadata drafts. |
+| `approved_terminology` | Preferred terms and terms to avoid. The first 30 entries go into the system prompt; all are checked in metadata drafts, content outlines and page plans. |
 | Organisation language | Language code in the system prompt |
 | Plan `max_ai_tasks_per_day` | Daily AI task limit, when the plan sets one |
 
